@@ -1,0 +1,1090 @@
+{
+  "version": 4,
+  "rules": {
+    "CORE-1-1": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true
+    },
+    "CORE-1-2": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true
+    },
+    "CORE-1-3": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true
+    },
+    "CORE-1-4": {
+      "strategy": "deterministic"
+    },
+    "CORE-1-5": {
+      "strategy": "deterministic"
+    },
+    "CORE-1-6": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "Часть правила относится к отсутствующей презентации."
+    },
+    "CORE-2-1": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "CORE-2-2": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "CORE-2-3": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_chapter_matrix"
+      ],
+      "exhaustive": true
+    },
+    "CORE-3-1": {
+      "strategy": "deterministic"
+    },
+    "CORE-3-2": {
+      "strategy": "deterministic",
+      "allowPass": false,
+      "reason": "Детектор использует консервативный набор контекстов и не доказывает отсутствие всех случаев во всём тексте."
+    },
+    "CORE-3-3": {
+      "strategy": "deterministic"
+    },
+    "CORE-3-4": {
+      "strategy": "deterministic"
+    },
+    "CORE-3-5": {
+      "strategy": "deterministic"
+    },
+    "CORE-3-6": {
+      "strategy": "deterministic"
+    },
+    "CORE-3-7": {
+      "strategy": "deterministic"
+    },
+    "CORE-4-1": {
+      "strategy": "structural"
+    },
+    "CORE-4-2": {
+      "strategy": "structural"
+    },
+    "CORE-4-3": {
+      "strategy": "structural"
+    },
+    "CORE-4-4": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Проверяется научное ядро; терминологическая понятность остаётся экспертной оценкой."
+    },
+    "CORE-5-1": {
+      "strategy": "unavailable",
+      "reason": "Из текстового слоя нельзя надёжно определить шрифт, кегль и интервал."
+    },
+    "CORE-5-2": {
+      "strategy": "unavailable",
+      "reason": "Из текстового слоя нельзя надёжно определить выравнивание абзацев."
+    },
+    "CORE-5-3": {
+      "strategy": "structural"
+    },
+    "CORE-5-4": {
+      "strategy": "structural"
+    },
+    "CORE-5-5": {
+      "strategy": "deterministic"
+    },
+    "CORE-5-6": {
+      "strategy": "deterministic"
+    },
+    "CORE-5-7": {
+      "strategy": "deterministic"
+    },
+    "CORE-6-1": {
+      "strategy": "deterministic"
+    },
+    "CORE-6-2": {
+      "strategy": "deterministic"
+    },
+    "CORE-6-3": {
+      "strategy": "deterministic"
+    },
+    "CORE-6-4": {
+      "strategy": "llm",
+      "selectors": [
+        "title_goal"
+      ],
+      "exhaustive": true
+    },
+    "CORE-7-1": {
+      "strategy": "structural"
+    },
+    "CORE-7-2": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "По текстовому слою проверяется пунктуация, но не положение подписи."
+    },
+    "CORE-7-3": {
+      "strategy": "unavailable",
+      "reason": "Подписи осей требуют визуального анализа графиков."
+    },
+    "CORE-7-4": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "PDF может терять номер и расположение формулы."
+    },
+    "CORE-7-5": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "PDF может терять перенос строки после формулы."
+    },
+    "CORE-8-1": {
+      "strategy": "structural"
+    },
+    "CORE-8-2": {
+      "strategy": "llm",
+      "selectors": [
+        "chapter_conclusions"
+      ],
+      "exhaustive": true
+    },
+    "CORE-8-3": {
+      "strategy": "llm",
+      "selectors": [
+        "conclusion_global"
+      ],
+      "exhaustive": true
+    },
+    "CORE-9-1": {
+      "strategy": "structural"
+    },
+    "CORE-9-2": {
+      "strategy": "deterministic"
+    },
+    "CORE-9-3": {
+      "strategy": "deterministic"
+    },
+    "CORE-9-4": {
+      "strategy": "structural"
+    },
+    "CORE-10-1": {
+      "strategy": "manual",
+      "reason": "Нужны презентация и запись доклада."
+    },
+    "CORE-10-2": {
+      "strategy": "manual",
+      "reason": "Нужна запись доклада."
+    },
+    "CORE-10-3": {
+      "strategy": "manual",
+      "reason": "Нужна презентация."
+    },
+    "CORE-10-4": {
+      "strategy": "manual",
+      "reason": "Нужна презентация."
+    },
+    "CORE-10-5": {
+      "strategy": "manual",
+      "reason": "Нужна презентация."
+    },
+    "CORE-10-6": {
+      "strategy": "manual",
+      "reason": "Правило относится к презентации и докладу."
+    },
+    "CORE-10-7": {
+      "strategy": "manual",
+      "reason": "Нужна запись доклада."
+    },
+    "CORE-11-1": {
+      "strategy": "deterministic",
+      "allowPass": false,
+      "reason": "Проверяется высокоточный словарь типичных замен е/ё; отсутствие всех возможных случаев не доказывается."
+    },
+    "CORE-11-2": {
+      "strategy": "deterministic"
+    },
+    "CORE-11-3": {
+      "strategy": "deterministic"
+    },
+    "CORE-11-4": {
+      "strategy": "deterministic"
+    },
+    "CORE-11-5": {
+      "strategy": "deterministic"
+    },
+    "CORE-11-6": {
+      "strategy": "deterministic"
+    },
+    "CORE-12": {
+      "strategy": "structural"
+    },
+    "CORE-13": {
+      "strategy": "structural"
+    },
+    "CORE-14": {
+      "strategy": "llm",
+      "selectors": [
+        "implementation_context"
+      ],
+      "exhaustive": true
+    },
+    "CORE-15": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_chapter_matrix"
+      ],
+      "exhaustive": true
+    },
+    "CORE-16": {
+      "strategy": "unavailable",
+      "reason": "Цветовое кодирование требует визуального анализа текста и слайдов."
+    },
+    "CORE-17": {
+      "strategy": "deterministic"
+    },
+    "CORE-18": {
+      "strategy": "structural"
+    },
+    "CORE-19": {
+      "strategy": "structural"
+    },
+    "CORE-20": {
+      "strategy": "deterministic"
+    },
+    "SOFT-001": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-002": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-003": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-004": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-005": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-006": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-007": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-008": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-009": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-010": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_chapters"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-011": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_chapters"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-012": {
+      "strategy": "llm",
+      "selectors": [
+        "chapter"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-013": {
+      "strategy": "llm",
+      "selectors": [
+        "chapter_conclusions"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-014": {
+      "strategy": "llm",
+      "selectors": [
+        "chapter_conclusions"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-015": {
+      "strategy": "llm",
+      "selectors": [
+        "conclusion_global"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-016": {
+      "strategy": "llm",
+      "selectors": [
+        "implementation_context"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-017": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-018": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-019": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-020": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-021": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-022": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-023": {
+      "strategy": "deterministic",
+      "detectorId": "defense-punctuation",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true,
+      "allowPass": true
+    },
+    "SOFT-024": {
+      "strategy": "deterministic",
+      "detectorId": "defense-symbols",
+      "selectors": [
+        "defense_statements"
+      ],
+      "exhaustive": true,
+      "allowPass": true
+    },
+    "SOFT-025": {
+      "strategy": "llm",
+      "selectors": [
+        "defense_chapters"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-026": {
+      "strategy": "structural"
+    },
+    "SOFT-027": {
+      "strategy": "deterministic"
+    },
+    "SOFT-028": {
+      "strategy": "deterministic"
+    },
+    "SOFT-029": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-030": {
+      "strategy": "deterministic"
+    },
+    "SOFT-031": {
+      "strategy": "deterministic"
+    },
+    "SOFT-032": {
+      "strategy": "deterministic"
+    },
+    "SOFT-033": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-034": {
+      "strategy": "deterministic"
+    },
+    "SOFT-035": {
+      "strategy": "deterministic",
+      "allowPass": false,
+      "reason": "Консервативный детектор не доказывает отсутствие всех допустимых и недопустимых контекстов."
+    },
+    "SOFT-036": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-037": {
+      "strategy": "deterministic",
+      "allowPass": false,
+      "reason": "Проверяется высокоточный словарь типичных замен е/ё."
+    },
+    "SOFT-038": {
+      "strategy": "deterministic"
+    },
+    "SOFT-039": {
+      "strategy": "deterministic"
+    },
+    "SOFT-040": {
+      "strategy": "deterministic"
+    },
+    "SOFT-041": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-042": {
+      "strategy": "deterministic"
+    },
+    "SOFT-043": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-044": {
+      "strategy": "deterministic"
+    },
+    "SOFT-045": {
+      "strategy": "deterministic"
+    },
+    "SOFT-046": {
+      "strategy": "deterministic"
+    },
+    "SOFT-047": {
+      "strategy": "deterministic"
+    },
+    "SOFT-048": {
+      "strategy": "deterministic"
+    },
+    "SOFT-049": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-050": {
+      "strategy": "deterministic"
+    },
+    "SOFT-051": {
+      "strategy": "deterministic"
+    },
+    "SOFT-052": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-053": {
+      "strategy": "deterministic"
+    },
+    "SOFT-054": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-055": {
+      "strategy": "structural"
+    },
+    "SOFT-056": {
+      "strategy": "structural"
+    },
+    "SOFT-057": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-058": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-059": {
+      "strategy": "deterministic"
+    },
+    "SOFT-060": {
+      "strategy": "deterministic",
+      "allowPass": false,
+      "reason": "Код проверяет порядок инициалов в библиографии; отдельные случаи в основном тексте требуют просмотра."
+    },
+    "SOFT-061": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-062": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+    },
+    "SOFT-063": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-064": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+    },
+    "SOFT-065": {
+      "strategy": "structural"
+    },
+    "SOFT-066": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+    },
+    "SOFT-067": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-068": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-069": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-070": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+    },
+    "SOFT-071": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-072": {
+      "strategy": "structural",
+      "allowPass": false,
+      "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+    },
+    "SOFT-073": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-074": {
+      "strategy": "deterministic"
+    },
+    "SOFT-075": {
+      "strategy": "deterministic"
+    },
+    "SOFT-076": {
+      "strategy": "deterministic"
+    },
+    "SOFT-077": {
+      "strategy": "structural"
+    },
+    "SOFT-078": {
+      "strategy": "llm",
+      "selectors": [
+        "bibliography"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-079": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-080": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-081": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-082": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-083": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-084": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-085": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-086": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-087": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-088": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-089": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-090": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-091": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-092": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-093": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-094": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-095": {
+      "strategy": "llm",
+      "selectors": [
+        "chapter"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-096": {
+      "strategy": "llm",
+      "selectors": [
+        "chapter"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-097": {
+      "strategy": "llm",
+      "selectors": [
+        "implementation_context"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-098": {
+      "strategy": "llm",
+      "selectors": [
+        "implementation_context"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-099": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-100": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Для окончательного вывода могут потребоваться внешние сведения о публикациях или апробации."
+    },
+    "SOFT-101": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Для окончательного вывода могут потребоваться внешние сведения о публикациях или апробации."
+    },
+    "SOFT-102": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Для окончательного вывода могут потребоваться внешние сведения о публикациях или апробации."
+    },
+    "SOFT-103": {
+      "strategy": "llm",
+      "selectors": [
+        "bibliography"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-104": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-105": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Для окончательного вывода могут потребоваться внешние сведения о публикациях или апробации."
+    },
+    "SOFT-106": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-107": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-108": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-109": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-110": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-111": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-112": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-113": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-114": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-115": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-116": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-117": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-118": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-119": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-120": {
+      "strategy": "structural"
+    },
+    "SOFT-121": {
+      "strategy": "deterministic"
+    },
+    "SOFT-122": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-123": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-124": {
+      "strategy": "deterministic"
+    },
+    "SOFT-125": {
+      "strategy": "deterministic"
+    },
+    "SOFT-126": {
+      "strategy": "deterministic"
+    },
+    "SOFT-127": {
+      "strategy": "deterministic"
+    },
+    "SOFT-128": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-129": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-130": {
+      "strategy": "deterministic"
+    },
+    "SOFT-131": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-132": {
+      "strategy": "deterministic"
+    },
+    "SOFT-133": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-134": {
+      "strategy": "deterministic"
+    },
+    "SOFT-135": {
+      "strategy": "llm",
+      "selectors": [
+        "scientific_core"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-136": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-137": {
+      "strategy": "deterministic"
+    },
+    "SOFT-138": {
+      "strategy": "deterministic"
+    },
+    "SOFT-139": {
+      "strategy": "structural"
+    },
+    "SOFT-140": {
+      "strategy": "llm",
+      "selectors": [
+        "bibliography"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-141": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-142": {
+      "strategy": "unavailable",
+      "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+    },
+    "SOFT-143": {
+      "strategy": "llm",
+      "selectors": [
+        "appendices"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-144": {
+      "strategy": "deterministic"
+    },
+    "SOFT-145": {
+      "strategy": "deterministic"
+    },
+    "SOFT-146": {
+      "strategy": "deterministic"
+    },
+    "SOFT-147": {
+      "strategy": "deterministic"
+    },
+    "SOFT-148": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-149": {
+      "strategy": "deterministic"
+    },
+    "SOFT-150": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-151": {
+      "strategy": "structural"
+    },
+    "SOFT-152": {
+      "strategy": "deterministic"
+    },
+    "SOFT-153": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    },
+    "SOFT-154": {
+      "strategy": "llm",
+      "selectors": [
+        "bibliography"
+      ],
+      "exhaustive": true
+    },
+    "SOFT-155": {
+      "strategy": "deterministic"
+    },
+    "SOFT-156": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-157": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-158": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-159": {
+      "strategy": "manual",
+      "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+    },
+    "SOFT-160": {
+      "strategy": "structural"
+    },
+    "SOFT-161": {
+      "strategy": "deterministic"
+    },
+    "SOFT-162": {
+      "strategy": "llm",
+      "selectors": [
+        "major_sections"
+      ],
+      "exhaustive": true,
+      "allowPass": false,
+      "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+    }
+  }
+}
