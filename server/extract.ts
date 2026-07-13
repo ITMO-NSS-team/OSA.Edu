@@ -1,36 +1,62 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import mammoth from "mammoth";
-import pdf from "pdf-parse";
 import { buildDocument } from "./document/analyze.js";
 import type { ExtractedDocument } from "./types.js";
 
-interface PdfItem { str?: string; transform?: number[]; hasEOL?: boolean; width?: number; height?: number; }
+const execFileAsync = promisify(execFile);
+
+interface PyMuPdfResult {
+  engine: "pymupdf";
+  engineVersion: string;
+  pageCount: number;
+  pages: Array<{ number: number; text: string }>;
+  warnings: string[];
+}
 
 export async function extractDocument(filePath: string): Promise<ExtractedDocument> {
   const extension = path.extname(filePath).toLowerCase();
+
   if (extension === ".docx") {
     const result = await mammoth.extractRawText({ path: filePath });
     const text = normalize(result.value);
-    return { ...buildDocument(text, [], ["DOCX не содержит надёжной привязки к страницам. Для финальной проверки вёрстки загрузите также PDF."]), sourceFormat: "docx" };
+    return {
+      ...buildDocument(text, [], [
+        "DOCX не содержит надёжной привязки к страницам. Для финальной проверки вёрстки загрузите также PDF."
+      ]),
+      sourceFormat: "docx"
+    };
   }
+
   if (extension === ".pdf") {
-    const buffer = await fs.readFile(filePath);
-    const pages: Array<{ number: number; text: string }> = [];
-    let pageNumber = 0;
-    const parsePdf = pdf as unknown as (data: Buffer, options?: unknown) => Promise<{ text: string }>;
-    await parsePdf(buffer, {
-      pagerender: async (pageData: { getTextContent: () => Promise<{ items: PdfItem[] }> }) => {
-        pageNumber += 1;
-        const content = await pageData.getTextContent();
-        const text = reconstructPage(content.items);
-        pages.push({ number: pageNumber, text });
-        return `\n\n<<<PAGE ${pageNumber}>>>\n${text}`;
-      }
-    });
-    const text = pages.map((page) => `<<<PAGE ${page.number}>>>\n${page.text}`).join("\n\n");
-    return { ...buildDocument(text, pages, pages.length ? [] : ["Не удалось определить страницы PDF."]), sourceFormat: "pdf" };
+    const extracted = await extractPdfWithPyMuPdf(filePath);
+    const pages = extracted.pages.map((page) => ({
+      number: page.number,
+      text: normalize(page.text)
+    }));
+
+    const text = pages
+      .map((page) => `<<<PAGE ${page.number}>>>\n${page.text}`)
+      .join("\n\n");
+
+    console.log(
+      `[PDF_EXTRACTOR] engine=${extracted.engine} version=${extracted.engineVersion} pages=${extracted.pageCount}`
+    );
+
+    return {
+      ...buildDocument(
+        text,
+        pages,
+        pages.length
+          ? extracted.warnings
+          : ["Не удалось определить страницы PDF."]
+      ),
+      sourceFormat: "pdf"
+    };
   }
+
   throw new Error("Поддерживаются только PDF и DOCX.");
 }
 
@@ -43,47 +69,63 @@ export async function readExtracted(filePath: string): Promise<ExtractedDocument
   return JSON.parse(await fs.readFile(filePath, "utf8")) as ExtractedDocument;
 }
 
-function reconstructPage(items: PdfItem[]) {
-  if (!items.some((item) => item.transform?.length)) return normalize(items.map((item) => item.str || "").join(" "));
-  const positioned = items.map((item, index) => ({
-    text: item.str || "",
-    x: item.transform?.[4] ?? index,
-    y: item.transform?.[5] ?? 0,
-    height: Math.abs(item.transform?.[3] ?? item.height ?? 10),
-    hasEOL: item.hasEOL
-  })).filter((item) => item.text.trim());
-  positioned.sort((a, b) => Math.abs(a.y - b.y) > 2 ? b.y - a.y : a.x - b.x);
-  const heights = positioned.map((item) => item.height).filter((value) => value > 0).sort((a, b) => a - b);
-  const medianHeight = heights[Math.floor(heights.length / 2)] || 10;
-  const lines: Array<{ y: number; height: number; items: typeof positioned }> = [];
-  for (const item of positioned) {
-    const line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= Math.max(2, medianHeight * 0.28));
-    if (line) { line.items.push(item); line.height = Math.max(line.height, item.height); }
-    else lines.push({ y: item.y, height: item.height, items: [item] });
+async function extractPdfWithPyMuPdf(filePath: string): Promise<PyMuPdfResult> {
+  const pythonExecutable = resolvePythonExecutable();
+  const scriptPath = path.resolve(
+    process.cwd(),
+    "server",
+    "python",
+    "extract_pdf.py"
+  );
+
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      pythonExecutable,
+      [scriptPath, path.resolve(filePath)],
+      {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        windowsHide: true
+      }
+    );
+
+    const stderrText = stderr;
+    if (stderrText.trim()) {
+      console.warn(stderrText.trim());
+    }
+
+    const stdoutText = stdout;
+    const parsed = JSON.parse(stdoutText) as PyMuPdfResult;
+
+    if (!Array.isArray(parsed.pages)) {
+      throw new Error("PyMuPDF вернул ответ без массива pages.");
+    }
+
+    return parsed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Не удалось извлечь PDF через PyMuPDF. Проверьте Python, виртуальное окружение и пакет PyMuPDF. Причина: ${message}`
+    );
   }
-  lines.sort((a, b) => b.y - a.y);
-  const output: string[] = [];
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index];
-    line.items.sort((a, b) => a.x - b.x);
-    output.push(joinLine(line.items));
-    const next = lines[index + 1];
-    if (next && line.y - next.y > Math.max(medianHeight * 1.65, 15)) output.push("");
-  }
-  return normalize(output.join("\n"));
 }
 
-function joinLine(items: Array<{ text: string; x: number; hasEOL?: boolean }>) {
-  let result = "";
-  for (const item of items) {
-    const text = item.text.trim();
-    if (!text) continue;
-    const needsSpace = result && !/[\s(\[«"'\-–—/]$/u.test(result) && !/^[,.;:!?%)\]»]/u.test(text);
-    result += `${needsSpace ? " " : ""}${text}`;
-  }
-  return result;
+function resolvePythonExecutable() {
+  const configured = process.env.PYTHON_BIN?.trim();
+  if (configured) return configured;
+
+  return process.platform === "win32"
+    ? path.resolve(process.cwd(), ".venv", "Scripts", "python.exe")
+    : path.resolve(process.cwd(), ".venv", "bin", "python");
 }
 
 function normalize(value: string) {
-  return value.replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return value
+    .normalize("NFC")
+    .replace(/\r/g, "")
+    .replace(/\u00a0/gu, " ")
+    .replace(/[\u200b\u2060]/gu, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
