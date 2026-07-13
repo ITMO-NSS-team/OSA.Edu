@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"tsx watch server/index.ts\" \"vite --host 127.0.0.1\"",
+    "dev:docker": "concurrently -k -n server,web -c blue,green \"HOST=0.0.0.0 tsx watch server/index.ts\" \"vite --host 0.0.0.0\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:web": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",

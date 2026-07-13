@@ -19,12 +19,14 @@ import type { CheckProfile, DocumentElementType, DocumentMapElement, Job } from 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = Number(process.env.PORT || 8787);
+const host = process.env.HOST || "127.0.0.1";
 const maxMb = Number(process.env.MAX_FILE_SIZE_MB || 35);
 const uploads = path.resolve(__dirname, "../data/uploads");
 await fs.mkdir(uploads, { recursive: true });
 await recoverInterruptedJobs();
 
-app.use(cors({ origin: process.env.WEB_ORIGIN || "http://127.0.0.1:5173" }));
+const webOrigins = (process.env.WEB_ORIGIN || "http://127.0.0.1:5173,http://localhost:5173").split(",").map((origin) => origin.trim()).filter(Boolean);
+app.use(cors({ origin: webOrigins.length === 1 ? webOrigins[0] : webOrigins }));
 app.use(express.json({ limit: "4mb" }));
 
 const storage = multer.diskStorage({
@@ -249,4 +251,4 @@ function validateQuote(blocks: Array<{ id: string; text: string }>, startBlockId
   return blocks.slice(start, end + 1).some((block) => normalized(block.text).includes(target)) ? "" : "Опорная цитата должна дословно находиться внутри выбранного диапазона.";
 }
 
-app.listen(port, "127.0.0.1", () => { console.log(`API: http://127.0.0.1:${port}`); startQueue(); });
+app.listen(port, host, () => { console.log(`API: http://${host}:${port}`); startQueue(); });
