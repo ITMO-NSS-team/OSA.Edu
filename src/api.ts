@@ -7,7 +7,6 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   if (!response.ok) throw new Error((body as { error?: string })?.error || "Ошибка API.");
   return body as T;
 }
-
 export const api = {
   health: () => request<Health>("/api/health"),
   jobs: () => request<Job[]>("/api/jobs"),
@@ -23,5 +22,6 @@ export const api = {
   retryFailed: (id: string) => request<Job>(`/api/jobs/${id}/retry-failed`, { method: "POST" }),
   delete: (id: string) => request<void>(`/api/jobs/${id}`, { method: "DELETE" }),
   reportMarkdownUrl: (id: string) => `${API}/api/jobs/${id}/report.md`,
+  reportPdfUrl: (id: string) => `${API}/api/jobs/${id}/report.pdf`,
   reportJsonUrl: (id: string) => `${API}/api/jobs/${id}/report.json`
 };

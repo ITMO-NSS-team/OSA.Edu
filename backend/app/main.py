@@ -18,6 +18,7 @@ from .defaults import DEFAULT_ADDITIONAL_CRITERIA, DEFAULT_MAP_PROMPT, DEFAULT_P
 from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
 from .llm.rate_limiter import configured_rate_limits
+from .pdf_reporting import report_to_pdf
 from .queue import start_queue
 from .reporting import report_to_markdown
 from .rules.registry import load_rule_registry
@@ -102,7 +103,6 @@ async def create_job_endpoint(
         return _error(400, "За один запуск можно загрузить не более 30 файлов.")
     if not os.getenv("OPENROUTER_API_KEY", "").strip():
         return _error(400, "Для OpenRouter не найден OPENROUTER_API_KEY в .env.")
-
     requested_model = model or MODELS[0]["id"]
     selected = model_definition(requested_model)
     if not selected:
@@ -172,7 +172,7 @@ async def structure(job_id: str):
     context = await _map_context(job_id)
     if not context:
         return _error(404, "Структура документа ещё не готова.")
-    job, document = context
+    _job, document = context
     return {"map": document["map"], "blocks": document.get("blocks", [])}
 
 
@@ -269,7 +269,7 @@ async def confirm_structure(job_id: str):
     context = await _map_context(job_id)
     if not context:
         return _error(404, "Структура документа не найдена.")
-    job, document = context
+    _job, document = context
     document["map"] = refresh_map(document, document["map"])
     if not document["map"].get("elements"):
         return _error(400, "Добавьте хотя бы один смысловой фрагмент.")
@@ -360,6 +360,22 @@ async def report_markdown(job_id: str):
     return PlainTextResponse(
         report_to_markdown(job["originalName"], job["report"]),
         media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+@app.get("/api/jobs/{job_id}/report.pdf")
+async def report_pdf(job_id: str):
+    job = await get_job(job_id)
+    if not job or not job.get("report"):
+        return _error(404, "Отчёт ещё не готов.")
+    try:
+        content = report_to_pdf(job["originalName"], job["report"])
+    except RuntimeError as exc:
+        return _error(500, str(exc))
+    filename = quote(f"{job['originalName']}-protocol.pdf")
+    return Response(
+        content=content,
+        media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )
 
