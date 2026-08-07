@@ -260,3 +260,11 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
 .matrix-table { overflow-x: auto; margin-top: 10px; }
 .matrix-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .matrix-table th, .matrix-table td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+
+.candidate-context {
+  display: block;
+  margin-top: 0.55rem;
+  color: var(--muted, #5c667a);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}

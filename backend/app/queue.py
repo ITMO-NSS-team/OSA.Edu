@@ -5,7 +5,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from .config import AUTO_DELETE_SOURCE
+from .config import APP_VERSION, AUTO_DELETE_SOURCE
 from .defaults import DEFAULT_MAP_PROMPT
 from .document.map_builder import build_document_map, map_can_be_reused
 from .extraction import extract_document, read_extracted, save_extracted
@@ -147,7 +147,7 @@ async def _perform_check(job: dict[str, Any]) -> None:
         report = make_report(
             checked["rules"], results, warnings, usage, document.get("map"), routing,
             {
-                "appVersion": "3.5.0-py",
+                "appVersion": APP_VERSION,
                 "provider": job.get("provider", "openrouter"),
                 "model": job["model"],
                 "promptHash": _hash_text(job.get("prompt", "")),

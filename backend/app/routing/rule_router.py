@@ -12,7 +12,6 @@ DIRECT_SELECTORS = {
     "title", "abstract", "introduction", "goal", "tasks", "defense_statements",
     "chapter", "chapter_conclusions", "conclusion", "bibliography", "appendices", "other",
 }
-ABBREVIATION_RULE_IDS = {"CORE-4-1", "CORE-4-2", "CORE-4-3", "CORE-12"}
 
 
 def _load_config() -> dict:
@@ -250,6 +249,8 @@ def _fallback_selectors(rule: dict) -> list[str]:
 
 
 def _fallback_spec(rule: dict) -> dict:
+    if rule.get("mode") == "candidate":
+        return {"strategy": "candidate", "candidateFamily": rule.get("candidateFamily"), "exhaustive": True}
     if rule.get("detectorId") or rule.get("mode") == "deterministic":
         return {"strategy": "deterministic"}
     if rule.get("mode") == "structural":
@@ -288,16 +289,15 @@ def _route_rule(rule: dict, fragments: list[dict], explicit_spec: dict | None) -
     spec = dict(explicit_spec or _fallback_spec(rule))
     strategy = spec.get("strategy", _fallback_spec(rule).get("strategy"))
 
-    # This safety decision existed in the stabilized OSA.Edu branch before migration:
-    # the four abbreviation checks remain deliberately uncertain until a reliable detector exists.
-    if rule.get("id") in ABBREVIATION_RULE_IDS:
-        strategy = "structural"
-        spec["reason"] = "Автоматическая проверка аббревиатур временно отключена из-за недостаточной надёжности."
-
     selectors = spec.get("selectors") or _fallback_selectors(rule)
     fragment_ids = _expand_selectors(selectors, fragments) if strategy == "llm" else []
     by_id = {fragment.get("id"): fragment for fragment in fragments}
-    exhaustive = bool(spec.get("exhaustive")) and bool(fragment_ids) and all(bool(by_id.get(fid, {}).get("complete")) for fid in fragment_ids)
+    if strategy == "candidate":
+        # Candidate collectors scan their complete typed scope in Python. Coverage is
+        # calculated later from the actual candidate batches, never from an LLM claim.
+        exhaustive = bool(spec.get("exhaustive", True))
+    else:
+        exhaustive = bool(spec.get("exhaustive")) and bool(fragment_ids) and all(bool(by_id.get(fid, {}).get("complete")) for fid in fragment_ids)
 
     routed = {
         "rule": rule,
@@ -308,6 +308,8 @@ def _route_rule(rule: dict, fragments: list[dict], explicit_spec: dict | None) -
         "reason": spec.get("reason"),
         "explicit": explicit_spec is not None,
     }
+    if strategy == "candidate":
+        routed["candidateFamily"] = spec.get("candidateFamily") or rule.get("candidateFamily")
     # Compatibility extension: if a routing profile explicitly overrides a detector,
     # the checker honours it without changing the public API contract.
     if spec.get("detectorId") or rule.get("detectorId"):

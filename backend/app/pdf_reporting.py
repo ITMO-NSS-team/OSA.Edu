@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
-from functools import lru_cache
-from html import escape
+import re
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
@@ -17,7 +16,6 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     HRFlowable,
-    KeepTogether,
     LongTable,
     PageBreak,
     Paragraph,
@@ -27,644 +25,470 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-STATUS_ORDER = ["violation", "pass", "uncertain", "not_checked", "not_applicable"]
-STATUS_LABELS = {
+_STATUS_ORDER = ["violation", "pass", "uncertain", "not_checked", "not_applicable"]
+_STATUS_LABELS = {
     "violation": "Нарушено",
     "pass": "Выполнено",
     "uncertain": "Неопределённо",
     "not_checked": "Не обработано",
     "not_applicable": "Неприменимо",
 }
-EVIDENCE_LABELS = {
+_STATUS_COLORS = {
+    "violation": colors.HexColor("#9B2C2C"),
+    "pass": colors.HexColor("#2F6B3C"),
+    "uncertain": colors.HexColor("#82651A"),
+    "not_checked": colors.HexColor("#626970"),
+    "not_applicable": colors.HexColor("#626970"),
+}
+_EVIDENCE_LABELS = {
     "verified": "цитаты подтверждены по исходным блокам",
     "coverage_verified": "отсутствие подтверждено полным просмотром назначенной области",
     "rejected": "заявленное нарушение не подтверждено допустимой цитатой или полной матрицей",
     "not_required": "доказательство не требовалось",
 }
-MATRIX_LABELS = {
+_MATRIX_LABELS = {
     "found": "найдено",
     "not_found": "не найдено",
     "ambiguous": "неоднозначно",
 }
-ELEMENT_LABELS = {
-    "title": "Название",
-    "abstract": "Аннотация",
-    "introduction": "Введение",
-    "goal": "Цель",
-    "tasks": "Задачи",
-    "defense_statements": "Положения на защиту",
-    "chapter": "Глава",
-    "chapter_conclusions": "Выводы по главе",
-    "conclusion": "Заключение",
-    "bibliography": "Библиография",
-    "appendices": "Приложения",
-    "other": "Другой фрагмент",
-}
-
-PAGE_WIDTH, PAGE_HEIGHT = A4
-LEFT_MARGIN = 18 * mm
-RIGHT_MARGIN = 18 * mm
-TOP_MARGIN = 20 * mm
-BOTTOM_MARGIN = 18 * mm
-CONTENT_WIDTH = PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
+_INVALID_XML = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+_MAX_QUOTE_CHARS = 2400
+_MAX_DIAGNOSTICS = 60
 
 
-@lru_cache(maxsize=1)
-def _register_fonts() -> tuple[str, str]:
-    """Register a Unicode font pair without bundling third-party font files."""
-    repo_root = Path(__file__).resolve().parents[2]
-    configured_regular = os.getenv("OSA_PDF_FONT_REGULAR", "").strip()
-    configured_bold = os.getenv("OSA_PDF_FONT_BOLD", "").strip()
-
-    candidates: list[tuple[Path, Path]] = []
-    if configured_regular:
-        regular = Path(configured_regular).expanduser()
-        candidates.append((regular, Path(configured_bold).expanduser() if configured_bold else regular))
-
-    candidates.extend(
-        [
-            (repo_root / "config/fonts/DejaVuSans.ttf", repo_root / "config/fonts/DejaVuSans-Bold.ttf"),
-            (Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"), Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")),
-            (Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"), Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf")),
-            (Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"), Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf")),
-            (Path("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"), Path("/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf")),
-            (Path("C:/Windows/Fonts/arial.ttf"), Path("C:/Windows/Fonts/arialbd.ttf")),
-            (Path("C:/Windows/Fonts/calibri.ttf"), Path("C:/Windows/Fonts/calibrib.ttf")),
-            (Path("/System/Library/Fonts/Supplemental/Arial.ttf"), Path("/System/Library/Fonts/Supplemental/Arial Bold.ttf")),
-            (Path("/Library/Fonts/Arial.ttf"), Path("/Library/Fonts/Arial Bold.ttf")),
-        ]
-    )
-
-    for regular, bold in candidates:
-        if not regular.is_file():
-            continue
-        selected_bold = bold if bold.is_file() else regular
-        pdfmetrics.registerFont(TTFont("OSAReport", str(regular)))
-        pdfmetrics.registerFont(TTFont("OSAReport-Bold", str(selected_bold)))
-        pdfmetrics.registerFontFamily(
-            "OSAReport",
-            normal="OSAReport",
-            bold="OSAReport-Bold",
-            italic="OSAReport",
-            boldItalic="OSAReport-Bold",
-        )
-        return "OSAReport", "OSAReport-Bold"
-
-    raise RuntimeError(
-        "Не найден Unicode-шрифт для PDF-отчёта. Установите DejaVu Sans, Liberation Sans или Noto Sans "
-        "либо задайте OSA_PDF_FONT_REGULAR и OSA_PDF_FONT_BOLD в .env."
-    )
-
-
-def _styles() -> dict[str, ParagraphStyle]:
-    regular, bold = _register_fonts()
-    base = getSampleStyleSheet()
-
-    def style(name: str, parent: str = "BodyText", **kwargs: Any) -> ParagraphStyle:
-        defaults = {
-            "fontName": regular,
-            "fontSize": 9.2,
-            "leading": 12.3,
-            "textColor": colors.HexColor("#172033"),
-            "spaceAfter": 4,
-            "wordWrap": "CJK",
-            "splitLongWords": 1,
-        }
-        defaults.update(kwargs)
-        return ParagraphStyle(name, parent=base[parent], **defaults)
-
-    return {
-        "title": style(
-            "OSA-Title",
-            fontName=bold,
-            fontSize=20,
-            leading=24,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor("#13213C"),
-            spaceAfter=7 * mm,
-        ),
-        "subtitle": style(
-            "OSA-Subtitle",
-            fontSize=9,
-            leading=12,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor("#5C667A"),
-            spaceAfter=5 * mm,
-        ),
-        "h1": style(
-            "OSA-H1",
-            fontName=bold,
-            fontSize=14,
-            leading=18,
-            textColor=colors.HexColor("#173B6C"),
-            spaceBefore=7 * mm,
-            spaceAfter=3 * mm,
-            keepWithNext=True,
-        ),
-        "h2": style(
-            "OSA-H2",
-            fontName=bold,
-            fontSize=11.5,
-            leading=15,
-            textColor=colors.HexColor("#1F2E49"),
-            spaceBefore=4 * mm,
-            spaceAfter=2 * mm,
-            keepWithNext=True,
-        ),
-        "body": style("OSA-Body"),
-        "small": style("OSA-Small", fontSize=8, leading=10.5, textColor=colors.HexColor("#5C667A")),
-        "label": style("OSA-Label", fontName=bold, fontSize=8.5, leading=11),
-        "evidence_location": style(
-            "OSA-EvidenceLocation",
-            fontName=bold,
-            fontSize=8.1,
-            leading=10.5,
-            textColor=colors.HexColor("#41516B"),
-            spaceAfter=0,
-        ),
-        "quote": style(
-            "OSA-Quote",
-            fontSize=8.7,
-            leading=12.2,
-            textColor=colors.HexColor("#172033"),
-            spaceBefore=0,
-            spaceAfter=0,
-        ),
-        "warning": style(
-            "OSA-Warning",
-            fontSize=8.8,
-            leading=12,
-            borderColor=colors.HexColor("#D69E2E"),
-            borderWidth=0.8,
-            borderPadding=3 * mm,
-            backColor=colors.HexColor("#FFF9E8"),
-            spaceBefore=2 * mm,
-            spaceAfter=4 * mm,
-        ),
-        "footer": style("OSA-Footer", fontSize=7.5, leading=9, textColor=colors.HexColor("#6B7280")),
-    }
-
-
-def _text(value: Any) -> str:
-    if value is None:
-        return "—"
-    raw = str(value).strip()
-    return raw if raw else "—"
-
-
-def _html(value: Any) -> str:
-    return escape(_text(value)).replace("\n", "<br/>")
-
-
-def _paragraph(value: Any, styles: dict[str, ParagraphStyle], kind: str = "body") -> Paragraph:
-    return Paragraph(_html(value), styles[kind])
-
-
-def _label_value(label: str, value: Any, styles: dict[str, ParagraphStyle], kind: str = "body") -> Paragraph:
-    return Paragraph(f"<b>{escape(label)}:</b> {_html(value)}", styles[kind])
-
-
-def _bullet(value: Any, styles: dict[str, ParagraphStyle], kind: str = "body") -> Paragraph:
-    return Paragraph(_html(value), styles[kind], bulletText="-")
-
-
-def _table(
-    rows: list[list[Any]],
-    widths: list[float],
-    styles: dict[str, ParagraphStyle],
+def report_to_pdf(
+    name: str,
+    report: dict[str, Any],
     *,
-    header: bool = False,
-    compact: bool = False,
-) -> Table:
-    prepared: list[list[Any]] = []
-    for row_index, row in enumerate(rows):
-        prepared_row: list[Any] = []
-        for cell in row:
-            if isinstance(cell, (Paragraph, Table, Spacer)):
-                prepared_row.append(cell)
-            else:
-                kind = "label" if header and row_index == 0 else ("small" if compact else "body")
-                prepared_row.append(_paragraph(cell, styles, kind))
-        prepared.append(prepared_row)
+    profile: str | None = None,
+    generated_at: str | None = None,
+) -> bytes:
+    """Build a printable Unicode PDF report directly from the report JSON."""
 
-    table_class = LongTable if len(prepared) > 8 else Table
-    table = table_class(prepared, colWidths=widths, repeatRows=1 if header else 0, hAlign="LEFT")
-    commands: list[tuple[Any, ...]] = [
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-        ("TOPPADDING", (0, 0), (-1, -1), 4 if compact else 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4 if compact else 5),
-    ]
-    if header:
-        commands.extend(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E9EEF6")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#173B6C")),
-            ]
-        )
-    for index in range(1 if header else 0, len(prepared)):
-        if index % 2 == 0:
-            commands.append(("BACKGROUND", (0, index), (-1, index), colors.HexColor("#FAFBFC")))
-    table.setStyle(TableStyle(commands))
-    return table
-
-
-def _evidence_card(
-    item: dict[str, Any],
-    index: int,
-    styles: dict[str, ParagraphStyle],
-) -> KeepTogether:
-    """Render one evidence item as an indivisible card.
-
-    A bordered Paragraph can be split at a page boundary, and in some PDF
-    viewers its border/padding may then overlap the next quote. A small table
-    calculates the complete card height before placement, while KeepTogether
-    moves the card to the next page when there is not enough room.
-    """
-    location = _text(item.get("location"))
-    if item.get("page"):
-        location += f", стр. {item['page']}"
-
-    location_paragraph = Paragraph(
-        f"Доказательство {index}. {escape(location)}",
-        styles["evidence_location"],
-    )
-    quote_paragraph = Paragraph(
-        f"«{_html(item.get('quote'))}»",
-        styles["quote"],
-    )
-
-    card = Table(
-        [[location_paragraph], [quote_paragraph]],
-        colWidths=[CONTENT_WIDTH],
-        hAlign="LEFT",
-        splitByRow=1,
-    )
-    card.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("BOX", (0, 0), (-1, -1), 0.55, colors.HexColor("#AAB8CC")),
-                ("LINEBELOW", (0, 0), (-1, 0), 0.35, colors.HexColor("#C7D1DF")),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF0F7")),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#F7F9FC")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 9),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 9),
-                ("TOPPADDING", (0, 0), (-1, 0), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-                ("TOPPADDING", (0, 1), (-1, 1), 8),
-                ("BOTTOMPADDING", (0, 1), (-1, 1), 8),
-            ]
-        )
-    )
-    return KeepTogether([card, Spacer(1, 2.8 * mm)])
-
-
-def _score_text(report: dict[str, Any]) -> str:
-    score = report.get("score")
-    if score is None:
-        return "Не рассчитана"
-    suffix = " (предварительно)" if report.get("scoreIsProvisional") else ""
-    return f"{score}/100{suffix}"
-
-
-def _add_document_map(story: list[Any], report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> None:
-    document_map = report.get("documentMap")
-    if not isinstance(document_map, dict):
-        return
-
-    elements = document_map.get("elements", []) or []
-    extraction = document_map.get("extraction", {}) or {}
-    review = document_map.get("review", {}) or {}
-    story.append(Paragraph("Структурная карта", styles["h1"]))
-    story.append(
-        _table(
-            [
-                ["Статус", "готова" if document_map.get("status") == "ready" else "частичная"],
-                ["Подтверждена пользователем", "да" if review.get("confirmedByUser") else "нет"],
-                ["Обработано блоков", f"{extraction.get('processedBlocks', 0)} из {extraction.get('totalBlocks', 0)}"],
-                ["Смысловых диапазонов", len(elements)],
-                ["Неоднозначных элементов", sum(1 for item in elements if item.get("state") == "ambiguous")],
-            ],
-            [55 * mm, CONTENT_WIDTH - 55 * mm],
-            styles,
-            compact=True,
-        )
-    )
-    story.append(Spacer(1, 3 * mm))
-
-    important = {
-        "title",
-        "introduction",
-        "goal",
-        "tasks",
-        "defense_statements",
-        "chapter",
-        "chapter_conclusions",
-        "conclusion",
-        "bibliography",
-    }
-    displayed = [item for item in elements if item.get("type") in important]
-    if displayed:
-        rows: list[list[Any]] = [["Тип", "Фрагмент", "Границы", "Страницы", "Статус"]]
-        for element in displayed:
-            pages = element.get("pages", []) or []
-            page_text = f"{pages[0]}-{pages[-1]}" if pages else "—"
-            rows.append(
-                [
-                    ELEMENT_LABELS.get(str(element.get("type")), str(element.get("type") or "—")),
-                    element.get("label", ""),
-                    f"{element.get('startBlockId', '—')} → {element.get('endBlockId', '—')}",
-                    page_text,
-                    "неоднозначен" if element.get("state") == "ambiguous" else "подтверждён",
-                ]
-            )
-        story.append(
-            _table(
-                rows,
-                [24 * mm, 55 * mm, 40 * mm, 20 * mm, CONTENT_WIDTH - 139 * mm],
-                styles,
-                header=True,
-                compact=True,
-            )
-        )
-
-    issues = document_map.get("issues", []) or []
-    if issues:
-        story.append(Paragraph("Замечания к карте", styles["h2"]))
-        for issue in issues:
-            story.append(_bullet(issue.get("message", ""), styles))
-
-
-def _add_rule_result(
-    story: list[Any],
-    result: dict[str, Any],
-    rule: dict[str, Any] | None,
-    styles: dict[str, ParagraphStyle],
-) -> None:
-    title = str(result.get("ruleId", "—"))
-    if rule and rule.get("title"):
-        title += f" - {rule['title']}"
-    story.append(Paragraph(_html(title), styles["h2"]))
-
-    meta_rows: list[list[Any]] = []
-    if rule:
-        meta_rows.extend(
-            [
-                ["Требование", rule.get("requirement", "")],
-                ["Источник", f"{rule.get('sourceLabel', '—')}, строка {rule.get('sourceLine', '—')}"],
-                ["Категория", rule.get("category", "—")],
-            ]
-        )
-    meta_rows.extend(
-        [
-            ["Проверено", result.get("checkedBy", "—")],
-            ["Проверка доказательств", EVIDENCE_LABELS.get(str(result.get("evidenceStatus") or "not_required"), "доказательство не требовалось")],
-        ]
-    )
-    story.append(_table(meta_rows, [43 * mm, CONTENT_WIDTH - 43 * mm], styles, compact=True))
-    story.append(Spacer(1, 2 * mm))
-    story.append(_label_value("Результат", result.get("explanation", ""), styles))
-
-    coverage = result.get("coverage")
-    if isinstance(coverage, dict):
-        story.append(
-            _label_value(
-                "Фрагменты",
-                f"{coverage.get('checkedCandidateCount', 0)} из {coverage.get('candidateCount', 0)}; "
-                f"полная область: {'да' if coverage.get('exhaustive') else 'нет'}",
-                styles,
-                "small",
-            )
-        )
-    if result.get("checkedFragments"):
-        story.append(_label_value("Проверенные фрагменты", ", ".join(map(str, result["checkedFragments"])), styles, "small"))
-    if result.get("relatedRuleIds"):
-        story.append(_label_value("Связанные правила", ", ".join(map(str, result["relatedRuleIds"])), styles, "small"))
-    if result.get("consistencyNotes"):
-        story.append(_label_value("Проверка согласованности", " ".join(map(str, result["consistencyNotes"])), styles, "small"))
-
-    term_findings = result.get("termFindings", []) or []
-    if term_findings:
-        story.append(Paragraph("Разбор обозначений", styles["h2"]))
-        rows = [["Термин", "Тип", "Статус"]]
-        rows.extend([[item.get("term", ""), item.get("kind", ""), item.get("status", "")] for item in term_findings])
-        story.append(_table(rows, [55 * mm, 45 * mm, CONTENT_WIDTH - 100 * mm], styles, header=True, compact=True))
-
-    matrix = result.get("coverageMatrix", []) or []
-    if matrix:
-        story.append(Paragraph("Матрица полного покрытия", styles["h2"]))
-        rows = [["Фрагмент", "Блоки", "Полнота", "Элементы"]]
-        for row in matrix:
-            items = "; ".join(
-                f"{item.get('name', '—')}: {MATRIX_LABELS.get(str(item.get('status')), str(item.get('status') or '—'))}"
-                for item in row.get("items", []) or []
-            )
-            rows.append(
-                [
-                    row.get("label", ""),
-                    f"{row.get('checkedBlocks', 0)}/{row.get('totalBlocks', 0)}",
-                    "полная" if row.get("complete") else "неполная",
-                    items,
-                ]
-            )
-        story.append(_table(rows, [45 * mm, 22 * mm, 25 * mm, CONTENT_WIDTH - 92 * mm], styles, header=True, compact=True))
-
-    evidence = result.get("evidence", []) or []
-    if evidence:
-        story.append(Paragraph("Подтверждённые доказательства", styles["h2"]))
-        for index, item in enumerate(evidence, start=1):
-            story.append(_evidence_card(item, index, styles))
-
-    if result.get("fix"):
-        story.append(_label_value("Исправление", result.get("fix"), styles))
-
-    story.append(Spacer(1, 2 * mm))
-    story.append(HRFlowable(width="100%", thickness=0.35, color=colors.HexColor("#D7DEE8"), spaceBefore=2 * mm, spaceAfter=2 * mm))
-
-
-def _add_technical(story: list[Any], report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> None:
-    usage = report.get("llmUsage", {}) or {}
-    technical = report.get("technical", {}) or {}
-    routing = report.get("routing", {}) or {}
-
-    story.append(PageBreak())
-    story.append(Paragraph("Технические сведения", styles["h1"]))
-    story.append(
-        _table(
-            [
-                ["Версия приложения", technical.get("appVersion", "—")],
-                ["Провайдер API", technical.get("provider", "—")],
-                ["Model ID", technical.get("model", "—")],
-                ["Хеш промпта проверки", technical.get("promptHash", "—")],
-                ["Хеш промпта структуры", technical.get("mapPromptHash") or "—"],
-            ],
-            [55 * mm, CONTENT_WIDTH - 55 * mm],
-            styles,
-            compact=True,
-        )
-    )
-
-    story.append(Paragraph("Нагрузка LLM", styles["h1"]))
-    story.append(
-        _table(
-            [
-                ["Физических запросов", usage.get("requests", 0)],
-                ["Повторных попыток", usage.get("retries", 0)],
-                ["Проверено пакетов", usage.get("packets", 0)],
-                ["Передано правил/объектов", usage.get("candidates", 0)],
-                ["Оценочно входных токенов", usage.get("estimatedInputTokens", 0)],
-                ["Ожидание rate limiter", f"{round(float(usage.get('rateLimitWaitMs', 0) or 0) / 1000)} с"],
-                ["Время запросов к модели", f"{round(float(usage.get('requestDurationMs', 0) or 0) / 1000)} с"],
-                [
-                    "Маршрутизация",
-                    f"{routing.get('strategy', '—')}; явно задано: {routing.get('explicitRules', 0)}; "
-                    f"fallback: {routing.get('fallbackRules', 0)}; фрагментов: {routing.get('fragments', 0)}; "
-                    f"запросов проверки: {routing.get('checkRequests', 0)}",
-                ],
-            ],
-            [55 * mm, CONTENT_WIDTH - 55 * mm],
-            styles,
-            compact=True,
-        )
-    )
-
-    traces = usage.get("traces", []) or []
-    if traces:
-        story.append(Paragraph("Успешные обращения к модели", styles["h2"]))
-        for trace in traces:
-            story.append(
-                _bullet(
-                    f"{trace.get('operation', '—')}: {trace.get('provider', '—')}/{trace.get('model', '—')}; "
-                    f"upstream={trace.get('providerName') or '—'}; HTTP {trace.get('httpStatus', '—')}; "
-                    f"compatibility={'да' if trace.get('compatibilityMode') else 'нет'}; request={trace.get('requestId') or '—'}",
-                    styles,
-                    "small",
-                )
-            )
-
-    diagnostics = usage.get("diagnostics", []) or []
-    if diagnostics:
-        story.append(Paragraph("Диагностика API", styles["h2"]))
-        for item in diagnostics:
-            quota = f"; quota={item.get('quotaMetric')}" if item.get("quotaMetric") else ""
-            story.append(
-                _bullet(
-                    f"{item.get('operation', '—')}, попытка {item.get('attempt', '—')}, HTTP {item.get('httpStatus') or '—'}: "
-                    f"{item.get('message', '')}; retry={str(bool(item.get('retryable'))).lower()}; "
-                    f"ожидание={item.get('backoffMs', 0)} мс{quota}",
-                    styles,
-                    "small",
-                )
-            )
-
-    warnings = report.get("warnings", []) or []
-    if warnings:
-        story.append(Paragraph("Ограничения проверки", styles["h1"]))
-        for warning in warnings:
-            story.append(_bullet(warning, styles))
-
-
-def _page_decorator(name: str, regular_font: str):
-    header = "OSA.Edu - протокол нормоконтроля"
-    generated = datetime.now().astimezone().strftime("%d.%m.%Y %H:%M")
-
-    def draw(canvas: Any, doc: Any) -> None:
-        canvas.saveState()
-        canvas.setStrokeColor(colors.HexColor("#D7DEE8"))
-        canvas.setLineWidth(0.35)
-        canvas.line(LEFT_MARGIN, PAGE_HEIGHT - 12 * mm, PAGE_WIDTH - RIGHT_MARGIN, PAGE_HEIGHT - 12 * mm)
-        canvas.setFont(regular_font, 7.5)
-        canvas.setFillColor(colors.HexColor("#6B7280"))
-        canvas.drawString(LEFT_MARGIN, PAGE_HEIGHT - 9.2 * mm, header)
-        canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, PAGE_HEIGHT - 9.2 * mm, f"Страница {doc.page}")
-        canvas.line(LEFT_MARGIN, 11 * mm, PAGE_WIDTH - RIGHT_MARGIN, 11 * mm)
-        canvas.drawString(LEFT_MARGIN, 7.3 * mm, f"Сформировано: {generated}")
-        footer_name = name if len(name) <= 80 else name[:77] + "..."
-        canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, 7.3 * mm, footer_name)
-        canvas.restoreState()
-
-    return draw
-
-
-def report_to_pdf(name: str, report: dict[str, Any]) -> bytes:
-    """Render the structured OSA.Edu report to a self-contained PDF document."""
-    regular, _bold = _register_fonts()
-    styles = _styles()
+    regular_font, bold_font = _register_fonts()
+    styles = _styles(regular_font, bold_font)
     buffer = BytesIO()
     document = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=RIGHT_MARGIN,
-        leftMargin=LEFT_MARGIN,
-        topMargin=TOP_MARGIN,
-        bottomMargin=BOTTOM_MARGIN,
+        leftMargin=16 * mm,
+        rightMargin=16 * mm,
+        topMargin=17 * mm,
+        bottomMargin=18 * mm,
         title=f"Протокол нормоконтроля - {name}",
         author="OSA.Edu",
         subject="Отчёт автоматизированной проверки ВКР",
     )
 
-    counts = report.get("counts", {}) or {}
-    score = _score_text(report)
-    story: list[Any] = [
-        Paragraph("Протокол нормоконтроля", styles["title"]),
-        Paragraph(_html(name), styles["subtitle"]),
-        _table(
-            [
-                ["Оценка", "Покрытие правил", "Покрытие фрагментов"],
-                [
-                    score,
-                    f"{round(float(report.get('coverage', 0) or 0) * 100)} %\n"
-                    f"{report.get('checkedRules', 0)} из {report.get('totalRules', 0)} правил",
-                    f"{round(float(report.get('candidateCoverage', 0) or 0) * 100)} %",
-                ],
-            ],
-            [CONTENT_WIDTH / 3] * 3,
-            styles,
-            header=True,
-        ),
-        Spacer(1, 4 * mm),
-        _table(
-            [
-                ["Нарушено", "Выполнено", "Неопределённо", "Не обработано", "Неприменимо"],
-                [
-                    counts.get("violation", 0),
-                    counts.get("pass", 0),
-                    counts.get("uncertain", 0),
-                    counts.get("notChecked", 0),
-                    counts.get("notApplicable", 0),
-                ],
-            ],
-            [CONTENT_WIDTH / 5] * 5,
-            styles,
-            header=True,
-            compact=True,
-        ),
-        Spacer(1, 4 * mm),
-        Paragraph(
-            "Оценка не является решением о допуске к защите. Смысловые замечания и предлагаемые исправления необходимо проверить вручную.",
-            styles["warning"],
-        ),
-        Paragraph("Краткий итог", styles["h1"]),
-        _paragraph(report.get("summary", ""), styles),
-    ]
+    story: list[Any] = []
+    story.extend(_cover(name, report, profile, generated_at, styles))
+    story.extend(_structure_section(report.get("documentMap"), styles))
 
-    _add_document_map(story, report, styles)
-
-    catalog = {item.get("id"): item for item in report.get("ruleCatalog", []) or []}
-    for status in STATUS_ORDER:
-        items = [item for item in report.get("ruleResults", []) or [] if item.get("status") == status]
-        story.append(Paragraph(f"{STATUS_LABELS.get(status, status)} ({len(items)})", styles["h1"]))
+    catalog = {str(item.get("id")): item for item in report.get("ruleCatalog", []) or []}
+    results = report.get("ruleResults", []) or []
+    for status in _STATUS_ORDER:
+        items = [item for item in results if item.get("status") == status]
         if not items:
-            story.append(_paragraph("В этой категории правил нет.", styles, "small"))
             continue
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(f"{_STATUS_LABELS[status]} ({len(items)})", styles["section"]))
+        story.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#D9DDE1"), spaceAfter=3 * mm))
         for result in items:
-            _add_rule_result(story, result, catalog.get(result.get("ruleId")), styles)
+            story.extend(_rule_result(result, catalog.get(str(result.get("ruleId"))), styles))
 
-    _add_technical(story, report, styles)
+    story.append(PageBreak())
+    story.extend(_technical_section(report, profile, styles))
 
-    decorator = _page_decorator(name, regular)
-    document.build(story, onFirstPage=decorator, onLaterPages=decorator)
+    def draw_page(canvas, doc):
+        canvas.saveState()
+        canvas.setFillColor(colors.HexColor("#6B7178"))
+        canvas.setFont(regular_font, 8)
+        canvas.drawString(doc.leftMargin, 9 * mm, "OSA.Edu - протокол нормоконтроля")
+        canvas.drawRightString(A4[0] - doc.rightMargin, 9 * mm, f"Страница {canvas.getPageNumber()}")
+        canvas.restoreState()
+
+    document.build(story, onFirstPage=draw_page, onLaterPages=draw_page)
     return buffer.getvalue()
+
+
+def _cover(
+    name: str,
+    report: dict[str, Any],
+    profile: str | None,
+    generated_at: str | None,
+    styles: dict[str, ParagraphStyle],
+) -> list[Any]:
+    score = report.get("score")
+    score_text = "не рассчитана" if score is None else f"{score}/100" + (" (предварительно)" if report.get("scoreIsProvisional") else "")
+    coverage = round(float(report.get("coverage", 0) or 0) * 100)
+    candidate_coverage = round(float(report.get("candidateCoverage", 0) or 0) * 100)
+    counts = report.get("counts", {}) or {}
+
+    rows = [
+        [_p("Оценка", styles["metric_label"]), _p(score_text, styles["metric_value"])],
+        [_p("Покрытие правил", styles["metric_label"]), _p(f"{coverage}% ({report.get('checkedRules', 0)} из {report.get('totalRules', 0)})", styles["metric_value"])],
+        [_p("Отправлено назначенных фрагментов", styles["metric_label"]), _p(f"{candidate_coverage}%", styles["metric_value"])],
+        [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "-", styles["metric_value"])],
+    ]
+    metric_table = Table(rows, colWidths=[62 * mm, 112 * mm], hAlign="LEFT")
+    metric_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F5F6F7")),
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#D9DDE1")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E5E8")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+
+    status_rows = [[
+        Paragraph(f"<b>{counts.get('violation', 0)}</b><br/>Нарушено", styles["status_cell"]),
+        Paragraph(f"<b>{counts.get('pass', 0)}</b><br/>Выполнено", styles["status_cell"]),
+        Paragraph(f"<b>{counts.get('uncertain', 0)}</b><br/>Неопределённо", styles["status_cell"]),
+        Paragraph(f"<b>{counts.get('notChecked', 0)}</b><br/>Не обработано", styles["status_cell"]),
+        Paragraph(f"<b>{counts.get('notApplicable', 0)}</b><br/>Неприменимо", styles["status_cell"]),
+    ]]
+    status_table = Table(status_rows, colWidths=[34.8 * mm] * 5)
+    status_table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#D9DDE1")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E2E5E8")),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+
+    result: list[Any] = [
+        Paragraph("OSA.Edu", styles["eyebrow"]),
+        Paragraph("Протокол нормоконтроля", styles["title"]),
+        Paragraph(name, styles["document_name"]),
+    ]
+    if generated_at:
+        result.append(Paragraph(f"Сформирован: {_safe(generated_at)}", styles["muted"]))
+    result.extend([
+        Spacer(1, 5 * mm),
+        metric_table,
+        Spacer(1, 4 * mm),
+        status_table,
+        Spacer(1, 4 * mm),
+        Paragraph(_safe(str(report.get("summary", ""))), styles["summary"]),
+        Spacer(1, 2 * mm),
+        Table([[_p("Оценка не является решением о допуске к защите. Смысловые замечания и исправления необходимо проверить вручную.", styles["notice"]) ]], colWidths=[174 * mm], style=TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF7E6")),
+            ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E4C982")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ])),
+    ])
+    return result
+
+
+def _structure_section(document_map: dict[str, Any] | None, styles: dict[str, ParagraphStyle]) -> list[Any]:
+    if not document_map:
+        return []
+    elements = document_map.get("elements", []) or []
+    important = {"title", "introduction", "goal", "tasks", "defense_statements", "chapter", "chapter_conclusions", "conclusion", "bibliography"}
+    displayed = [item for item in elements if item.get("type") in important]
+    extraction = document_map.get("extraction", {}) or {}
+    review = document_map.get("review", {}) or {}
+
+    result: list[Any] = [
+        Spacer(1, 6 * mm),
+        Paragraph("Структурная карта", styles["section"]),
+        Paragraph(
+            f"Статус: {'готова' if document_map.get('status') == 'ready' else 'частичная'}; "
+            f"подтверждена пользователем: {'да' if review.get('confirmedByUser') else 'нет'}; "
+            f"обработано блоков: {extraction.get('processedBlocks', 0)} из {extraction.get('totalBlocks', 0)}; "
+            f"неоднозначных элементов: {sum(1 for item in elements if item.get('state') == 'ambiguous')}.",
+            styles["body"],
+        ),
+        Spacer(1, 2 * mm),
+    ]
+    if displayed:
+        rows: list[list[Any]] = [[_p("Тип", styles["table_head"]), _p("Фрагмент", styles["table_head"]), _p("Диапазон", styles["table_head"])]]
+        for item in displayed:
+            pages = item.get("pages", []) or []
+            pages_text = f"; стр. {pages[0]}-{pages[-1]}" if pages else ""
+            state = "; требует проверки" if item.get("state") == "ambiguous" else ""
+            rows.append([
+                _p(str(item.get("type", "")), styles["table_cell"]),
+                _p(str(item.get("label", "")), styles["table_cell"]),
+                _p(f"{item.get('startBlockId', '')} - {item.get('endBlockId', '')}{pages_text}{state}", styles["table_cell"]),
+            ])
+        table = LongTable(rows, colWidths=[34 * mm, 88 * mm, 52 * mm], repeatRows=1)
+        table.setStyle(_table_style())
+        result.append(table)
+    issues = document_map.get("issues", []) or []
+    if issues:
+        result.extend([Spacer(1, 2 * mm), Paragraph("Замечания к карте", styles["subsection"])])
+        result.extend(Paragraph(f"- {_safe(str(item.get('message', '')))}", styles["body"]) for item in issues)
+    return result
+
+
+def _rule_result(result: dict[str, Any], rule: dict[str, Any] | None, styles: dict[str, ParagraphStyle]) -> list[Any]:
+    rule_id = str(result.get("ruleId", ""))
+    title = str((rule or {}).get("title") or result.get("explanation") or "")
+    status = str(result.get("status", "not_checked"))
+    color = _STATUS_COLORS.get(status, colors.HexColor("#626970"))
+
+    heading_table = Table([[Paragraph(_safe(_STATUS_LABELS.get(status, status)), styles["badge"]), Paragraph(f"{_safe(rule_id)} - {_safe(title)}", styles["rule_title"]) ]], colWidths=[34 * mm, 140 * mm])
+    heading_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, 0), color),
+        ("TEXTCOLOR", (0, 0), (0, 0), colors.white),
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#D9DDE1")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+
+    items: list[Any] = [Spacer(1, 2.5 * mm), heading_table, Spacer(1, 2 * mm)]
+    if rule:
+        items.append(_label_value("Требование", str(rule.get("requirement", "")), styles))
+        source = str(rule.get("sourceLabel", ""))
+        if rule.get("sourceLine") is not None:
+            source += f", строка {rule.get('sourceLine')}"
+        items.append(_label_value("Источник", source, styles))
+    items.append(_label_value("Результат", str(result.get("explanation", "")), styles))
+    items.append(_label_value("Проверено", str(result.get("checkedBy", "")), styles))
+    items.append(_label_value("Проверка доказательств", _EVIDENCE_LABELS.get(str(result.get("evidenceStatus") or "not_required"), "доказательство не требовалось"), styles))
+
+    coverage = result.get("coverage") or {}
+    if coverage:
+        items.append(_label_value(
+            "Покрытие",
+            f"фрагменты: {coverage.get('checkedCandidateCount', 0)} из {coverage.get('candidateCount', 0)}; полная область: {'да' if coverage.get('exhaustive') else 'нет'}",
+            styles,
+        ))
+    if result.get("relatedRuleIds"):
+        items.append(_label_value("Связанные правила", ", ".join(str(value) for value in result["relatedRuleIds"]), styles))
+    if result.get("consistencyNotes"):
+        items.append(_label_value("Проверка согласованности", " ".join(str(value) for value in result["consistencyNotes"]), styles))
+
+    term_findings = result.get("termFindings") or []
+    if term_findings:
+        rows = [[_p("Термин", styles["table_head"]), _p("Тип", styles["table_head"]), _p("Статус", styles["table_head"])]]
+        for item in term_findings:
+            rows.append([_p(str(item.get("term", "")), styles["table_cell"]), _p(str(item.get("kind", "")), styles["table_cell"]), _p(str(item.get("status", "")), styles["table_cell"])])
+        table = LongTable(rows, colWidths=[52 * mm, 56 * mm, 66 * mm], repeatRows=1)
+        table.setStyle(_table_style())
+        items.extend([Spacer(1, 1.5 * mm), Paragraph("Разбор обозначений", styles["subsection"]), table])
+
+    matrix = result.get("coverageMatrix") or []
+    if matrix:
+        rows = [[_p("Фрагмент", styles["table_head"]), _p("Блоки", styles["table_head"]), _p("Полнота", styles["table_head"]), _p("Элементы", styles["table_head"])]]
+        for row in matrix:
+            elements = "; ".join(f"{item.get('name')}: {_MATRIX_LABELS.get(str(item.get('status')), str(item.get('status')))}" for item in row.get("items", []) or [])
+            rows.append([
+                _p(str(row.get("label", "")), styles["table_cell"]),
+                _p(f"{row.get('checkedBlocks', 0)}/{row.get('totalBlocks', 0)}", styles["table_cell"]),
+                _p("полная" if row.get("complete") else "неполная", styles["table_cell"]),
+                _p(elements, styles["table_cell"]),
+            ])
+        table = LongTable(rows, colWidths=[49 * mm, 23 * mm, 25 * mm, 77 * mm], repeatRows=1)
+        table.setStyle(_table_style())
+        items.extend([Spacer(1, 1.5 * mm), Paragraph("Матрица полного покрытия", styles["subsection"]), table])
+
+    evidence = result.get("evidence") or []
+    if evidence:
+        items.extend([Spacer(1, 1.5 * mm), Paragraph("Доказательства", styles["subsection"])])
+        for item in evidence:
+            meta = str(item.get("location", ""))
+            if item.get("page"):
+                meta += f", стр. {item.get('page')}"
+            if item.get("start") is not None and item.get("end") is not None:
+                meta += f", символы {item.get('start')}–{item.get('end')}"
+            quote, shortened = _shorten(str(item.get("quote", "")), _MAX_QUOTE_CHARS)
+            quote_text = f"<b>{_safe(meta)}</b><br/>{_safe(quote)}"
+            context = str(item.get("context") or "").strip()
+            if context and context != str(item.get("quote", "")).strip():
+                context_value, context_shortened = _shorten(context, min(_MAX_QUOTE_CHARS, 900))
+                quote_text += f"<br/><i>Контекст:</i> {_safe(context_value)}"
+                shortened = shortened or context_shortened
+            if shortened:
+                quote_text += "<br/><i>Текст сокращён в PDF; полный вариант доступен в JSON/Markdown.</i>"
+            quote_table = Table([[Paragraph(quote_text, styles["quote"]) ]], colWidths=[170 * mm])
+            quote_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7F8F8")),
+                ("LINEBEFORE", (0, 0), (0, -1), 2, colors.HexColor("#BFC5CA")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]))
+            items.extend([quote_table, Spacer(1, 1.5 * mm)])
+
+    if result.get("fix"):
+        items.append(_label_value("Исправление", str(result.get("fix")), styles))
+    return items
+
+
+def _technical_section(report: dict[str, Any], profile: str | None, styles: dict[str, ParagraphStyle]) -> list[Any]:
+    technical = report.get("technical", {}) or {}
+    usage = report.get("llmUsage", {}) or {}
+    routing = report.get("routing", {}) or {}
+    rows = [
+        ["Версия приложения", technical.get("appVersion", "")],
+        ["Провайдер API", technical.get("provider", "")],
+        ["Model ID", technical.get("model", "")],
+        ["Профиль", "Ядро" if profile == "core" else "Полный набор" if profile == "full" else "-"],
+        ["Хеш промпта проверки", technical.get("promptHash", "")],
+        ["Хеш промпта структуры", technical.get("mapPromptHash") or "-"],
+        ["Физических запросов", usage.get("requests", 0)],
+        ["Повторных попыток", usage.get("retries", 0)],
+        ["Оценочно входных токенов", usage.get("estimatedInputTokens", 0)],
+        ["Ожидание rate limiter", f"{round(float(usage.get('rateLimitWaitMs', 0) or 0) / 1000)} с"],
+        ["Время запросов к модели", f"{round(float(usage.get('requestDurationMs', 0) or 0) / 1000)} с"],
+        ["Маршрутизация", f"{routing.get('strategy', '')}; явно задано: {routing.get('explicitRules', 0)}; fallback: {routing.get('fallbackRules', 0)}; фрагментов: {routing.get('fragments', 0)}; запросов проверки: {routing.get('checkRequests', 0)} (candidate: {routing.get('candidateRequests', 0)}, semantic: {routing.get('semanticRequests', 0)})"],
+    ]
+    table_rows = [[_p("Параметр", styles["table_head"]), _p("Значение", styles["table_head"])]] + [[_p(str(key), styles["table_cell"]), _p(str(value), styles["table_cell"])] for key, value in rows]
+    table = LongTable(table_rows, colWidths=[55 * mm, 119 * mm], repeatRows=1)
+    table.setStyle(_table_style())
+
+    result: list[Any] = [Paragraph("Технические сведения", styles["section"]), table]
+    traces = usage.get("traces", []) or []
+    if traces:
+        result.extend([Spacer(1, 3 * mm), Paragraph("Успешные обращения к модели", styles["subsection"])])
+        for trace in traces:
+            value = (
+                f"{trace.get('operation')}: {trace.get('provider')}/{trace.get('model')}; "
+                f"upstream={trace.get('providerName') or '-'}; HTTP {trace.get('httpStatus')}; "
+                f"compatibility={'да' if trace.get('compatibilityMode') else 'нет'}; request={trace.get('requestId') or '-'}"
+            )
+            result.append(Paragraph(f"- {_safe(value)}", styles["small"]))
+
+    diagnostics = usage.get("diagnostics", []) or []
+    if diagnostics:
+        result.extend([Spacer(1, 3 * mm), Paragraph("Диагностика API", styles["subsection"])])
+        for item in diagnostics[:_MAX_DIAGNOSTICS]:
+            value = (
+                f"{item.get('operation')}, попытка {item.get('attempt')}, HTTP {item.get('httpStatus') or '-'}: "
+                f"{item.get('message')}; retry={'да' if item.get('retryable') else 'нет'}; "
+                f"ожидание={item.get('backoffMs', 0)} мс"
+            )
+            result.append(Paragraph(f"- {_safe(value)}", styles["small"]))
+        if len(diagnostics) > _MAX_DIAGNOSTICS:
+            result.append(Paragraph(f"Показаны первые {_MAX_DIAGNOSTICS} записей из {len(diagnostics)}. Полная диагностика доступна в JSON/Markdown.", styles["muted"]))
+
+    warnings = report.get("warnings", []) or []
+    if warnings:
+        result.extend([Spacer(1, 3 * mm), Paragraph("Ограничения проверки", styles["subsection"])])
+        result.extend(Paragraph(f"- {_safe(str(value))}", styles["body"]) for value in warnings)
+    return result
+
+
+def _styles(regular_font: str, bold_font: str) -> dict[str, ParagraphStyle]:
+    base = getSampleStyleSheet()
+    return {
+        "eyebrow": ParagraphStyle("Eyebrow", parent=base["Normal"], fontName=bold_font, fontSize=9, leading=11, textColor=colors.HexColor("#6B7178"), spaceAfter=3),
+        "title": ParagraphStyle("TitleRu", parent=base["Title"], fontName=bold_font, fontSize=22, leading=27, alignment=TA_LEFT, textColor=colors.HexColor("#202124"), spaceAfter=4),
+        "document_name": ParagraphStyle("DocumentName", parent=base["Normal"], fontName=regular_font, fontSize=12, leading=16, textColor=colors.HexColor("#555C64"), splitLongWords=True),
+        "section": ParagraphStyle("Section", parent=base["Heading2"], fontName=bold_font, fontSize=15, leading=19, textColor=colors.HexColor("#202124"), spaceBefore=4, spaceAfter=4),
+        "subsection": ParagraphStyle("Subsection", parent=base["Heading3"], fontName=bold_font, fontSize=11, leading=14, textColor=colors.HexColor("#303337"), spaceBefore=3, spaceAfter=3),
+        "body": ParagraphStyle("BodyRu", parent=base["BodyText"], fontName=regular_font, fontSize=9.5, leading=13, textColor=colors.HexColor("#202124"), spaceAfter=3, splitLongWords=True),
+        "small": ParagraphStyle("SmallRu", parent=base["BodyText"], fontName=regular_font, fontSize=8.2, leading=10.5, textColor=colors.HexColor("#202124"), spaceAfter=2, splitLongWords=True),
+        "muted": ParagraphStyle("Muted", parent=base["BodyText"], fontName=regular_font, fontSize=8.5, leading=11, textColor=colors.HexColor("#6B7178"), spaceAfter=3, splitLongWords=True),
+        "summary": ParagraphStyle("Summary", parent=base["BodyText"], fontName=regular_font, fontSize=10, leading=14, textColor=colors.HexColor("#303337"), splitLongWords=True),
+        "notice": ParagraphStyle("Notice", parent=base["BodyText"], fontName=regular_font, fontSize=9, leading=12.5, textColor=colors.HexColor("#634B15"), splitLongWords=True),
+        "metric_label": ParagraphStyle("MetricLabel", parent=base["BodyText"], fontName=regular_font, fontSize=8.5, leading=11, textColor=colors.HexColor("#6B7178")),
+        "metric_value": ParagraphStyle("MetricValue", parent=base["BodyText"], fontName=bold_font, fontSize=9.5, leading=12, textColor=colors.HexColor("#202124"), splitLongWords=True),
+        "status_cell": ParagraphStyle("StatusCell", parent=base["BodyText"], fontName=regular_font, fontSize=8, leading=11, alignment=TA_CENTER, textColor=colors.HexColor("#444A50")),
+        "badge": ParagraphStyle("Badge", parent=base["BodyText"], fontName=bold_font, fontSize=8, leading=10, alignment=TA_CENTER, textColor=colors.white),
+        "rule_title": ParagraphStyle("RuleTitle", parent=base["BodyText"], fontName=bold_font, fontSize=10, leading=13, textColor=colors.HexColor("#202124"), splitLongWords=True),
+        "label": ParagraphStyle("Label", parent=base["BodyText"], fontName=bold_font, fontSize=8.5, leading=11, textColor=colors.HexColor("#555C64")),
+        "value": ParagraphStyle("Value", parent=base["BodyText"], fontName=regular_font, fontSize=9, leading=12.5, textColor=colors.HexColor("#202124"), splitLongWords=True),
+        "quote": ParagraphStyle("Quote", parent=base["BodyText"], fontName=regular_font, fontSize=8.5, leading=11.5, textColor=colors.HexColor("#303337"), splitLongWords=True),
+        "table_head": ParagraphStyle("TableHead", parent=base["BodyText"], fontName=bold_font, fontSize=7.6, leading=9.5, textColor=colors.HexColor("#303337"), splitLongWords=True),
+        "table_cell": ParagraphStyle("TableCell", parent=base["BodyText"], fontName=regular_font, fontSize=7.4, leading=9.5, textColor=colors.HexColor("#303337"), splitLongWords=True),
+    }
+
+
+def _label_value(label: str, value: str, styles: dict[str, ParagraphStyle]) -> Table:
+    table = Table([[_p(label, styles["label"]), _p(value, styles["value"]) ]], colWidths=[40 * mm, 134 * mm])
+    table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+    ]))
+    return table
+
+
+def _table_style() -> TableStyle:
+    return TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ECEFF1")),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D2D6DA")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#E0E3E6")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFBFB")]),
+    ])
+
+
+def _p(value: Any, style: ParagraphStyle) -> Paragraph:
+    return Paragraph(_safe(str(value or "")), style)
+
+
+def _safe(value: str) -> str:
+    cleaned = _INVALID_XML.sub(" ", value.replace("\r\n", "\n").replace("\r", "\n"))
+    return escape(cleaned).replace("\n", "<br/>")
+
+
+def _shorten(value: str, limit: int) -> tuple[str, bool]:
+    normalized = value.strip()
+    if len(normalized) <= limit:
+        return normalized, False
+    return normalized[:limit].rstrip() + "...", True
+
+
+def _register_fonts() -> tuple[str, str]:
+    regular_path = _find_font(
+        os.getenv("OSA_PDF_FONT_REGULAR") or os.getenv("PDF_FONT_REGULAR"),
+        [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSans-Regular.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/Library/Fonts/Arial.ttf",
+        ],
+    )
+    bold_path = _find_font(
+        os.getenv("OSA_PDF_FONT_BOLD") or os.getenv("PDF_FONT_BOLD"),
+        [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSans-Bold.ttf",
+            "C:/Windows/Fonts/arialbd.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+            "/Library/Fonts/Arial Bold.ttf",
+        ],
+        required=False,
+    ) or regular_path
+    if not regular_path:
+        raise RuntimeError(
+            "Не найден Unicode-шрифт для PDF. Установите DejaVu Sans или задайте OSA_PDF_FONT_REGULAR и OSA_PDF_FONT_BOLD (или совместимые PDF_FONT_REGULAR/PDF_FONT_BOLD) в .env."
+        )
+    if "OSAReportRegular" not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont("OSAReportRegular", regular_path))
+    if "OSAReportBold" not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont("OSAReportBold", bold_path))
+    return "OSAReportRegular", "OSAReportBold"
+
+
+def _find_font(value: str | None, candidates: Iterable[str], *, required: bool = True) -> str | None:
+    paths = [value, *candidates] if value else list(candidates)
+    for raw in paths:
+        if raw and Path(raw).expanduser().is_file():
+            return str(Path(raw).expanduser())
+    return None if not required else None

@@ -16,6 +16,7 @@ STATUS_ORDER = ["violation", "pass", "uncertain", "not_checked", "not_applicable
 def _link_related_violations(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     evidence_groups: dict[str, set[str]] = defaultdict(set)
     finding_groups: dict[str, set[str]] = defaultdict(set)
+    position_groups: dict[str, set[str]] = defaultdict(set)
     for result in results:
         if result.get("status") != "violation":
             continue
@@ -24,9 +25,14 @@ def _link_related_violations(results: list[dict[str, Any]]) -> list[dict[str, An
             evidence_groups[key].add(str(result.get("ruleId", "")))
         for finding_id in result.get("findingIds", []) or []:
             finding_groups[str(finding_id)].add(str(result.get("ruleId", "")))
+        dedup_key = str(result.get("dedupKey") or "")
+        if dedup_key:
+            for evidence in result.get("evidence", []) or []:
+                position = f"{dedup_key}|{evidence.get('blockId','')}|{evidence.get('start','')}|{evidence.get('end','')}"
+                position_groups[position].add(str(result.get("ruleId", "")))
 
     related: dict[str, set[str]] = defaultdict(set)
-    for ids in [*evidence_groups.values(), *finding_groups.values()]:
+    for ids in [*evidence_groups.values(), *finding_groups.values(), *position_groups.values()]:
         if len(ids) <= 1:
             continue
         for rule_id in ids:
@@ -43,6 +49,8 @@ def _link_related_violations(results: list[dict[str, Any]]) -> list[dict[str, An
 
 
 def _score_group_key(rule: dict[str, Any]) -> str:
+    if rule.get("dedupKey"):
+        return "dedup:" + str(rule.get("dedupKey"))
     for family in SCORE_FAMILIES:
         if rule.get("id") in family:
             return "family:" + "|".join(family)
@@ -81,7 +89,11 @@ def make_report(
     routing: dict[str, Any],
     technical_input: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    prepared = _link_related_violations(results)
+    dedup_by_rule = {str(rule.get("id")): rule.get("dedupKey") for rule in rules}
+    prepared = _link_related_violations([
+        {**result, **({"dedupKey": dedup_by_rule.get(str(result.get("ruleId")))} if dedup_by_rule.get(str(result.get("ruleId"))) else {})}
+        for result in results
+    ])
     count = lambda status: sum(1 for x in prepared if x.get("status") == status)
     violations = [x for x in prepared if x.get("status") == "violation"]
     applicable = [x for x in prepared if x.get("status") != "not_applicable"]
@@ -126,11 +138,22 @@ def make_report(
         "promptHash": technical_input.get("promptHash") or "unknown",
         "mapPromptHash": technical_input.get("mapPromptHash") or (document_map or {}).get("promptHash"),
     }
-    catalog_keys = ["id", "category", "title", "requirement", "sourceLabel", "sourceLine", "mode", "scope", "severity", "correctExample", "incorrectExample"]
+    catalog_keys = ["id", "category", "title", "requirement", "sourceLabel", "sourceLine", "mode", "scope", "severity", "dedupKey", "candidateFamily", "correctExample", "incorrectExample"]
+    issue_groups: dict[str, dict[str, Any]] = {}
+    for result in violations:
+        key = str(result.get("dedupKey") or result.get("ruleId"))
+        group = issue_groups.setdefault(key, {"dedupKey": key, "ruleIds": [], "evidence": []})
+        group["ruleIds"] = sorted(set([*group["ruleIds"], str(result.get("ruleId"))]))
+        for evidence in result.get("evidence", []) or []:
+            ev_key = (evidence.get("blockId"), evidence.get("start"), evidence.get("end"), normalized_quote(str(evidence.get("quote", ""))))
+            if not any((x.get("blockId"), x.get("start"), x.get("end"), normalized_quote(str(x.get("quote", "")))) == ev_key for x in group["evidence"]):
+                group["evidence"].append(evidence)
+
     return {
         "ruleResults": prepared,
         "documentMap": document_map,
         "ruleCatalog": [{k: rule.get(k) for k in catalog_keys if rule.get(k) is not None} for rule in rules],
+        "issueGroups": list(issue_groups.values()),
         "summary": summary,
         "score": score,
         "scoreIsProvisional": score is not None and coverage < 0.9,
@@ -246,7 +269,10 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
                 lines.append("- **Доказательства:**")
                 for evidence in result["evidence"]:
                     page = f", стр. {evidence.get('page')}" if evidence.get("page") else ""
-                    lines.append(f"  - {evidence.get('location','')}{page}: «{evidence.get('quote','')}»")
+                    offset = f", символы {evidence.get('start')}–{evidence.get('end')}" if evidence.get("start") is not None and evidence.get("end") is not None else ""
+                    lines.append(f"  - {evidence.get('location','')}{page}{offset}: «{evidence.get('quote','')}»")
+                    if evidence.get("context") and evidence.get("context") != evidence.get("quote"):
+                        lines.append(f"    - Контекст: «{evidence.get('context')}»")
             if result.get("fix"):
                 lines.append(f"- **Исправление:** {result['fix']}")
             lines.append("")
@@ -266,7 +292,7 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
         f"- Повторных попыток: {usage.get('retries',0)}",
         f"- Проверено пакетов: {usage.get('packets',0)}",
         f"- Передано правил/объектов: {usage.get('candidates',0)}",
-        f"- Маршрутизация: {routing.get('strategy','')}; явно задано: {routing.get('explicitRules',0)}; fallback: {routing.get('fallbackRules',0)}; фрагментов: {routing.get('fragments',0)}; запросов проверки: {routing.get('checkRequests',0)}",
+        f"- Маршрутизация: {routing.get('strategy','')}; явно задано: {routing.get('explicitRules',0)}; fallback: {routing.get('fallbackRules',0)}; фрагментов: {routing.get('fragments',0)}; запросов проверки: {routing.get('checkRequests',0)} (candidate: {routing.get('candidateRequests',0)}, semantic: {routing.get('semanticRequests',0)})",
         f"- Оценочно входных токенов: {usage.get('estimatedInputTokens',0)}",
         f"- Ожидание rate limiter: {round(float(usage.get('rateLimitWaitMs',0))/1000)} с",
         f"- Время запросов к модели: {round(float(usage.get('requestDurationMs',0))/1000)} с", "",

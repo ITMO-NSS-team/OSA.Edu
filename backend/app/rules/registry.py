@@ -27,6 +27,50 @@ DETECTOR_BY_RULE = {
     'core:11.1':'yo-letter','core:11.2':'forbidden-sentence-start','core:11.3':'forbidden-abbreviations','core:11.4':'colon-a-imenno','core:11.5':'to-est','core:11.6':'diminutives','core:17':'see-figure','core:20':'first-new',
     'soft:27':'personal-pronouns','soft:28':'numbered-list-capitalization','soft:29':'heading-final-period','soft:30':'numbered-list-ending','soft:31':'bullet-list-ending','soft:32':'dash-spacing','soft:34':'quote-consistency','soft:35':'small-numerals','soft:37':'yo-letter','soft:38':'lexical-replacements','soft:39':'praise-claims','soft:40':'diminutives','soft:42':'forbidden-sentence-start','soft:44':'colon-and-to-est','soft:45':'above-written','soft:46':'lexical-cliches','soft:47':'jargon','soft:48':'first-new','soft:50':'title-process','soft:51':'title-length','soft:53':'goal-infinitive','soft:59':'python-capitalization','soft:60':'initials-order','soft:74':'decimal-comma','soft:75':'thousands-spacing','soft:76':'percent-spacing','soft:121':'specialty-dot','soft:124':'method-tuning','soft:125':'method-behavior','soft:126':'performance-verb','soft:127':'model-shows','soft:130':'tasks-solved','soft:132':'analogovye','soft:134':'roman-ending','soft:137':'implemented-in-company','soft:138':'yo-letter','soft:144':'formula-wording','soft:145':'next-respectively','soft:146':'receiver-successor','soft:147':'colloquial-errors','soft:149':'present-work','soft:152':'format-parent-word','soft:155':'document-garbage','soft:159':'transition-to-conclusions','soft:161':'results-word',
 }
+
+CANDIDATE_FAMILY_BY_RULE = {
+    'core:3.1':'impersonal',
+    'core:3.2':'numerals',
+    'core:3.5':'filler',
+    'core:3.6':'condescending',
+    'core:3.7':'overclaim',
+    'core:4.1':'abbrev-first-use',
+    'core:4.2':'abbrev-in-heading',
+    'core:4.3':'abbrev-foreign',
+    'core:11.2':'sentence-start',
+    'core:11.5':'to-est',
+    'core:11.6':'diminutive',
+    'core:12':'abbrev-first-use',
+    # Exact soft duplicates reuse the same candidates in the full profile.
+    'soft:27':'impersonal',
+    'soft:35':'numerals',
+    'soft:39':'overclaim',
+    'soft:40':'diminutive',
+    'soft:42':'sentence-start',
+}
+DEDUP_BY_RULE = {
+    'core:4.1':'abbreviation-introduction',
+    'core:12':'abbreviation-introduction',
+    'core:4.2':'abbreviation-heading',
+    'core:4.3':'abbreviation-translation',
+    'core:5.4':'caption-terminal-punctuation',
+    'core:7.2':'caption-terminal-punctuation',
+    'core:19':'caption-terminal-punctuation',
+    'core:3.1':'impersonal-style',
+    'core:3.2':'small-numerals',
+    'core:3.5':'filler-language',
+    'core:3.6':'condescending-language',
+    'core:3.7':'evaluative-language',
+    'core:11.2':'sentence-start',
+    'core:11.5':'to-est',
+    'core:11.6':'diminutive-language',
+    'soft:27':'impersonal-style',
+    'soft:35':'small-numerals',
+    'soft:39':'evaluative-language',
+    'soft:40':'diminutive-language',
+    'soft:42':'sentence-start',
+}
+
 STOP_WORDS = {'это','как','что','для','или','при','также','так','все','всех','его','ее','она','они','над','под','без','после','перед','если','где','когда','который','которые','данных','работы','работа','главе','глава','раздел','текст','текста','тексте','быть','может','должен','должна','должны','было','были','будет','будут','чтобы','этого','этой','этих','этом','такой','такие','такого','требование','совет'}
 
 
@@ -65,9 +109,19 @@ def _meta(layer: str, number: str, category: str, requirement: str) -> dict[str,
     key = f'{layer}:{number}'
     detector = DETECTOR_BY_RULE.get(key)
     scope = _scope(category, requirement, key)
-    mode = MODE_OVERRIDES.get(key) or ('deterministic' if detector else 'structural' if key in STRUCTURAL_RULES else 'manual' if scope in {'presentation','defense','process'} else 'semantic')
+    candidate_family = CANDIDATE_FAMILY_BY_RULE.get(key)
+    mode = 'candidate' if candidate_family else MODE_OVERRIDES.get(key) or ('deterministic' if detector else 'structural' if key in STRUCTURAL_RULES else 'manual' if scope in {'presentation','defense','process'} else 'semantic')
     sev = _severity(category, requirement, key)
-    return {'mode':mode,'scope':scope,'severity':sev,'weight':{'critical':5,'major':3,'minor':1,'info':0.25}[sev], **({'detectorId':detector} if detector else {})}
+    dedup_key = DEDUP_BY_RULE.get(key) or (f'detector:{detector}' if detector else key)
+    return {
+        'mode':mode,
+        'scope':scope,
+        'severity':sev,
+        'weight':{'critical':5,'major':3,'minor':1,'info':0.25}[sev],
+        'dedupKey':dedup_key,
+        **({'candidateFamily':candidate_family} if candidate_family else {}),
+        **({'detectorId':detector} if detector and not candidate_family else {}),
+    }
 
 
 def _title(requirement: str) -> str:
@@ -111,7 +165,7 @@ def load_rule_registry() -> dict[str, list[dict[str, Any]]]:
 def parse_user_rules(value: str) -> list[dict[str, Any]]:
     result=[]
     for idx, requirement in enumerate([x.strip() for x in value.splitlines() if len(x.strip())>=8][:30], start=1):
-        result.append({'id':f'USR-{idx:02d}','sourceNumber':str(idx),'category':'Дополнительные требования','title':_title(requirement),'requirement':requirement,'sourceLabel':'Пользовательские требования','sourceLine':idx,'layer':'user','mode':'semantic','scope':'document','severity':'major','weight':3,'keywords':tokenize(requirement)})
+        result.append({'id':f'USR-{idx:02d}','sourceNumber':str(idx),'category':'Дополнительные требования','title':_title(requirement),'requirement':requirement,'sourceLabel':'Пользовательские требования','sourceLine':idx,'layer':'user','mode':'semantic','scope':'document','severity':'major','weight':3,'dedupKey':f'user:{idx}','keywords':tokenize(requirement)})
     return result
 
 

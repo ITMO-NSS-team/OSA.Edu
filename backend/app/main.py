@@ -13,13 +13,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
-from .config import MAX_FILE_SIZE_MB, PORT, UPLOADS_DIR, WEB_ORIGIN
+from .config import MAX_FILE_SIZE_MB,  UPLOADS_DIR, WEB_ORIGIN
 from .defaults import DEFAULT_ADDITIONAL_CRITERIA, DEFAULT_MAP_PROMPT, DEFAULT_PROFILE, DEFAULT_PROMPT, MODELS, model_definition
 from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
 from .llm.rate_limiter import configured_rate_limits
-from .pdf_reporting import report_to_pdf
 from .queue import start_queue
+from .pdf_reporting import report_to_pdf
 from .reporting import report_to_markdown
 from .rules.registry import load_rule_registry
 from .store import create_jobs, delete_job, get_job, list_jobs, recover_interrupted_jobs, update_job
@@ -33,7 +33,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="OSA.Edu API", version="3.5.0-py", lifespan=lifespan)
+app = FastAPI(title="OSA.Edu API", version="3.6.0-py-candidate-first", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[WEB_ORIGIN],
@@ -72,7 +72,7 @@ async def health():
             "coreCount": len(registry["core"]),
             "softCount": len(registry["soft"]),
             "fullCount": len(registry["all"]),
-            "retrieval": "Один запрос строит крупные диапазоны ВКР; после подтверждения правила маршрутизируются по явной карте областей. Точные факты проверяются кодом, смысловые требования — выбранной моделью OpenRouter группами.",
+            "retrieval": "После подтверждения карты точные правила проверяются кодом, языковые — через полный поиск коротких кандидатов и LLM-судью, содержательные — по назначенным разделам документа.",
         },
     }
 
@@ -103,6 +103,7 @@ async def create_job_endpoint(
         return _error(400, "За один запуск можно загрузить не более 30 файлов.")
     if not os.getenv("OPENROUTER_API_KEY", "").strip():
         return _error(400, "Для OpenRouter не найден OPENROUTER_API_KEY в .env.")
+
     requested_model = model or MODELS[0]["id"]
     selected = model_definition(requested_model)
     if not selected:
@@ -172,7 +173,7 @@ async def structure(job_id: str):
     context = await _map_context(job_id)
     if not context:
         return _error(404, "Структура документа ещё не готова.")
-    _job, document = context
+    job, document = context
     return {"map": document["map"], "blocks": document.get("blocks", [])}
 
 
@@ -269,7 +270,7 @@ async def confirm_structure(job_id: str):
     context = await _map_context(job_id)
     if not context:
         return _error(404, "Структура документа не найдена.")
-    _job, document = context
+    job, document = context
     document["map"] = refresh_map(document, document["map"])
     if not document["map"].get("elements"):
         return _error(400, "Добавьте хотя бы один смысловой фрагмент.")
@@ -323,8 +324,10 @@ async def retry_failed(job_id: str):
     retry_ids: list[str] = []
     for item in current["report"].get("ruleResults", []):
         coverage = item.get("coverage") or {}
-        failed = item.get("status") == "not_checked" and item.get("checkedBy") == "llm"
-        incomplete = item.get("status") == "uncertain" and item.get("checkedBy") == "llm" and (
+        checked_by = str(item.get("checkedBy") or "")
+        is_llm = checked_by.startswith("llm")
+        failed = item.get("status") == "not_checked" and is_llm
+        incomplete = item.get("status") == "uncertain" and is_llm and (
             item.get("evidenceStatus") == "rejected" or int(coverage.get("checkedCandidateCount", 0)) < int(coverage.get("candidateCount", 0))
         )
         if failed or incomplete:
@@ -363,15 +366,21 @@ async def report_markdown(job_id: str):
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )
 
+
 @app.get("/api/jobs/{job_id}/report.pdf")
 async def report_pdf(job_id: str):
     job = await get_job(job_id)
     if not job or not job.get("report"):
         return _error(404, "Отчёт ещё не готов.")
     try:
-        content = report_to_pdf(job["originalName"], job["report"])
-    except RuntimeError as exc:
-        return _error(500, str(exc))
+        content = report_to_pdf(
+            job["originalName"],
+            job["report"],
+            profile=job.get("profile"),
+            generated_at=job.get("finishedAt"),
+        )
+    except Exception as exc:
+        return _error(500, f"Не удалось сформировать PDF: {exc}")
     filename = quote(f"{job['originalName']}-protocol.pdf")
     return Response(
         content=content,

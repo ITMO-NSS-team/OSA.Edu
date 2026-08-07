@@ -29,6 +29,7 @@ export const jobStatusLabel: Record<Status, string> = {
 
 export const modeLabel: Record<RuleMode, string> = {
   deterministic: "Код",
+  candidate: "Кандидаты + LLM",
   structural: "Структура",
   semantic: "LLM",
   manual: "Ручная проверка"

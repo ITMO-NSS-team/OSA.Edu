@@ -4,7 +4,13 @@ from ..util import compact, normalized_quote
 
 
 def evidence(block:dict, quote:str) -> dict:
-    out={'quote':compact(quote),'blockId':block['id'],'location':block.get('location',''),'verified':True}
+    clean=compact(quote)
+    out={'quote':clean,'blockId':block['id'],'location':block.get('location',''),'verified':True}
+    source=block.get('text','')
+    start=source.find(clean)
+    if start>=0:
+        out['start']=start
+        out['end']=start+len(clean)
     if block.get('page') is not None: out['page']=block['page']
     return out
 

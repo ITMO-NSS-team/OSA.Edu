@@ -11,6 +11,7 @@ from ..document.title import extract_best_title
 from ..llm.client import ask_structured_json, is_fatal_provider_error
 from ..llm.rate_limiter import configured_rate_limits
 from ..routing.rule_router import build_routing
+from .candidate_checker import build_candidate_plan, execute_candidate_plan
 from ..rules.registry import rules_for_profile
 from ..util import empty_usage, merge_usage, normalized_quote, unique
 
@@ -89,6 +90,9 @@ def _parse_evidence(value:Any,block_map:dict[str,dict])->list[dict]:
         key=(b['id'],normalized_quote(q))
         if key in seen:continue
         seen.add(key); item={'quote':q,'blockId':b['id'],'location':b.get('location',''),'verified':True}
+        exact_start=b.get('text','').find(q)
+        if exact_start>=0:
+            item['start']=exact_start; item['end']=exact_start+len(q)
         if b.get('page') is not None:item['page']=b['page']
         out.append(item)
     return out
@@ -163,65 +167,156 @@ def _aggregate(rule:dict,routed:dict,items:list[dict])->dict:
 
 
 async def check_document(*,document:dict,provider:str,model:str,prompt:str,profile:str,additional_criteria:str,only_rule_ids:list[str]|None=None,on_progress:Callable[[int,int,str],Awaitable[None]|None]|None=None,is_cancelled:Callable[[],Awaitable[bool]|bool]|None=None)->dict:
-    if not (document.get('map') or {}).get('review',{}).get('confirmedByUser'): raise ValueError('Структура документа не подтверждена пользователем.')
+    if not (document.get('map') or {}).get('review',{}).get('confirmedByUser'):
+        raise ValueError('Структура документа не подтверждена пользователем.')
     hydrate_fields_from_confirmed_map(document)
-    all_rules=rules_for_profile(profile,additional_criteria); selected=set(only_rule_ids or []); rules=[r for r in all_rules if not selected or r['id'] in selected]
-    warnings=[]; usage=empty_usage(); routing=await build_routing(document=document,map_value=document['map'],rules=rules); merge_usage(usage,routing.get('usage'))
-    local={}; llm_routed=[]
+    all_rules=rules_for_profile(profile,additional_criteria)
+    selected=set(only_rule_ids or [])
+    rules=[r for r in all_rules if not selected or r['id'] in selected]
+    warnings=[]
+    usage=empty_usage()
+    routing=await build_routing(document=document,map_value=document['map'],rules=rules)
+    merge_usage(usage,routing.get('usage'))
+
+    local={}
+    llm_routed=[]
+    candidate_routed=[]
     for routed in routing['routed']:
         st=routed['strategy']; rule=routed['rule']
         if st=='deterministic':
             detector_rule = {**rule, **({'detectorId': routed.get('detectorId')} if routed.get('detectorId') else {})}
             local[rule['id']]=_normalize_local(routed,run_deterministic(detector_rule,document))
-        elif st=='structural': local[rule['id']]=_normalize_local(routed,run_structural(rule,document))
-        elif st=='manual': local[rule['id']]=_manual(rule,routed.get('reason'))
-        elif st=='unavailable': local[rule['id']]=_not_checked(rule,routed.get('reason') or 'Надёжная автоматическая проверка недоступна.')
-        else: llm_routed.append(routed)
-    fragment_by={x['id']:x for x in routing['fragments']}; assignments={}
+        elif st=='structural':
+            local[rule['id']]=_normalize_local(routed,run_structural(rule,document))
+        elif st=='manual':
+            local[rule['id']]=_manual(rule,routed.get('reason'))
+        elif st=='unavailable':
+            local[rule['id']]=_not_checked(rule,routed.get('reason') or 'Надёжная автоматическая проверка недоступна.')
+        elif st=='candidate':
+            candidate_routed.append(routed)
+        else:
+            llm_routed.append(routed)
+
+    fragment_by={x['id']:x for x in routing['fragments']}
+    assignments={}
     for routed in llm_routed:
-        for fid in routed.get('fragmentIds',[]): assignments.setdefault(fid,[]).append(routed['rule'])
+        for fid in routed.get('fragmentIds',[]):
+            assignments.setdefault(fid,[]).append(routed['rule'])
+
     import os
-    max_rules=max(1,int(os.getenv('RULES_PER_FRAGMENT_REQUEST','12') or 12)); requests=[]
+    max_rules=max(1,int(os.getenv('RULES_PER_FRAGMENT_REQUEST','12') or 12))
+    requests=[]
     for fid,frules in assignments.items():
-        for i in range(0,len(frules),max_rules):requests.append((fid,frules[i:i+max_rules]))
-    raw=[]; packet_attempts=max(1,int(os.getenv('CHECK_PACKET_MAX_ATTEMPTS','2') or 2)); fatal=None
-    # Default rate limit is one request at a time. A simple bounded worker pool preserves future configurability.
-    next_index=0; lock=asyncio.Lock(); completed=0
+        for i in range(0,len(frules),max_rules):
+            requests.append((fid,frules[i:i+max_rules]))
+
+    candidate_plan=build_candidate_plan(document,candidate_routed)
+    total_requests=max(1,len(requests)+len(candidate_plan['requests']))
+    completed_total=0
+    progress_lock=asyncio.Lock()
+
+    async def progress_step(label:str)->None:
+        nonlocal completed_total
+        async with progress_lock:
+            completed_total+=1
+            current=completed_total
+        if on_progress:
+            value=on_progress(current,total_requests,label)
+            if asyncio.iscoroutine(value):
+                await value
+
+    candidate_results,candidate_warnings=await execute_candidate_plan(
+        plan=candidate_plan,
+        provider=provider,
+        model=model,
+        usage=usage,
+        on_request_done=lambda: progress_step(f'Кандидаты {completed_total + 1}/{total_requests}'),
+        is_cancelled=is_cancelled,
+    )
+    warnings.extend(candidate_warnings)
+    for item in candidate_results:
+        local[item['ruleId']]=item
+
+    raw=[]
+    packet_attempts=max(1,int(os.getenv('CHECK_PACKET_MAX_ATTEMPTS','2') or 2))
+    fatal=None
+    next_index=0
+    lock=asyncio.Lock()
+
     async def cancelled():
         if not is_cancelled:return False
-        value=is_cancelled(); return await value if asyncio.iscoroutine(value) else bool(value)
+        value=is_cancelled()
+        return await value if asyncio.iscoroutine(value) else bool(value)
+
     async def worker():
-        nonlocal next_index,completed,fatal
+        nonlocal next_index,fatal
         while fatal is None:
             if await cancelled():return
             async with lock:
                 if next_index>=len(requests):return
                 current=requests[next_index];next_index+=1
-            fid,frules=current; fragment=fragment_by.get(fid)
-            if not fragment:continue
+            fid,frules=current
+            fragment=fragment_by.get(fid)
+            if not fragment:
+                await progress_step(f'Фрагменты {completed_total + 1}/{total_requests}')
+                continue
             error=None
             for attempt in range(1,packet_attempts+1):
                 try:
-                    response=await ask_structured_json(provider=provider,model=model,system_prompt=prompt,user_message=_message(document['map'],fragment,frules),operation='check',packets=1,candidates=len(frules));merge_usage(usage,response['usage']);raw.extend(_parse_fragment_results(response['value'],fragment,frules));error=None;break
+                    response=await ask_structured_json(
+                        provider=provider,model=model,system_prompt=prompt,
+                        user_message=_message(document['map'],fragment,frules),
+                        operation='check',packets=1,candidates=len(frules),
+                    )
+                    merge_usage(usage,response['usage'])
+                    raw.extend(_parse_fragment_results(response['value'],fragment,frules))
+                    error=None
+                    break
                 except Exception as exc:
-                    error=exc;merge_usage(usage,getattr(exc,'llm_usage',None))
-                    if is_fatal_provider_error(exc):fatal=exc;break
-                    if attempt<packet_attempts:await asyncio.sleep(.6*attempt)
+                    error=exc
+                    merge_usage(usage,getattr(exc,'llm_usage',None))
+                    if is_fatal_provider_error(exc):
+                        fatal=exc
+                        break
+                    if attempt<packet_attempts:
+                        await asyncio.sleep(.6*attempt)
             if error and fatal is None:
                 warnings.append(f"Фрагмент «{fragment['label']}» не проверен: {error}")
-                for rule in frules:raw.append({**_not_checked(rule,str(error)),'fragmentId':fid,'checkedBy':'llm','checkedFragments':[fid]})
-            completed+=1
-            if on_progress:
-                value=on_progress(completed,max(1,len(requests)),f'Фрагменты {completed}/{len(requests)}')
-                if asyncio.iscoroutine(value):await value
+                for rule in frules:
+                    raw.append({**_not_checked(rule,str(error)),'fragmentId':fid,'checkedBy':'llm','checkedFragments':[fid]})
+            await progress_step(f'Фрагменты {completed_total + 1}/{total_requests}')
+
     workers=min(configured_rate_limits(provider)['maxConcurrent'],max(1,len(requests)))
-    await asyncio.gather(*(worker() for _ in range(workers)))
-    if fatal is not None: raise fatal
-    routed_by={x['rule']['id']:x for x in routing['routed']}; initial=[]
+    if requests:
+        await asyncio.gather(*(worker() for _ in range(workers)))
+    if fatal is not None:
+        raise fatal
+
+    routed_by={x['rule']['id']:x for x in routing['routed']}
+    initial=[]
     for rule in rules:
-        if rule['id'] in local:initial.append(local[rule['id']]);continue
+        if rule['id'] in local:
+            initial.append(local[rule['id']])
+            continue
         routed=routed_by.get(rule['id'])
-        if not routed or not routed.get('fragmentIds'): initial.append(_not_checked(rule,(routed or {}).get('reason') or 'Для правила не найден обязательный смысловой фрагмент.'));continue
+        if not routed or not routed.get('fragmentIds'):
+            initial.append(_not_checked(rule,(routed or {}).get('reason') or 'Для правила не найден обязательный смысловой фрагмент.'))
+            continue
         initial.append(_aggregate(rule,routed,[x for x in raw if x.get('ruleId')==rule['id']]))
     results=apply_consistency_checks(initial)
-    return {'rules':all_rules,'results':results,'warnings':warnings,'llmUsage':usage,'routing':{'strategy':routing['strategy'],'fragments':len(routing['fragments']),'checkRequests':len(requests),'explicitRules':routing['explicitRules'],'fallbackRules':routing['fallbackRules']}}
+    return {
+        'rules':all_rules,
+        'results':results,
+        'warnings':warnings,
+        'llmUsage':usage,
+        'routing':{
+            'strategy':routing['strategy'],
+            'fragments':len(routing['fragments']),
+            'checkRequests':len(requests)+len(candidate_plan['requests']),
+            'semanticRequests':len(requests),
+            'candidateRequests':len(candidate_plan['requests']),
+            'candidateFamilies':len(candidate_plan['rulesByFamily']),
+            'explicitRules':routing['explicitRules'],
+            'fallbackRules':routing['fallbackRules'],
+        },
+    }
