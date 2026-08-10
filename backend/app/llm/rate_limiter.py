@@ -55,7 +55,7 @@ def configured_rate_limits(provider: str) -> dict:
     return {
         "requestsPerMinute": rpm,
         "inputTokensPerMinute": _env_number(f"{prefix}_MAX_INPUT_TOKENS_PER_MINUTE", default_tpm),
-        "maxConcurrent": max(1, _env_number(f"{prefix}_MAX_CONCURRENT_REQUESTS", 1)),
+        "maxConcurrent": max(1, _env_number(f"{prefix}_MAX_CONCURRENT_REQUESTS", 3 if provider == "openrouter" else 1)),
         "minRequestIntervalMs": interval,
     }
 

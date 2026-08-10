@@ -259,11 +259,17 @@ def _rule_result(result: dict[str, Any], rule: dict[str, Any] | None, styles: di
 
     coverage = result.get("coverage") or {}
     if coverage:
-        items.append(_label_value(
-            "Покрытие",
-            f"фрагменты: {coverage.get('checkedCandidateCount', 0)} из {coverage.get('candidateCount', 0)}; полная область: {'да' if coverage.get('exhaustive') else 'нет'}",
-            styles,
-        ))
+        if coverage.get('kind') == 'candidate':
+            coverage_text = (
+                f"кандидаты: {coverage.get('checkedCandidateCount', 0)} из {coverage.get('candidateCount', 0)}; "
+                f"поиск и проверка кандидатов завершены: {'да' if coverage.get('exhaustive') else 'нет'}"
+            )
+        else:
+            coverage_text = (
+                f"фрагменты: {coverage.get('checkedCandidateCount', 0)} из {coverage.get('candidateCount', 0)}; "
+                f"полная область: {'да' if coverage.get('exhaustive') else 'нет'}"
+            )
+        items.append(_label_value("Покрытие", coverage_text, styles))
     if result.get("relatedRuleIds"):
         items.append(_label_value("Связанные правила", ", ".join(str(value) for value in result["relatedRuleIds"]), styles))
     if result.get("consistencyNotes"):
@@ -343,6 +349,7 @@ def _technical_section(report: dict[str, Any], profile: str | None, styles: dict
         ["Оценочно входных токенов", usage.get("estimatedInputTokens", 0)],
         ["Ожидание rate limiter", f"{round(float(usage.get('rateLimitWaitMs', 0) or 0) / 1000)} с"],
         ["Время запросов к модели", f"{round(float(usage.get('requestDurationMs', 0) or 0) / 1000)} с"],
+        ["Активное wall-clock время", f"{round(sum(float((technical.get('performance') or {}).get(k, 0) or 0) for k in ('extractionMs','structureMs','checkingMs','reportMs')) / 1000)} с"],
         ["Маршрутизация", f"{routing.get('strategy', '')}; явно задано: {routing.get('explicitRules', 0)}; fallback: {routing.get('fallbackRules', 0)}; фрагментов: {routing.get('fragments', 0)}; запросов проверки: {routing.get('checkRequests', 0)} (candidate: {routing.get('candidateRequests', 0)}, semantic: {routing.get('semanticRequests', 0)})"],
     ]
     table_rows = [[_p("Параметр", styles["table_head"]), _p("Значение", styles["table_head"])]] + [[_p(str(key), styles["table_cell"]), _p(str(value), styles["table_cell"])] for key, value in rows]

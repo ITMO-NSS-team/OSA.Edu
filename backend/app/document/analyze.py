@@ -7,7 +7,7 @@ from .title import extract_best_title
 
 ALLOWED_BLOCK_TYPES = {
     "paragraph", "heading", "title", "list", "caption", "table", "formula",
-    "code", "bibliography", "toc",
+    "code", "bibliography", "toc", "figure",
 }
 
 

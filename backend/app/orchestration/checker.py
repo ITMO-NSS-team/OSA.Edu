@@ -21,6 +21,19 @@ ABSENCE_RULES={
     'CORE-8-2':['comparison_with_prototype_in_chapter_conclusions'],
 }
 
+RULE_GUIDANCE = {
+    'CORE-8-2': (
+        'Смысловой критерий CORE-8-2: НЕ требуй буквальную фразу «отличающийся тем, что». '
+        'Считай comparison_with_prototype_in_chapter_conclusions=found, если вывод содержательно '
+        'сопоставляет разработанное решение с известным методом, классом подходов или обычной практикой: называет или однозначно '
+        'идентифицирует сравниваемое решение, указывает его ограничение/отличие и описывает, чем '
+        'разработанный метод это ограничение устраняет, заменяет или принципиально делает иначе. Конкретное название прототипа не обязательно, если класс известного подхода определён однозначно. Например, конструкция '
+        '«алгоритм устраняет ограничение ..., присущее E-SINDy: произведение ... заменяется ...» '
+        'является полноценным сравнением. Простое перечисление результатов или преимуществ без '
+        'сравниваемого известного решения — not_found.'
+    ),
+}
+
 
 def _not_checked(rule,msg): return {'ruleId':rule['id'],'status':'not_checked','severity':rule.get('severity','major'),'explanation':msg,'confidence':0,'evidence':[],'evidenceStatus':'not_required','checkedBy':'system'}
 def _manual(rule,reason=None): return {'ruleId':rule['id'],'status':'not_applicable','severity':rule.get('severity','major'),'explanation':reason or 'Требуется другой артефакт или ручное наблюдение.','confidence':0,'evidence':[],'evidenceStatus':'not_required','checkedBy':'system'}
@@ -43,7 +56,12 @@ def hydrate_fields_from_confirmed_map(document:dict)->None:
         e=es[0]; s=idx.get(e.get('startBlockId')); en=idx.get(e.get('endBlockId'))
         if s is None or en is None or s>en:return None
         source=blocks[s]; rng=blocks[s:en+1]
-        if t=='title': return extract_best_title(rng,blocks) or document.get('fields',{}).get('title')
+        if t=='title':
+            found=extract_best_title(rng,blocks) or document.get('fields',{}).get('title')
+            if found:return found
+            label=str(e.get('label') or '').strip()
+            generic_label=any(token in label.lower() for token in ('титульн', 'title page', 'название работы'))
+            return {**source,'text':label} if label and not generic_label else None
         quote=(e.get('quote') or '').strip()
         return {**source,'text':quote} if quote else source
     fields=document.setdefault('fields',{})
@@ -76,8 +94,12 @@ def _message(map_value:dict,fragment:dict,rules:list[dict])->str:
         required=ABSENCE_RULES.get(rule['id']); absence=''
         if required:
             absence=f'''\nТИП ПРОВЕРКИ: отсутствие элемента. Просмотри ВСЕ {len(fragment.get('blocks',[]))} блоков фрагмента. Помимо обычных полей верни absenceCheck: {{"complete": boolean, "checkedBlockCount": number, "items": [{{"name": string, "status": "found"|"not_found"|"ambiguous", "evidence": [{{"blockId": string, "quote": string}}]}}]}}. Обязательные элементы: {', '.join(required)}. Статус violation допускается без цитаты только при complete=true и полном покрытии.'''
-        chunks.append(f"RULE {rule['id']}\nКатегория: {rule.get('category','')}\nТребование: {rule.get('requirement','')}\nКорректный пример: {rule.get('correctExample') or '—'}\nПример нарушения: {rule.get('incorrectExample') or '—'}{absence}")
-    return f'''DOCUMENT_MAP:\n{summary}\n\nCHECK_FRAGMENT:\nid={fragment['id']}\nlabel={fragment['label']}\ncomplete={str(fragment.get('complete',False)).lower()}\ntotalBlocks={len(fragment.get('blocks',[]))}\n\n{blocks}\n\nRULES:\n{'\n\n'.join(chunks)}\n\nВерни JSON: {{"results":[{{"ruleId":"...","status":"pass|violation|uncertain|not_applicable","explanation":"...","fix":"...","evidence":[{{"blockId":"...","quote":"точная непрерывная цитата"}}],"absenceCheck":...}}]}}.'''
+        guidance = RULE_GUIDANCE.get(rule['id'])
+        guidance_text = f"\nУТОЧНЕНИЕ ПРОВЕРКИ: {guidance}" if guidance else ''
+        chunks.append(f"RULE {rule['id']}\nКатегория: {rule.get('category','')}\nТребование: {rule.get('requirement','')}\nКорректный пример: {rule.get('correctExample') or '—'}\nПример нарушения: {rule.get('incorrectExample') or '—'}{guidance_text}{absence}")
+    semantic_context = str(fragment.get('semanticContext') or '').strip()
+    semantic_section = f"\nSEMANTIC_CONTEXT (контекст для понимания; evidence всё равно только из BLOCK):\n{semantic_context}\n" if semantic_context else ''
+    return f'''DOCUMENT_MAP:\n{summary}\n\nCHECK_FRAGMENT:\nid={fragment['id']}\nlabel={fragment['label']}\ncomplete={str(fragment.get('complete',False)).lower()}\ntotalBlocks={len(fragment.get('blocks',[]))}{semantic_section}\n{blocks}\n\nRULES:\n{'\n\n'.join(chunks)}\n\nВерни JSON: {{"results":[{{"ruleId":"...","status":"pass|violation|uncertain|not_applicable","explanation":"...","fix":"...","evidence":[{{"blockId":"...","quote":"точная непрерывная цитата"}}],"absenceCheck":...}}]}}.'''
 
 
 def _parse_evidence(value:Any,block_map:dict[str,dict])->list[dict]:
@@ -225,17 +247,17 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             if asyncio.iscoroutine(value):
                 await value
 
-    candidate_results,candidate_warnings=await execute_candidate_plan(
+    # Candidate and semantic packets are independent. Run them concurrently so
+    # candidate-first does not create a second sequential LLM phase. Both paths
+    # still share the provider rate limiter and therefore respect RPM/concurrency.
+    candidate_task=asyncio.create_task(execute_candidate_plan(
         plan=candidate_plan,
         provider=provider,
         model=model,
         usage=usage,
         on_request_done=lambda: progress_step(f'Кандидаты {completed_total + 1}/{total_requests}'),
         is_cancelled=is_cancelled,
-    )
-    warnings.extend(candidate_warnings)
-    for item in candidate_results:
-        local[item['ruleId']]=item
+    ))
 
     raw=[]
     packet_attempts=max(1,int(os.getenv('CHECK_PACKET_MAX_ATTEMPTS','2') or 2))
@@ -269,7 +291,40 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
                         operation='check',packets=1,candidates=len(frules),
                     )
                     merge_usage(usage,response['usage'])
-                    raw.extend(_parse_fragment_results(response['value'],fragment,frules))
+                    parsed = _parse_fragment_results(response['value'],fragment,frules)
+                    returned_ids = {
+                        str(item.get('ruleId','')).strip()
+                        for item in (response.get('value') or {}).get('results',[])
+                        if isinstance(item,dict)
+                    } if isinstance(response.get('value'),dict) else set()
+                    missing_rules = [rule for rule in frules if rule['id'] not in returned_ids]
+                    if missing_rules:
+                        # Models occasionally omit one item from an otherwise valid
+                        # batched JSON response. Retry only the omitted rule(s) once
+                        # instead of discarding the successful work for this fragment.
+                        try:
+                            followup = await ask_structured_json(
+                                provider=provider,model=model,system_prompt=prompt,
+                                user_message=_message(document['map'],fragment,missing_rules),
+                                operation='check',packets=1,candidates=len(missing_rules),
+                            )
+                            merge_usage(usage,followup['usage'])
+                            retry_parsed = _parse_fragment_results(followup['value'],fragment,missing_rules)
+                            retry_by = {item['ruleId']: item for item in retry_parsed}
+                            parsed = [
+                                retry_by.get(item['ruleId'], item)
+                                if item['ruleId'] in {rule['id'] for rule in missing_rules}
+                                else item
+                                for item in parsed
+                            ]
+                        except Exception as followup_error:
+                            merge_usage(usage,getattr(followup_error,'llm_usage',None))
+                            if is_fatal_provider_error(followup_error):
+                                raise
+                            warnings.append(
+                                f"Фрагмент «{fragment['label']}»: повтор для пропущенных правил не удался: {followup_error}"
+                            )
+                    raw.extend(parsed)
                     error=None
                     break
                 except Exception as exc:
@@ -290,7 +345,13 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
     if requests:
         await asyncio.gather(*(worker() for _ in range(workers)))
     if fatal is not None:
+        if not candidate_task.done():
+            candidate_task.cancel()
         raise fatal
+    candidate_results,candidate_warnings=await candidate_task
+    warnings.extend(candidate_warnings)
+    for item in candidate_results:
+        local[item['ruleId']]=item
 
     routed_by={x['rule']['id']:x for x in routing['routed']}
     initial=[]

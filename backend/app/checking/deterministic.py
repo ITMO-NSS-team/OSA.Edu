@@ -123,7 +123,20 @@ def _personal(rule,document):
 
 
 def _yo(rule,document):
-    candidates=[(r'\bза\s+счет\b','за счёт'),(r'\bвсе\s+еще\b','всё ещё'),(r'\bеще\b','ещё'),(r'\bучет(?:а|е|ом)?\b','учёт…'),(r'\bобъем(?:а|е|ом|ы|ов)?\b','объём…'),(r'\bприем(?:а|е|ом|ы|ов)?\b','приём…'),(r'\bнадежн\p{L}*\b','надёжн…'),(r'\bпроведен\p{L}*\b','проведён…'),(r'\bподтвержден\p{L}*\b','подтверждён…')]
+    # Keep this detector deliberately high-precision. In particular, short passive
+    # forms such as «проведено/проведены» and nouns such as «проведение» contain
+    # е, not ё; the old broad stems produced systematic false positives.
+    candidates=[
+        (r'\bза\s+счет\b','за счёт'),
+        (r'\bвсе\s+еще\b','всё ещё'),
+        (r'\bеще\b','ещё'),
+        (r'\bучет(?:а|е|ом|у|ы|ов)?\b','учёт…'),
+        (r'\bобъем(?:а|е|ом|у|ы|ов)?\b','объём…'),
+        (r'\bприем(?:а|е|ом|у|ы|ов)?\b','приём…'),
+        (r'\bнадежн\p{L}*\b','надёжн…'),
+        (r'\bпроведен(?:\b|н(?:ый|ая|ое|ые|ого|ому|ым|ыми|ых|ой|ую)\b)','проведён…'),
+        (r'\bподтвержден(?:\b|н(?:ый|ая|ое|ые|ого|ому|ым|ыми|ых|ой|ую)\b)','подтверждён…'),
+    ]
     ev=[]
     for b in narrative_blocks(document):
         for p,_ in candidates:
@@ -140,7 +153,14 @@ def _quote_consistency(rule,document):
             m=re.search(p,text)
             if m and name not in variants:
                 q=contextual(text,m.start(),len(m.group()))
-                if name=='прямые двойные' and is_code_or_prompt(q): continue
+                if name=='прямые двойные':
+                    if is_code_or_prompt(q):
+                        continue
+                    around=text[max(0,m.start()-100):min(len(text),m.end()+100)]
+                    numbers=len(re.findall(r'(?<!\p{L})\d+(?:[.,]\d+)?%?',around))
+                    prose_words=len(re.findall(r'[А-ЯЁа-яё]{3,}',around))
+                    if numbers >= 10 and numbers >= prose_words * 1.2:
+                        continue
                 variants[name]=evidence(b,q)
     if len(variants)<=1: return result(rule,'pass','В основном тексте не обнаружено смешения нескольких типов кавычек.',confidence=.98)
     return result(rule,'violation','Обнаружено несколько типов кавычек: '+', '.join(variants)+'.',list(variants.values()),.99,'detector','Выбрать один тип кавычек.')

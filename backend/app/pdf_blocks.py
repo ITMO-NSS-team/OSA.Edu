@@ -127,6 +127,7 @@ def build_pdf_pages(document: Any) -> tuple[list[dict[str, Any]], dict[str, Any]
             bibliography_active=bibliography_active,
             toc_active=toc_active,
         )
+        blocks = _refine_page_block_types(blocks)
         page_text = "\n\n".join(block["text"] for block in blocks)
         pages.append({
             "number": raw_page["number"],
@@ -442,6 +443,124 @@ def _merge_page_lines(
     # The bibliography heading itself remains a heading. All following blocks are
     # explicitly typed as bibliography while the section is active.
     return blocks, bibliography_active, toc_active
+
+
+def _refine_page_block_types(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Refine vector plot/table regions exposed by the PDF text layer as text.
+
+    Captions are strong local anchors.  We only re-type nearby blocks with an
+    unmistakable numeric/row-like shape, so ordinary paragraphs remain prose.
+    """
+    if not blocks:
+        return blocks
+    refined = [dict(block) for block in blocks]
+    for index, caption in enumerate(refined):
+        text = str(caption.get("text") or "").strip()
+        if caption.get("type") != "caption":
+            continue
+        if re.match(r"^(?:рис(?:унок)?|figure|fig\.?)\b", text, re.I):
+            # A vector plot may be split into several tiny text blocks (ticks,
+            # legends, axis labels) immediately before its caption.
+            found_plot_fragment = False
+            for neighbour_index in range(index - 1, max(-1, index - 7), -1):
+                neighbour = refined[neighbour_index]
+                if neighbour.get("type") == "figure":
+                    found_plot_fragment = True
+                    continue
+                if neighbour.get("type") != "paragraph":
+                    if found_plot_fragment:
+                        break
+                    continue
+                if _looks_like_plot_payload(neighbour) or _looks_like_plot_fragment(neighbour):
+                    neighbour["type"] = "figure"
+                    neighbour["layoutRole"] = "figure_text"
+                    found_plot_fragment = True
+                    continue
+                if found_plot_fragment:
+                    break
+            # Some layouts place legend text after the caption.
+            if index + 1 < len(refined):
+                neighbour = refined[index + 1]
+                if neighbour.get("type") == "paragraph" and _looks_like_plot_payload(neighbour):
+                    neighbour["type"] = "figure"
+                    neighbour["layoutRole"] = "figure_text"
+        elif re.match(r"^(?:таблица|table)\b", text, re.I):
+            # Table rows can be separate paragraph/bold-heading blocks. Walk a
+            # short local window and stop at the first normal prose paragraph.
+            for neighbour_index in range(index + 1, min(len(refined), index + 7)):
+                neighbour = refined[neighbour_index]
+                if neighbour.get("type") not in {"paragraph", "heading", "list"}:
+                    break
+                if _looks_like_table_payload(neighbour) or _looks_like_table_row_fragment(neighbour):
+                    neighbour["type"] = "table"
+                    neighbour["layoutRole"] = "table_text"
+                    continue
+                break
+    return refined
+
+
+def _looks_like_plot_fragment(block: dict[str, Any]) -> bool:
+    text = str(block.get("text") or "").strip()
+    numbers = re.findall(r"(?<!\p{L})[-+]?\d+(?:[.,]\d+)?(?:e[-+]?\d+)?%?", text, re.I)
+    cyr_words = re.findall(r"[А-ЯЁа-яё]{3,}", text)
+    sentence_marks = len(re.findall(r"[.!?](?:\s|$)", text))
+    return bool(
+        re.match(r"^[(']*[-+]?\d", text)
+        and len(numbers) >= 1
+        and sentence_marks == 0
+        and len(cyr_words) <= 16
+    )
+
+
+def _looks_like_table_row_fragment(block: dict[str, Any]) -> bool:
+    text = str(block.get("text") or "").strip()
+    numbers = re.findall(r"(?<!\p{L})[-+]?\d+(?:[.,]\d+)?(?:e[-+]?\d+)?%?", text, re.I)
+    percents = len(re.findall(r"\d+(?:[.,]\d+)?\s*%", text))
+    words = re.findall(r"[А-ЯЁа-яёA-Za-z-]{2,}", text)
+    sentence_marks = len(re.findall(r"[.!?](?:\s|$)", text))
+    return bool(
+        len(words) >= 1
+        and sentence_marks <= 1
+        and (
+            percents >= 2
+            or (len(numbers) >= 3 and len(words) <= 24)
+        )
+    )
+
+
+def _looks_like_plot_payload(block: dict[str, Any]) -> bool:
+    text = str(block.get("text") or "")
+    numbers = re.findall(r"(?<!\p{L})[-+]?\d+(?:[.,]\d+)?(?:e[-+]?\d+)?%?", text, re.I)
+    words = re.findall(r"[А-ЯЁа-яёA-Za-z]{2,}", text)
+    cyr_words = re.findall(r"[А-ЯЁа-яё]{3,}", text)
+    axis_marks = len(re.findall(r"(?:%|[\"']|\b(?:x|y|t)\b)", text, re.I))
+    # Plot text is dominated by ticks/legends and usually contains little
+    # grammatical Russian prose.  Requiring many numeric labels makes this
+    # intentionally conservative.
+    return bool(
+        len(numbers) >= 8
+        and len(cyr_words) <= 14
+        and (len(numbers) >= max(8, len(words) // 2) or axis_marks >= 2)
+    )
+
+
+def _looks_like_table_payload(block: dict[str, Any]) -> bool:
+    text = str(block.get("text") or "")
+    numbers = re.findall(r"(?<!\p{L})[-+]?\d+(?:[.,]\d+)?(?:e[-+]?\d+)?%?", text, re.I)
+    tokens = re.findall(r"\S+", text)
+    cyr_words = re.findall(r"[А-ЯЁа-яё]{3,}", text)
+    sentence_marks = len(re.findall(r"[.!?](?:\s|$)", text))
+    line_count = int(block.get("lineCount") or len(block.get("lines") or []) or 1)
+    latin_headers = len(re.findall(r"\b[A-Z][A-Z0-9@-]{1,12}\b", text))
+    return bool(
+        line_count >= 2
+        and len(tokens) >= 8
+        and sentence_marks <= 2
+        and (
+            (len(numbers) >= 4 and len(cyr_words) <= 24)
+            or (latin_headers >= 2 and len(cyr_words) <= 18)
+        )
+    )
 
 
 def _estimate_body_left(lines: list[dict[str, Any]], body_size: float, page_width: float) -> float:

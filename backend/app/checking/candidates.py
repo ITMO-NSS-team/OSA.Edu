@@ -4,7 +4,7 @@ import hashlib
 from typing import Any, Callable, Iterable
 import regex as re
 
-from .common import mapped_excluded_ids, contents_page_range, is_code_or_prompt, looks_like_contents
+from .common import mapped_excluded_ids, contents_page_range, is_code_or_prompt, looks_like_contents, is_likely_table_context, formula_like_block
 from ..util import compact
 
 # Candidate-first checking keeps recall in code and lets the LLM make only a
@@ -36,6 +36,9 @@ _ABBREV_STOP = {
     'ГЛАВА', 'ВВЕДЕНИЕ', 'ЗАКЛЮЧЕНИЕ', 'СПИСОК', 'ЛИТЕРАТУРЫ', 'ПРИЛОЖЕНИЕ',
     'РЕФЕРАТ', 'ОГЛАВЛЕНИЕ', 'СОДЕРЖАНИЕ', 'ТАБЛИЦА', 'РИСУНОК', 'ВЫВОДЫ',
     'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
+    # Uppercase English service headings are words, not abbreviations.
+    'CONTENT', 'CONTENTS', 'ABSTRACT', 'SYNOPSIS', 'INTRODUCTION', 'CONCLUSION',
+    'REFERENCES', 'PUBLICATIONS', 'AUTHOR', 'CONTRIBUTION',
 }
 
 
@@ -72,8 +75,9 @@ def _block_context(document: dict, block: dict, start: int, end: int) -> str:
         return _context(block.get('text', ''), start, end)
     selected: list[str] = []
     for item in blocks[max(0, index - 2):min(len(blocks), index + 3)]:
-        if item.get('page') != block.get('page'):
-            continue
+        # Cross-page neighbours are intentionally retained. A sentence may continue
+        # on the next PDF page, and hiding the previous page made sentence-start
+        # checks treat continuations such as «а источник ...» as new sentences.
         selected.append(compact(item.get('text', '')))
     return compact(' '.join(selected))[:1200]
 
@@ -86,10 +90,51 @@ def _split_word_continuation(document: dict, block: dict, offset: int) -> bool:
         index = next(i for i, item in enumerate(blocks) if item.get('id') == block.get('id'))
     except StopIteration:
         return False
-    if index <= 0 or blocks[index - 1].get('page') != block.get('page'):
+    if index <= 0:
         return False
     return str(blocks[index - 1].get('text', '')).rstrip().endswith(('\u00ad', '-'))
 
+
+
+def _continues_previous_sentence(document: dict, block: dict, offset: int) -> bool:
+    """Return True when a candidate at block start is a continuation of the
+    preceding prose block, including a page boundary.
+
+    PDF layout extraction intentionally keeps page-local blocks. This helper adds
+    only the linguistic continuity needed by sentence-start checks; it does not
+    merge block ids or alter evidence offsets.
+    """
+    if offset > 2:
+        return False
+    blocks = document.get('blocks', [])
+    try:
+        index = next(i for i, item in enumerate(blocks) if item.get('id') == block.get('id'))
+    except StopIteration:
+        return False
+    if index <= 0:
+        return False
+    previous = blocks[index - 1]
+    if previous.get('type') not in {'paragraph', 'list'}:
+        return False
+    prev_text = compact(previous.get('text', '')).rstrip()
+    if not prev_text:
+        return False
+    # A full stop/question/exclamation mark closes the sentence. Comma, colon,
+    # semicolon, dash or no terminal punctuation means the next block can continue it.
+    if re.search(r"[.!?…][»\"')\]]?$", prev_text):
+        return False
+    current = block.get('text', '').lstrip()
+    return bool(current and re.match(r'^(?:[а-яё]|и\b|а\b|но\b|либо\b|или\b|котор\p{L}*\b|где\b|что\b)', current, re.I))
+
+
+def _math_heavy_local_context(text: str, start: int, end: int) -> bool:
+    """Filter uppercase tokens that are clearly embedded in a mathematical
+    expression produced by the PDF text layer (e.g. DD/BND inside a broken formula).
+    """
+    window = text[max(0, start - 40):min(len(text), end + 40)]
+    math_marks = len(re.findall(r'[=≈≤≥∑∫√±∞∈∉⊂∪∩×·←→{}\[\]𝑃𝑅ℒξσπθ]', window))
+    words = re.findall(r'[А-ЯЁа-яёA-Za-z]{3,}', window)
+    return math_marks >= 5 and len(words) <= 8
 
 def _cyrillic_ratio(value: str) -> float:
     letters = re.findall(r'\p{L}', value)
@@ -139,6 +184,8 @@ def _lexical(document: dict, family: str) -> list[dict]:
         for match in pattern.finditer(text):
             if _split_word_continuation(document, block, match.start()):
                 continue
+            if family == 'sentence-start' and _continues_previous_sentence(document, block, match.start()):
+                continue
             start, end = _sentence_span(text, match.start())
             result.append(_make(family, block, start, end, context=_block_context(document, block, match.start(), match.end()), meta={'marker': match.group(0)}))
     return _dedupe(result)
@@ -165,20 +212,45 @@ def _numerals(document: dict) -> list[dict]:
     result: list[dict] = []
     for block in _narrative_blocks(document):
         text = block.get('text', '')
+        if formula_like_block(text) or _looks_like_pseudocode(text):
+            continue
         for match in _NUMERAL_RE.finditer(text):
             before = text[max(0, match.start() - 45):match.start()]
             after = text[match.end(1) + 1:match.end(1) + 24]
-            if _NUMERAL_SKIP_BEFORE.search(before) or _NUMERAL_SKIP_AFTER.match(after.strip()):
+            local = _context(text, match.start(), match.end(), before=120, after=160)
+            scope_before = re.sub(r'([А-Яа-яЁё])(?:-|\u00ad)\s*([А-Яа-яЁё])', r'\1\2', before)
+            if _NUMERAL_SKIP_BEFORE.search(scope_before) or _NUMERAL_SKIP_AFTER.match(after.strip()):
+                continue
+            if is_likely_table_context(local) or re.search(r'[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9_]{0,20}\s*=\s*$', before):
+                continue
+            if re.search(r'^(?:Категория|Модель|Датасет|Шум|Метод|Подход)\s+.{0,80}(?:Значение|Precision|Recall|F1|Инструмент|Проверяем)', text, re.I):
                 continue
             start, end = _sentence_span(text, match.start())
             result.append(_make('numerals', block, start, end, context=_block_context(document, block, match.start(), match.end()), meta={'digit': match.group(1), 'word': match.group(2)}))
     return _dedupe(result)
 
 
+
+
+def _looks_like_pseudocode(value: str) -> bool:
+    text = compact(value)
+    if is_code_or_prompt(text):
+        return True
+    # Common algorithm-listing artefacts from PDF extraction.  Requiring at
+    # least two code markers keeps normal mathematical prose in scope.
+    markers = 0
+    markers += 1 if re.search(r'(?:←|:=|->)', text) else 0
+    markers += 1 if '//' in text else 0
+    markers += 1 if re.search(r'\b[A-Za-z][A-Za-z0-9_]*\s*\([^)]{0,120}\)', text) else 0
+    markers += 1 if re.search(r'(?:^|[;])\s*\d{1,3}\s+(?:Этап\s+\d+|[A-Za-zА-ЯЁ_][\w.-]*\s*(?:←|:=))', text, re.I) else 0
+    return markers >= 2
+
 def _abbreviation_occurrences(document: dict, token: str) -> list[dict]:
     pattern = re.compile(rf'(?<![\p{{L}}\p{{N}}_@-]){re.escape(token)}(?![\p{{L}}\p{{N}}_@])')
     rows: list[dict] = []
     for block in document.get('blocks', []):
+        if block.get('type') in {'table', 'code', 'formula', 'figure'} or _looks_like_pseudocode(block.get('text', '')):
+            continue
         match = pattern.search(block.get('text', ''))
         if match:
             rows.append({'block': block, 'start': match.start(), 'end': match.end()})
@@ -186,13 +258,13 @@ def _abbreviation_occurrences(document: dict, token: str) -> list[dict]:
 
 
 def _abbrev_first_use(document: dict) -> list[dict]:
-    skip = {'toc', 'bibliography', 'table', 'code', 'formula', 'caption'}
+    skip = {'toc', 'bibliography', 'table', 'code', 'formula', 'figure', 'caption'}
     excluded = mapped_excluded_ids(document)
     toc_pages = contents_page_range(document)
     seen: set[str] = set()
     result: list[dict] = []
     for block in sorted(document.get('blocks', []), key=lambda x: int(x.get('order', 0))):
-        if block.get('type') in skip or block.get('id') in excluded or block.get('page') in toc_pages:
+        if block.get('type') in skip or block.get('id') in excluded or block.get('page') in toc_pages or _looks_like_pseudocode(block.get('text', '')):
             continue
         text = block.get('text', '')
         if _cyrillic_ratio(text) < .20:
@@ -200,7 +272,7 @@ def _abbrev_first_use(document: dict) -> list[dict]:
         for match in _ABBREV_RE.finditer(text):
             token = match.group(1)
             key = token.upper().replace('–', '-')
-            if key in seen or key in _ABBREV_STOP:
+            if key in seen or key in _ABBREV_STOP or _math_heavy_local_context(text, match.start(), match.end()):
                 continue
             seen.add(key)
             sentence = _sentence_span(text, match.start())
@@ -227,6 +299,34 @@ def _abbrev_first_use(document: dict) -> list[dict]:
     return result
 
 
+
+def _looks_like_table_header_heading(document: dict, block: dict) -> bool:
+    if block.get('type') != 'heading':
+        return False
+    text = compact(block.get('text', ''))
+    if re.match(r'^(?:таблица|рис(?:унок)?|figure|table)\b', text, re.I):
+        return True
+    # A section/chapter number is strong evidence of a real heading even if a
+    # table happens to end immediately before it.
+    if re.match(r'^(?:глава\s+)?\d+(?:\.\d+){0,4}\.?\s+', text, re.I):
+        return False
+    blocks = document.get('blocks', [])
+    try:
+        index = next(i for i, item in enumerate(blocks) if item.get('id') == block.get('id'))
+    except StopIteration:
+        return False
+    page = block.get('page')
+    for previous in reversed(blocks[max(0, index - 3):index]):
+        if page is not None and previous.get('page') != page:
+            break
+        prev_text = compact(previous.get('text', ''))
+        if previous.get('type') == 'caption' and re.match(r'^таблица\b', prev_text, re.I):
+            # PDF font heuristics often mark the bold column-name row as a heading.
+            return len(re.findall(r'\S+', text)) <= 12
+        if previous.get('type') == 'heading' and not _looks_like_table_header_heading(document, previous):
+            break
+    return False
+
 def _abbrev_in_heading(document: dict) -> list[dict]:
     allowed = {'title', 'heading', 'toc'}
     excluded = mapped_excluded_ids(document)
@@ -235,6 +335,8 @@ def _abbrev_in_heading(document: dict) -> list[dict]:
     occurrence_counts: dict[tuple[str, str], int] = {}
     for block in document.get('blocks', []):
         if block.get('type') not in allowed or block.get('id') in excluded:
+            continue
+        if _looks_like_table_header_heading(document, block):
             continue
         for match in _ABBREV_RE.finditer(block.get('text', '')):
             token = match.group(1)

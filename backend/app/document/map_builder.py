@@ -162,19 +162,37 @@ def _materialize_element(element: dict[str, Any], blocks: list[dict[str, Any]], 
     range_text = " ".join(x.get("text", "") for x in range_blocks)
     requested_quote = _exact_quote(str(element.get("quote") or ""), range_blocks)
     fallback = ""
+    label = str(element.get("label", "")).strip()
+    state = element.get("state")
     if element.get("type") == "title":
         title = extract_best_title(range_blocks, blocks)
         fallback = (title or {}).get("text", "")
+        # The structure LLM sometimes returns a generic label such as
+        # «Титульная страница». The extracted title is deterministic and is also
+        # what downstream title rules use, so keep the map/report consistent.
+        if fallback:
+            label = fallback
     elif element.get("type") == "goal":
         fallback = _extract_goal(range_text)
+    elif element.get("type") == "chapter_conclusions" and _obvious_chapter_conclusions(label, range_blocks):
+        # An exact heading like «3.5 Выводы по главе» is not genuinely
+        # ambiguous even when the structure model marks it so.
+        state = "confirmed"
     return {
         **element,
+        "state": state,
         "blockIds": anchors if anchors else [range_blocks[0]["id"]],
         "pages": list(dict.fromkeys(x.get("page") for x in range_blocks if isinstance(x.get("page"), int))),
         "text": _compact(range_text, 900),
         "quote": _compact(requested_quote or fallback or first.get("text", ""), 500),
-        "label": str(element.get("label", ""))[:180],
+        "label": label[:180],
     }
+
+
+def _obvious_chapter_conclusions(label: str, blocks: list[dict[str, Any]]) -> bool:
+    values = [label, *[str(block.get("text") or "") for block in blocks[:3]]]
+    pattern = re.compile(r"^(?:\d+(?:\.\d+)*\.?\s*)?выводы(?:\s+(?:к|по)\s+главе(?:\s+\d+)?)?\.?$", re.I)
+    return any(pattern.match(re.sub(r"\s+", " ", value).strip()) for value in values if value)
 
 
 def _exact_quote(value: str, blocks: list[dict[str, Any]]) -> str:
@@ -223,11 +241,19 @@ def _parse_issues(value: Any, elements: list[dict[str, Any]]) -> list[dict[str, 
         if not message:
             continue
         indexes = [int(x) for x in (record.get("sectionIndexes") or []) if isinstance(x, (int, float)) and int(x) == x]
+        referenced = [elements[i] for i in indexes if 0 <= i < len(elements)]
+        code = str(record.get("code") or "model_issue").strip()
+        if referenced and ("ambig" in code.lower() or re.search(r"неоднознач", message, re.I)):
+            if all(item.get("state") == "confirmed" for item in referenced):
+                # Deterministic post-processing may have resolved an LLM ambiguity
+                # (e.g. an exact «3.5 Выводы по главе» heading). Do not keep the
+                # stale model issue in the report after that resolution.
+                continue
         result.append({
-            "code": str(record.get("code") or "model_issue").strip(),
+            "code": code,
             "severity": "info" if record.get("severity") == "info" else "warning",
             "message": message,
-            "elementIds": [elements[i].get("id") for i in indexes if 0 <= i < len(elements)],
+            "elementIds": [item.get("id") for item in referenced],
         })
     return result
 

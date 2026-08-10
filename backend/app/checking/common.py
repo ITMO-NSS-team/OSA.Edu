@@ -84,9 +84,10 @@ def narrative_blocks(document:dict) -> list[dict]:
     bibliography={b['id'] for b in document.get('fields',{}).get('bibliographyBlocks',[])}
     contents_pages = contents_page_range(document)
     out=[]
+    allowed_types={'paragraph','list'}
     for b in document.get('blocks',[]):
         text=b.get('text','')
-        if b['id'] in excluded or b['id'] in bibliography or b.get('type')=='bibliography' or looks_like_contents(text) or b.get('page') in contents_pages or is_code_or_prompt(text):
+        if b['id'] in excluded or b['id'] in bibliography or b.get('type') not in allowed_types or looks_like_contents(text) or b.get('page') in contents_pages or is_code_or_prompt(text):
             continue
         letters=re.findall(r'\p{L}',text); cyr=re.findall(r'[А-ЯЁа-яё]',text)
         if letters and len(cyr)/len(letters)>=0.28:

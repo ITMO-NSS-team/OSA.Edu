@@ -7,7 +7,7 @@ from ..checking.candidates import collect_candidates, validate_candidate
 from ..config import CONFIG_DIR, env_int
 from ..llm.client import ask_structured_json, is_fatal_provider_error
 from ..llm.rate_limiter import configured_rate_limits
-from ..util import  merge_usage, unique
+from ..util import merge_usage, unique
 
 
 def _system_prompt() -> str:
@@ -34,7 +34,12 @@ def build_candidate_plan(document: dict, routed_rules: list[dict]) -> dict[str, 
         family_candidates[family] = candidates
         for start in range(0, len(candidates), batch_size):
             batch = candidates[start:start + batch_size]
-            requests.append({'family': family, 'rules': rules, 'candidates': batch})
+            requests.append({
+                'family': family,
+                'rules': rules,
+                'candidates': batch,
+                'pairs': [(item['id'], rule['id']) for item in batch for rule in rules],
+            })
     return {
         'requests': requests,
         'familyCandidates': family_candidates,
@@ -43,7 +48,13 @@ def build_candidate_plan(document: dict, routed_rules: list[dict]) -> dict[str, 
     }
 
 
-def _message(family: str, candidates: list[dict], rules: list[dict]) -> str:
+def request_pairs_for(candidates: list[dict], rules: list[dict], pairs: list[tuple[str, str]] | None = None) -> list[tuple[str, str]]:
+    if pairs is not None:
+        return [(str(candidate_id), str(rule_id)) for candidate_id, rule_id in pairs]
+    return [(item['id'], rule['id']) for item in candidates for rule in rules]
+
+
+def _message(family: str, candidates: list[dict], rules: list[dict], pairs: list[tuple[str, str]] | None = None) -> str:
     rule_text = '\n\n'.join(
         f"RULE {rule['id']}\nТребование: {rule.get('requirement','')}\n"
         f"Корректный пример: {rule.get('correctExample') or '—'}\n"
@@ -56,10 +67,11 @@ def _message(family: str, candidates: list[dict], rules: list[dict]) -> str:
         f"quote={item['quote']}\ncontext={item['context']}\nmeta={item.get('meta') or {}}"
         for item in candidates
     )
-    pairs = '\n'.join(f"- {item['id']} + {rule['id']}" for item in candidates for rule in rules)
+    requested_pairs = request_pairs_for(candidates, rules, pairs)
+    pair_text = '\n'.join(f"- {candidate_id} + {rule_id}" for candidate_id, rule_id in requested_pairs)
     return (
         f"FAMILY: {family}\n\nRULES:\n{rule_text}\n\nCANDIDATES:\n{candidate_text}\n\n"
-        f"ОБЯЗАТЕЛЬНЫЕ ПАРЫ:\n{pairs}\n\n"
+        f"ОБЯЗАТЕЛЬНЫЕ ПАРЫ (верни ровно по одному verdict для каждой пары; другие пары не добавляй):\n{pair_text}\n\n"
         'Верни JSON вида {"verdicts":[{"candidateId":"...","ruleId":"...",'
         '"violation":true|false|null,"reason":"...","fix":"..."}]}.'
     )
@@ -69,13 +81,14 @@ def _parse_verdicts(value: Any, request: dict) -> dict[tuple[str, str], dict]:
     records = value.get('verdicts', []) if isinstance(value, dict) and isinstance(value.get('verdicts'), list) else []
     valid_candidates = {x['id'] for x in request['candidates']}
     valid_rules = {x['id'] for x in request['rules']}
+    valid_pairs = set(request_pairs_for(request['candidates'], request['rules'], request.get('pairs')))
     grouped: dict[tuple[str, str], list[dict]] = {}
     for record in records:
         if not isinstance(record, dict):
             continue
         candidate_id = str(record.get('candidateId') or '').strip()
         rule_id = str(record.get('ruleId') or '').strip()
-        if candidate_id not in valid_candidates or rule_id not in valid_rules:
+        if candidate_id not in valid_candidates or rule_id not in valid_rules or (candidate_id, rule_id) not in valid_pairs:
             continue
         verdict = record.get('violation')
         if verdict not in {True, False, None}:
@@ -121,6 +134,7 @@ def aggregate_candidate_results(plan: dict, verdicts: dict[tuple[str, str], dict
             checked = len(processed)
             exhaustive = bool(routed.get('exhaustive', True)) and checked == total and not unclear
             coverage = {
+                'kind': 'candidate',
                 'candidateCount': total,
                 'checkedCandidateCount': checked,
                 'packetCount': total,
@@ -200,12 +214,11 @@ async def execute_candidate_plan(
 ) -> tuple[list[dict], list[str]]:
     verdicts: dict[tuple[str, str], dict] = {}
     warnings: list[str] = []
+    transient_errors: list[tuple[str, str, str, set[tuple[str, str]]]] = []
     requests = plan['requests']
     if not requests:
         return aggregate_candidate_results(plan, verdicts), warnings
 
-    next_index = 0
-    lock = asyncio.Lock()
     fatal: BaseException | None = None
 
     async def cancelled() -> bool:
@@ -214,42 +227,114 @@ async def execute_candidate_plan(
         value = is_cancelled()
         return await value if asyncio.iscoroutine(value) else bool(value)
 
-    async def worker() -> None:
-        nonlocal next_index, fatal
-        while fatal is None:
-            if await cancelled():
-                return
-            async with lock:
-                if next_index >= len(requests):
-                    return
-                request = requests[next_index]
-                next_index += 1
-            try:
-                response = await ask_structured_json(
-                    provider=provider,
-                    model=model,
-                    system_prompt=_system_prompt(),
-                    user_message=_message(request['family'], request['candidates'], request['rules']),
-                    operation='candidate',
-                    packets=1,
-                    candidates=len(request['candidates']) * len(request['rules']),
-                )
-                merge_usage(usage, response['usage'])
-                verdicts.update(_parse_verdicts(response['value'], request))
-            except BaseException as exc:
-                merge_usage(usage, getattr(exc, 'llm_usage', None))
-                if is_fatal_provider_error(exc):
-                    fatal = exc
-                    return
-                warnings.append(f"Кандидаты семейства {request['family']} не проверены: {exc}")
-            finally:
-                if on_request_done:
-                    value = on_request_done()
-                    if asyncio.iscoroutine(value):
-                        await value
+    async def run_requests(batch_requests: list[dict], *, phase: str, report_progress: bool) -> None:
+        nonlocal fatal
+        if not batch_requests or fatal is not None:
+            return
+        next_index = 0
+        lock = asyncio.Lock()
 
-    workers = min(configured_rate_limits(provider)['maxConcurrent'], max(1, len(requests)))
-    await asyncio.gather(*(worker() for _ in range(workers)))
+        async def worker() -> None:
+            nonlocal next_index, fatal
+            while fatal is None:
+                if await cancelled():
+                    return
+                async with lock:
+                    if next_index >= len(batch_requests):
+                        return
+                    request = batch_requests[next_index]
+                    next_index += 1
+                try:
+                    response = await ask_structured_json(
+                        provider=provider,
+                        model=model,
+                        system_prompt=_system_prompt(),
+                        user_message=_message(
+                            request['family'],
+                            request['candidates'],
+                            request['rules'],
+                            request.get('pairs'),
+                        ),
+                        operation='candidate',
+                        packets=1,
+                        candidates=len(request_pairs_for(request['candidates'], request['rules'], request.get('pairs'))),
+                    )
+                    merge_usage(usage, response['usage'])
+                    verdicts.update(_parse_verdicts(response['value'], request))
+                except BaseException as exc:
+                    merge_usage(usage, getattr(exc, 'llm_usage', None))
+                    if is_fatal_provider_error(exc):
+                        fatal = exc
+                        return
+                    transient_errors.append((
+                        str(request['family']),
+                        phase,
+                        str(exc),
+                        set(request_pairs_for(request['candidates'], request['rules'], request.get('pairs'))),
+                    ))
+                finally:
+                    if report_progress and on_request_done:
+                        value = on_request_done()
+                        if asyncio.iscoroutine(value):
+                            await value
+
+        workers = min(configured_rate_limits(provider)['maxConcurrent'], max(1, len(batch_requests)))
+        await asyncio.gather(*(worker() for _ in range(workers)))
+
+    await run_requests(requests, phase='основной пакет', report_progress=True)
     if fatal is not None:
         raise fatal
+
+    # A valid JSON response may still omit several candidate/rule pairs. Retrying
+    # the whole packet wastes tokens and used to leave coverage at values such as
+    # 26/48 or 69/91. Retry only the exact missing pairs, preserving all successful
+    # verdicts from the first pass.
+    retry_rounds = max(1, env_int('CANDIDATE_MISSING_RETRY_ROUNDS', 2))
+    for retry_round in range(1, retry_rounds + 1):
+        retry_requests: list[dict] = []
+        for request in requests:
+            expected = request_pairs_for(request['candidates'], request['rules'], request.get('pairs'))
+            missing = [pair for pair in expected if pair not in verdicts]
+            if not missing:
+                continue
+            candidate_ids = {candidate_id for candidate_id, _rule_id in missing}
+            rule_ids = {rule_id for _candidate_id, rule_id in missing}
+            retry_requests.append({
+                'family': request['family'],
+                'candidates': [item for item in request['candidates'] if item['id'] in candidate_ids],
+                'rules': [rule for rule in request['rules'] if rule['id'] in rule_ids],
+                'pairs': missing,
+            })
+        if not retry_requests:
+            break
+        await run_requests(
+            retry_requests,
+            phase=f'повтор пропущенных пар {retry_round}/{retry_rounds}',
+            report_progress=False,
+        )
+        if fatal is not None:
+            raise fatal
+
+    missing_pairs = {
+        pair
+        for request in requests
+        for pair in request_pairs_for(request['candidates'], request['rules'], request.get('pairs'))
+        if pair not in verdicts
+    }
+    # A malformed/partial first response is an implementation detail when the
+    # targeted recovery pass restores every required pair. Do not surface a
+    # misleading limitation such as “family not checked” after successful recovery.
+    for family, phase, message, affected_pairs in transient_errors:
+        unresolved = affected_pairs & missing_pairs
+        if unresolved:
+            warnings.append(
+                f"Кандидаты семейства {family} ({phase}) частично не проверены: {message}; "
+                f"после восстановления осталось обязательных пар: {len(unresolved)}."
+            )
+    if missing_pairs:
+        warnings.append(
+            f'После точечных повторов LLM не вернула {len(missing_pairs)} обязательных candidate/rule пар; '
+            'соответствующие правила оставлены неопределёнными, а не засчитаны как проверенные.'
+        )
     return aggregate_candidate_results(plan, verdicts), warnings
+

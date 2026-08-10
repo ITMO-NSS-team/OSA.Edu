@@ -49,6 +49,9 @@ CANDIDATE_FAMILY_BY_RULE = {
     'soft:42':'sentence-start',
 }
 DEDUP_BY_RULE = {
+    'core:1.1':'defense-statement-form',
+    'core:1.2':'defense-statement-form',
+    'core:1.3':'defense-statement-form',
     'core:4.1':'abbreviation-introduction',
     'core:12':'abbreviation-introduction',
     'core:4.2':'abbreviation-heading',

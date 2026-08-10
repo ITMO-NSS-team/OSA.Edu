@@ -14,29 +14,24 @@ STATUS_ORDER = ["violation", "pass", "uncertain", "not_checked", "not_applicable
 
 
 def _link_related_violations(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    evidence_groups: dict[str, set[str]] = defaultdict(set)
-    finding_groups: dict[str, set[str]] = defaultdict(set)
-    position_groups: dict[str, set[str]] = defaultdict(set)
+    # Related-rule links are semantic metadata, not an incidental consequence of
+    # two rules quoting the same block. Shared evidence previously linked unrelated
+    # checks (for example a numeral rule with prototype analysis). Only an explicit
+    # shared dedupKey may create a related-rule group.
+    dedup_groups: dict[str, set[str]] = defaultdict(set)
     for result in results:
         if result.get("status") != "violation":
             continue
-        for evidence in result.get("evidence", []) or []:
-            key = f"{evidence.get('blockId','')}|{normalized_quote(str(evidence.get('quote','')))}"
-            evidence_groups[key].add(str(result.get("ruleId", "")))
-        for finding_id in result.get("findingIds", []) or []:
-            finding_groups[str(finding_id)].add(str(result.get("ruleId", "")))
-        dedup_key = str(result.get("dedupKey") or "")
+        dedup_key = str(result.get("dedupKey") or "").strip()
         if dedup_key:
-            for evidence in result.get("evidence", []) or []:
-                position = f"{dedup_key}|{evidence.get('blockId','')}|{evidence.get('start','')}|{evidence.get('end','')}"
-                position_groups[position].add(str(result.get("ruleId", "")))
+            dedup_groups[dedup_key].add(str(result.get("ruleId", "")))
 
     related: dict[str, set[str]] = defaultdict(set)
-    for ids in [*evidence_groups.values(), *finding_groups.values(), *position_groups.values()]:
+    for ids in dedup_groups.values():
         if len(ids) <= 1:
             continue
         for rule_id in ids:
-            related[rule_id].update(x for x in ids if x != rule_id)
+            related[rule_id].update(other for other in ids if other != rule_id)
 
     prepared: list[dict[str, Any]] = []
     for result in results:
@@ -137,6 +132,7 @@ def make_report(
         "model": technical_input.get("model") or (document_map or {}).get("model") or "unknown",
         "promptHash": technical_input.get("promptHash") or "unknown",
         "mapPromptHash": technical_input.get("mapPromptHash") or (document_map or {}).get("promptHash"),
+        "performance": technical_input.get("performance") or {},
     }
     catalog_keys = ["id", "category", "title", "requirement", "sourceLabel", "sourceLine", "mode", "scope", "severity", "dedupKey", "candidateFamily", "correctExample", "incorrectExample"]
     issue_groups: dict[str, dict[str, Any]] = {}
@@ -254,7 +250,10 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
                 lines.append(f"- **Проверка согласованности:** {' '.join(result['consistencyNotes'])}")
             coverage = result.get("coverage")
             if coverage:
-                lines.append(f"- **Фрагменты:** {coverage.get('checkedCandidateCount',0)} из {coverage.get('candidateCount',0)}; полная область: {'да' if coverage.get('exhaustive') else 'нет'}")
+                if coverage.get('kind') == 'candidate':
+                    lines.append(f"- **Кандидаты:** {coverage.get('checkedCandidateCount',0)} из {coverage.get('candidateCount',0)}; поиск и проверка кандидатов завершены: {'да' if coverage.get('exhaustive') else 'нет'}")
+                else:
+                    lines.append(f"- **Фрагменты:** {coverage.get('checkedCandidateCount',0)} из {coverage.get('candidateCount',0)}; полная область: {'да' if coverage.get('exhaustive') else 'нет'}")
             if result.get("termFindings"):
                 lines.append("- **Разбор обозначений:**")
                 for term in result["termFindings"]:
@@ -286,7 +285,9 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
         f"- Провайдер API: {technical.get('provider','')}",
         f"- Model ID: {technical.get('model','')}",
         f"- Хеш промпта проверки: {technical.get('promptHash','')}",
-        f"- Хеш промпта структуры: {technical.get('mapPromptHash') or '—'}", "",
+        f"- Хеш промпта структуры: {technical.get('mapPromptHash') or '—'}",
+        f"- Активное wall-clock время: {round(sum(float((technical.get('performance') or {}).get(k, 0) or 0) for k in ('extractionMs','structureMs','checkingMs','reportMs')) / 1000)} с",
+        "",
         "## Нагрузка LLM", "",
         f"- Физических запросов: {usage.get('requests',0)}",
         f"- Повторных попыток: {usage.get('retries',0)}",

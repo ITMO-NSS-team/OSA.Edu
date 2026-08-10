@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import time
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +53,10 @@ async def _prepare_structure(job: dict[str, Any]) -> None:
             "status": "extracting", "progress": 3, "startedAt": now_iso(), "error": None,
             "diagnostics": [], "attempts": 0, "report": None,
         })
+        phase_started = time.perf_counter()
         document, extracted_path = await _obtain_document(job)
+        performance = document.setdefault("performance", {})
+        performance.setdefault("extractionMs", round((time.perf_counter() - phase_started) * 1000))
         if len(document.get("text", "")) < 100:
             raise RuntimeError("Из файла удалось извлечь слишком мало текста. Попробуйте DOCX или PDF с текстовым слоем.")
         await update_job(job["id"], {"extractedPath": extracted_path, "progress": 10})
@@ -62,10 +66,12 @@ async def _prepare_structure(job: dict[str, Any]) -> None:
             await update_job(job["id"], {"status": "mapping", "progress": 12})
             if await _is_cancelled(job["id"]):
                 return
+            map_started = time.perf_counter()
             document["map"] = await build_document_map(
                 document,
                 provider=job.get("provider", "openrouter"), model=job["model"], prompt=map_prompt,
             )
+            performance["structureMs"] = round((time.perf_counter() - map_started) * 1000)
             await update_job(job["id"], {"status": "mapping", "progress": 30})
             save_extracted(job["id"], document)
 
@@ -101,6 +107,8 @@ async def _perform_check(job: dict[str, Any]) -> None:
         document = read_extracted(extracted_path)
         if not (document.get("map") or {}).get("review", {}).get("confirmedByUser"):
             raise RuntimeError("Сначала подтвердите выделенную структуру документа.")
+
+        check_wall_started = time.perf_counter()
 
         await update_job(job["id"], {
             "status": "checking", "progress": 35, "error": None,
@@ -144,6 +152,9 @@ async def _perform_check(job: dict[str, Any]) -> None:
             {**previous_report.get("routing", {}), "checkRequests": int((previous_report.get("routing") or {}).get("checkRequests", 0)) + int(checked["routing"].get("checkRequests", 0))}
             if previous_report else checked["routing"]
         )
+        performance = document.setdefault("performance", {})
+        performance["checkingMs"] = round((time.perf_counter() - check_wall_started) * 1000)
+        report_started = time.perf_counter()
         report = make_report(
             checked["rules"], results, warnings, usage, document.get("map"), routing,
             {
@@ -152,8 +163,18 @@ async def _perform_check(job: dict[str, Any]) -> None:
                 "model": job["model"],
                 "promptHash": _hash_text(job.get("prompt", "")),
                 "mapPromptHash": _hash_text(job.get("mapPrompt", "")),
+                "performance": performance,
             },
         )
+        performance["reportMs"] = round((time.perf_counter() - report_started) * 1000)
+        if job.get("startedAt"):
+            try:
+                from datetime import datetime
+                start_dt = datetime.fromisoformat(str(job["startedAt"]).replace("Z", "+00:00"))
+                performance["totalWallMs"] = max(0, round((datetime.now(start_dt.tzinfo) - start_dt).total_seconds() * 1000))
+            except Exception:
+                pass
+        report.setdefault("technical", {})["performance"] = performance
         await update_job(job["id"], {
             "status": "completed", "progress": 100, "finishedAt": now_iso(),
             "documentMap": document.get("map"), "report": report, "retryRuleIds": [],

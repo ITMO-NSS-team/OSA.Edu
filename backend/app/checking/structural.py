@@ -59,9 +59,21 @@ def _heading_format(rule,document):
     for b in document.get('blocks',[]):
         if b.get('type')!='heading' and not is_actual_caption(b): continue
         t=b.get('text','').strip()
-        if re.search(r'^глава\s+\d+\s+(?![.–—-])',t,re.I) or re.search(r'^\d+(?:\.\d+)+\s+(?=[А-ЯЁ])',t) or t.endswith('.'):
+        is_chapter=bool(re.match(r'^глава\s+\d+\b',t,re.I))
+        is_section=bool(re.match(r'^\d+(?:\.\d+)+(?:\.)?\s+',t))
+        is_numbered_object=bool(re.match(r'^(?:рис(?:унок)?|таблица)\s*\d+(?:\.\d+)?\b',t,re.I))
+        # CORE-5-4 explicitly concerns numbered chapters/sections/tables/figures.
+        # Generic headings such as ``Основное содержание работы.`` belong to
+        # CORE-19 and must not be evidence for this rule.
+        if not (is_chapter or is_section or is_numbered_object):
+            continue
+        bad_separator = bool(
+            re.search(r'^глава\s+\d+\s+(?![.–—-])',t,re.I)
+            or re.search(r'^\d+(?:\.\d+)+\s+(?=[А-ЯЁ])',t)
+        )
+        if bad_separator or t.endswith('.'):
             ev.append(evidence(b,t))
-    return _violation(rule,'Обнаружен заголовок или подпись с неверной точкой после номера либо лишней точкой в конце.',ev[:15],'Исправить нумерацию и убрать точку в конце названия.') if ev else _pass(rule,'Явных нарушений формата распознанных заголовков и подписей не обнаружено.')
+    return _violation(rule,'Обнаружен нумерованный заголовок или подпись с неверной точкой после номера либо лишней точкой в конце.',ev[:15],'Исправить нумерацию и убрать точку в конце названия.') if ev else _pass(rule,'Явных нарушений формата распознанных нумерованных заголовков и подписей не обнаружено.')
 
 
 def _chapter_heading_order(rule,document):
@@ -78,10 +90,14 @@ def _object_key(text:str):
 
 
 def _reference_keys(text:str):
-    normalized=re.sub(r'([А-ЯЁа-яё])(?:-|\u00ad)\s*\n\s*([А-ЯЁа-яё])',r'\1\2',text)
+    normalized=re.sub(r'([А-ЯЁа-яё])(?:-|\u00ad)\s*\n?\s*([А-ЯЁа-яё])',r'\1\2',text)
     out=[]
-    for m in re.finditer(r'(?<![\p{L}\p{N}_])(?:рис\.?|рисунок|рисунк(?:е|а|у|ом)|табл\.?|таблиц(?:а|е|ы|у|ей)|figure|fig\.?|table)\s*(\d+(?:\.\d+)?)',normalized,re.I):
-        out.append(('рис' if re.search(r'рис|fig|figure',m.group(0),re.I) else 'табл')+':'+m.group(1))
+    pattern = re.compile(r'(?<![\p{L}\p{N}_])(?P<kind>рис\.?|рисунок|рисунк(?:е|а|у|ом|ах|ами)|табл\.?|таблиц(?:а|е|ы|у|ей|ах|ами)|figure|fig\.?|table)\s*(?P<num>\d+(?:\.\d+)?)(?P<tail>(?:\s*(?:,|и|–|—|-)\s*\d+(?:\.\d+)?)*)', re.I)
+    for m in pattern.finditer(normalized):
+        prefix='рис' if re.search(r'рис|fig|figure',m.group('kind'),re.I) else 'табл'
+        out.append(prefix+':'+m.group('num'))
+        for number in re.findall(r'\d+(?:\.\d+)?', m.group('tail') or ''):
+            out.append(prefix+':'+number)
     return list(dict.fromkeys(out))
 
 
@@ -127,9 +143,14 @@ def _formula_numbering(rule,document):
     if not formulas: return _na(rule,'Формулы в извлечённом тексте не распознаны.')
     bad=[]; numbered=0
     for b in formulas:
-        t=b.get('text','')
-        if re.search(r'\(\d+(?:\.\d+)*\)',t): numbered+=1
-        if re.search(r'\(\d+(?:\.\d+)*\)\s*[.,;:]',t): bad.append(evidence(b,t[:450]))
+        t=b.get('text','').strip()
+        # A formula number is a parenthesized integer/section number aligned at
+        # the end of the formula block. Parentheses inside expressions such as
+        # s(1), x(2) or {s(1), ..., s(N)} are indices/arguments, not numbering.
+        if re.search(r'\(\d+(?:\.\d+)*\)\s*$', t):
+            numbered += 1
+        if re.search(r'\(\d+(?:\.\d+)*\)\s*[.,;:]\s*$', t):
+            bad.append(evidence(b,t[:450]))
     return _violation(rule,'В том же извлечённом блоке знак препинания расположен после номера формулы.',bad,'Перенести знак перед номером формулы.') if bad else _uncertain(rule,f'Распознано формул: {len(formulas)}; в тех же блоках найдено номеров: {numbered}. Отсутствие или расположение остальных номеров требует просмотра PDF.')
 
 

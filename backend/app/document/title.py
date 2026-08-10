@@ -27,14 +27,39 @@ def extract_best_title(range_blocks: list[dict], all_blocks: list[dict] | None =
                 if score > 0:
                     candidates.append((score, len(combined), block, combined))
         whole = _restore_joined_words(_clean_line(re.sub(r'\n+', ' ', block.get("text", ""))), lexicon)
-        if not re.search(r'[A-Za-z]', whole):
-            score = _title_score(whole)
+        for variant in _title_variants(whole):
+            score = _title_score(variant)
             if score > 0:
-                candidates.append((score, len(whole), block, whole))
+                candidates.append((score, len(variant), block, variant))
     if not candidates:
         return None
     _, _, block, text = max(candidates, key=lambda x: (x[0], x[1]))
     return {**block, "text": text}
+
+
+def _title_variants(value: str) -> list[str]:
+    """Return plausible title strings from one PDF text block.
+
+    Digital title pages often place the Russian title and its English translation
+    in the same PyMuPDF block. The older extractor rejected the whole block as soon
+    as Latin letters appeared, which made the result depend on the structure LLM.
+    Keep the original value when it is monolingual and additionally expose the
+    Russian prefix when a clear multi-word English translation follows it.
+    """
+    text = re.sub(r'\s+', ' ', value).strip()
+    if not text:
+        return []
+    variants: list[str] = []
+    if not re.search(r'[A-Za-z]', text):
+        variants.append(text)
+    # Look for the start of a real English phrase, not a single acronym/model name.
+    # A tail with at least four Latin words is a strong signal of a bilingual title.
+    for match in re.finditer(r'(?<![A-Za-z])(?=[A-Z][A-Za-z-]{2,}(?:\s+(?:[A-Za-z][A-Za-z-]{1,}|of|for|and|on|based)){3,})', text):
+        prefix = text[:match.start()].strip(' ;,–—-')
+        if len(prefix) >= 25 and re.search(r'[А-ЯЁа-яё]', prefix):
+            variants.append(prefix)
+            break
+    return list(dict.fromkeys(variants))
 
 
 def _clean_line(value: str) -> str:
