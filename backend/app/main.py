@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
-from .config import MAX_FILE_SIZE_MB, PORT, UPLOADS_DIR, WEB_ORIGIN
+from .config import APP_VERSION, MAX_FILE_SIZE_MB, PORT, UPLOADS_DIR, WEB_ORIGIN
 from .defaults import DEFAULT_ADDITIONAL_CRITERIA, DEFAULT_MAP_PROMPT, DEFAULT_PROFILE, DEFAULT_PROMPT, MODELS, model_definition
 from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
@@ -23,7 +23,7 @@ from .pdf_reporting import report_to_pdf
 from .reporting import report_to_markdown
 from .rules.registry import load_rule_registry
 from .store import create_jobs, delete_job, get_job, list_jobs, recover_interrupted_jobs, update_job
-from .util import normalized_quote, now_iso
+from .util import map_is_confirmed, normalized_quote, now_iso
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -33,7 +33,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="OSA.Edu API", version="3.6.0", lifespan=lifespan)
+app = FastAPI(title="OSA.Edu API", version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[WEB_ORIGIN],
@@ -96,6 +96,7 @@ async def create_job_endpoint(
     prompt: str = Form(""),
     mapPrompt: str = Form(""),
     additionalCriteria: str = Form(""),
+    developerMode: bool = Form(False),
 ):
     if not files:
         return _error(400, "Добавьте хотя бы один PDF или DOCX файл.")
@@ -155,6 +156,7 @@ async def create_job_endpoint(
                 "prompt": semantic_prompt,
                 "mapPrompt": map_prompt,
                 "additionalCriteria": additional,
+                "developerMode": bool(developerMode),
                 "attempts": 0,
                 "progress": 0,
             })
@@ -279,6 +281,8 @@ async def confirm_structure(job_id: str):
         return _error(400, "Исправьте недействительные границы фрагментов перед запуском проверки.")
     document["map"].setdefault("review", {})["required"] = True
     document["map"]["review"]["confirmedByUser"] = True
+    document["map"]["review"]["autoConfirmed"] = False
+    document["map"]["review"]["confirmationMode"] = "user"
     document["map"]["review"]["confirmedAt"] = now_iso()
     save_extracted(job_id, document)
     updated = await update_job(job_id, {"status": "queued_check", "progress": 32, "documentMap": document["map"], "error": None})
@@ -301,7 +305,7 @@ async def retry(job_id: str):
     source_exists = bool(current.get("filePath") and Path(current["filePath"]).exists())
     if not source_exists and not cache_exists:
         return _error(409, "Нет исходного файла или кэша. Загрузите ВКР заново.")
-    next_status = "queued_check" if (current.get("documentMap") or {}).get("review", {}).get("confirmedByUser") and cache_exists else "queued"
+    next_status = "queued_check" if map_is_confirmed(current.get("documentMap")) and cache_exists else "queued"
     job = await update_job(job_id, {
         "status": next_status,
         "progress": 32 if next_status == "queued_check" else 0,
@@ -436,6 +440,8 @@ def _unconfirm(document_map: dict[str, Any]) -> None:
     review = document_map.setdefault("review", {"required": True})
     review["required"] = True
     review["confirmedByUser"] = False
+    review["autoConfirmed"] = False
+    review.pop("confirmationMode", None)
     review.pop("confirmedAt", None)
 
 

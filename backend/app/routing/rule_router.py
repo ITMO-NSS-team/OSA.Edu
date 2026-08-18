@@ -4,7 +4,7 @@ import json
 import regex as re
 
 from ..config import CONFIG_DIR
-from ..document.numbered_items import collect_unique_numbered_items
+from ..document.numbered_items import collect_unique_defense_items
 from ..document.semantic_ranges import trim_blocks_for_element
 from ..util import empty_usage
 
@@ -43,6 +43,11 @@ def _build_fragments(document: dict, map_value: dict) -> list[dict]:
     # Direct map fragments. IDs intentionally stay equal to DocumentMap element IDs;
     # the React client and reports can therefore refer to exactly the same semantic ranges.
     for element in map_value.get("elements", []):
+        # Goal/tasks/defence can occur twice in combined synopsis+thesis PDFs.
+        # The map keeps secondary copies visible for transparency, but routing
+        # must use only the canonical main-work copy.
+        if element.get("type") in {"goal", "tasks", "defense_statements"} and element.get("canonicalRole") == "secondary_copy":
+            continue
         start = block_index.get(element.get("startBlockId"))
         end = block_index.get(element.get("endBlockId"))
         if start is None or end is None or start > end:
@@ -94,10 +99,60 @@ def _build_fragments(document: dict, map_value: dict) -> list[dict]:
     explicit_conclusions = by_type("chapter_conclusions")
     conclusion = by_type("conclusion")
 
-    derived_conclusions = explicit_conclusions or [
-        result for index, chapter in enumerate(chapters)
-        if (result := _derive_chapter_conclusion(chapter, index)) is not None
-    ]
+    # Experimental full-document semantic fragment. It mirrors the one-shot
+    # structure request: every extracted block is present exactly once, while
+    # type/page metadata is added later by the checker message. Abbreviation
+    # rules share this selector, so the default grouped semantic pipeline sends
+    # all of them in a single LLM request.
+    add_virtual(
+        "whole_document",
+        "Полный документ для проверки аббревиатур",
+        [],
+        blocks,
+        True,
+        sourceScannedBlocks=len(blocks),
+        semanticContext=(
+            f"Передан весь документ: {len(blocks)} блоков. "
+            "Для проверки аббревиатур учитывай порядок, тип и страницу каждого BLOCK."
+        ),
+    )
+
+    # Document-map chapter conclusions are independent semantic ranges and do not
+    # necessarily overlap the chapter range itself. Associate each explicit
+    # conclusion with the nearest preceding chapter in document order so that
+    # position→chapter routing can reliably recover the corresponding conclusions.
+    for conclusion_fragment in explicit_conclusions:
+        if conclusion_fragment.get("chapterId"):
+            continue
+        conclusion_blocks = conclusion_fragment.get("blocks", [])
+        if not conclusion_blocks:
+            continue
+        conclusion_start = block_index.get(conclusion_blocks[0].get("id"))
+        if conclusion_start is None:
+            continue
+        preceding: list[tuple[int, dict]] = []
+        for chapter in chapters:
+            chapter_blocks = chapter.get("blocks", [])
+            if not chapter_blocks:
+                continue
+            chapter_start = block_index.get(chapter_blocks[0].get("id"))
+            if chapter_start is not None and chapter_start <= conclusion_start:
+                preceding.append((chapter_start, chapter))
+        if preceding:
+            conclusion_fragment["chapterId"] = max(preceding, key=lambda row: row[0])[1].get("id")
+
+    derived_conclusions = list(explicit_conclusions)
+    explicit_chapter_ids = {item.get("chapterId") for item in explicit_conclusions if item.get("chapterId")}
+    # Keep explicit map ranges authoritative, but deterministically derive a
+    # missing conclusion for an individual chapter when an actual conclusion
+    # heading exists inside that chapter.  A conclusion in one chapter must not
+    # disable discovery for all other chapters.
+    for index, chapter in enumerate(chapters):
+        if chapter.get("id") in explicit_chapter_ids:
+            continue
+        derived = _derive_chapter_conclusion(chapter, index)
+        if derived is not None:
+            derived_conclusions.append(derived)
     existing_ids = {fragment.get("id") for fragment in fragments}
     for item in derived_conclusions:
         if item.get("id") not in existing_ids:
@@ -188,24 +243,46 @@ def _build_fragments(document: dict, map_value: dict) -> list[dict]:
         if support_text:
             semantic_context += f" Дополнительные связи (не основная область CORE-2-3/CORE-15): {support_text}."
         conclusion_blocks: list[dict] = []
+        conclusion_complete = True
+        missing_conclusion_labels: list[str] = []
         for chapter in selected_chapters:
             chapter_id = chapter.get("id")
             match = next((item for item in derived_conclusions if item.get("chapterId") == chapter_id), None)
             if match is None:
-                # Fallback: conclusion fragment overlapping the tail of the primary chapter.
+                # Compatibility fallback for old maps where the conclusion range
+                # overlapped the tail of the chapter itself.
                 chapter_ids = {block.get("id") for block in chapter.get("blocks", [])}
                 match = next((item for item in derived_conclusions if any(block.get("id") in chapter_ids for block in item.get("blocks", []))), None)
             if match is not None:
                 conclusion_blocks.extend(match.get("blocks", []))
+                conclusion_complete = conclusion_complete and bool(match.get("complete"))
+                continue
+
+            # A missing dedicated conclusion is useful semantic information rather
+            # than a routing failure. Route a short tail of the primary chapter as
+            # an explicitly incomplete context. This makes CORE-8-2 return a
+            # meaningful uncertain result instead of "required fragment missing".
+            tail = chapter.get("blocks", [])[-8:]
+            conclusion_blocks.extend(tail)
+            conclusion_complete = False
+            missing_conclusion_labels.append(str(chapter.get("label") or chapter_id or "глава"))
+
         if conclusion_blocks:
+            context = f"Положение {index + 1}: {statement_text}"
+            if missing_conclusion_labels:
+                context += (
+                    "\nОтдельный диапазон выводов для основной главы не найден в подтверждённой карте: "
+                    + "; ".join(missing_conclusion_labels)
+                    + ". Переданные блоки являются только хвостом главы; не считать их полноценными выводами."
+                )
             fragments.append({
                 "id": f"virtual-primary-conclusions-{index + 1}",
                 "type": "virtual",
                 "selector": "primary_chapter_conclusions",
                 "label": f"Выводы основной главы для положения {index + 1}",
                 "blocks": _unique_blocks(conclusion_blocks),
-                "complete": True,
-                "semanticContext": f"Положение {index + 1}: {statement_text}",
+                "complete": bool(conclusion_complete and selected_chapters),
+                "semanticContext": context,
             })
 
         fragments.append({
@@ -284,7 +361,10 @@ def _flatten_blocks(fragments: list[dict]) -> list[dict]:
 
 
 def _derive_chapter_conclusion(chapter: dict, index: int) -> dict | None:
-    heading = re.compile(r"^(?:\d+(?:\.\d+)*\.?\s*)?выводы(?:\s+по\s+главе)?\.?$", re.I)
+    heading = re.compile(
+        r"^(?:\d+(?:\.\d+)*\.?\s*)?.{0,120}?\bвыводы(?:\s+(?:к|по)\s+главе(?:\s+\d+)?)?(?:\s*[:—–-]\s*.{1,120})?\.?$",
+        re.I,
+    )
     chapter_blocks = chapter.get("blocks", [])
     start = next((i for i, block in enumerate(chapter_blocks) if heading.match(block.get("text", "").strip())), -1)
     if start < 0:
@@ -314,7 +394,7 @@ def _select_chapter_evidence(blocks: list[dict]) -> list[dict]:
 def _split_defense_statements(fragments: list[dict]) -> list[dict]:
     blocks = _unique_blocks(_flatten_blocks(fragments))
     statements: list[dict] = []
-    for item in collect_unique_numbered_items(blocks):
+    for item in collect_unique_defense_items(blocks):
         source = dict(item.get("source") or {})
         number = item.get("number")
         source["id"] = f"{source.get('id')}-statement-{number}"
@@ -363,6 +443,34 @@ def _longest_contiguous_overlap(left: list[str], right: list[str]) -> int:
         previous = current
     return best
 
+
+def _chapter_role_text(chapter: dict) -> str:
+    blocks = chapter.get("blocks", [])
+    # Classify the chapter by its own title/opening, not by arbitrary subsection
+    # headings. A normal methodological chapter can contain an "experimental"
+    # subsection without becoming a validation chapter as a whole.
+    opening = [str(block.get("text") or "") for block in blocks[:2]]
+    return re.sub(r"\s+", " ", " ".join([str(chapter.get("label") or ""), *opening]))
+
+
+def _is_validation_chapter(chapter: dict) -> bool:
+    text = _chapter_role_text(chapter)
+    return bool(re.search(
+        r"(?:валидаци\p{L}*|верификаци\p{L}*|экспериментальн\p{L}*\s+(?:оцен\p{L}*|провер\p{L}*|исследован\p{L}*)|"
+        r"подтверждени\p{L}*\s+положени\p{L}*)",
+        text,
+        re.I,
+    ))
+
+
+def _is_implementation_chapter(chapter: dict) -> bool:
+    text = _chapter_role_text(chapter)
+    return bool(re.search(
+        r"программн\p{L}*\s+(?:инструмент\p{L}*|систем\p{L}*)|реализаци\p{L}*|инструментальн\p{L}*|архитектур\p{L}*",
+        text,
+        re.I,
+    ))
+
 def _statement_chapter_score(statement: str, chapter: dict) -> float:
     st = _semantic_tokens(statement)
     if not st:
@@ -394,6 +502,16 @@ def _statement_chapter_score(statement: str, chapter: dict) -> float:
     # happens to repeat most terms from a position.
     score = full_ratio * 0.38 + anchor_ratio * 0.82
 
+    # Morphological wording can hide an otherwise near-exact result/title match
+    # (e.g. «повысить устойчивость моделей» vs «повышение устойчивости моделей»).
+    # Give a small semantic bonus only when both the result and the chapter title
+    # contain the same distinctive concept pair.
+    statement_text = statement.lower().replace("ё", "е")
+    chapter_label_text = str(chapter.get("label") or "").lower().replace("ё", "е")
+    improve_stability = r"(?:повыс\p{L}*|повыш\p{L}*)[^.!?]{0,70}устойчив\p{L}*"
+    if re.search(improve_stability, statement_text, re.I) and re.search(improve_stability, chapter_label_text, re.I):
+        score += 0.48
+
     result_prefix = re.split(r",\s*(?:отлича\p{L}*|характериз\p{L}*|основан\p{L}*)", statement, maxsplit=1, flags=re.I)[0]
     result_sequence = _semantic_sequence(result_prefix)
     heading_sequences = [
@@ -412,9 +530,75 @@ def _statement_chapter_score(statement: str, chapter: dict) -> float:
     # every position. They are useful as secondary evidence but should not outrank
     # the chapter where the method/model is actually introduced solely because of
     # that repetition.
-    if re.search(r"\b(?:экспериментальн\p{L}*|валидаци\p{L}*|применени\p{L}*)\b", str(chapter.get("label") or ""), re.I):
-        score *= 0.78
+    if _is_validation_chapter(chapter):
+        # A chapter may contain «валидация» in its title and still be the chapter
+        # where a particular result is developed (Latypov: the two-loop workflow
+        # is named directly in the OOD-validation chapter title). Do not penalize
+        # such a strong result-title match as a generic validation appendix.
+        result_prefix = re.split(r",\s*(?:отлича\p{L}*|характериз\p{L}*|основан\p{L}*)", statement, maxsplit=1, flags=re.I)[0]
+        result_sequence = _semantic_sequence(result_prefix)
+        heading_sequences = [
+            _semantic_sequence(str(chapter.get("label") or "")),
+            *[_semantic_sequence(str(block.get("text") or "")) for block in chapter.get("blocks", [])[:2] if block.get("type") == "heading"],
+        ]
+        result_overlap = max((_longest_contiguous_overlap(result_sequence, sequence) for sequence in heading_sequences), default=0)
+        if result_overlap < 4:
+            score *= 0.68
     return score
+
+def _statement_number(statement: str) -> str:
+    match = re.match(r"\s*(\d+)\.", statement)
+    return match.group(1) if match else ""
+
+
+def _chapter_opening(chapter: dict, limit: int = 14) -> str:
+    return re.sub(
+        r"\s+",
+        " ",
+        " ".join([str(chapter.get("label") or ""), *[str(b.get("text") or "") for b in chapter.get("blocks", [])[:limit]]]),
+    )
+
+
+def _explicit_validation_anchor(statement: str, chapter: dict) -> bool:
+    number = _statement_number(statement)
+    if not number:
+        return False
+    escaped = re.escape(number)
+    opening = _chapter_opening(chapter, 20)
+    patterns = [
+        rf"(?:валидаци\p{{L}}*|верификаци\p{{L}}*|экспериментальн\p{{L}}*\s+(?:провер\p{{L}}*|оцен\p{{L}}*)|подтвержда\p{{L}}*)[^.!?]{{0,110}}положени\p{{L}}*\s+{escaped}\b",
+        rf"положени\p{{L}}*\s+{escaped}\b[^.!?]{{0,110}}(?:подтвержда\p{{L}}*|валидаци\p{{L}}*|верификаци\p{{L}}*)",
+    ]
+    return any(re.search(pattern, opening, re.I) for pattern in patterns)
+
+
+def _explicit_statement_chapter_anchor(statement: str, chapter: dict) -> bool:
+    number = _statement_number(statement)
+    if not number:
+        return False
+    escaped = re.escape(number)
+    opening = _chapter_opening(chapter)
+    # Only self-references that describe where the proposition is developed are
+    # allowed to force a primary chapter.  «Валидация/подтверждение Положения N»
+    # is evidence for a validation role and must never override the development
+    # chapter (Fedrushkov regression).
+    strong_patterns = [
+        rf"(?:обеспечива\p{{L}}*|соответству\p{{L}}*|формулиру\p{{L}}*)[^.!?]{{0,100}}положени\p{{L}}*\s+{escaped}\b",
+        rf"положени\p{{L}}*\s+{escaped}\b[^.!?]{{0,100}}(?:обеспечива\p{{L}}*|соответству\p{{L}}*|формулиру\p{{L}}*)",
+    ]
+    if any(re.search(pattern, opening, re.I) for pattern in strong_patterns):
+        return True
+    dedicated = re.search(
+        rf"посвящен\p{{L}}*[^.!?]{{0,55}}положени\p{{L}}*\s+{escaped}\b",
+        opening,
+        re.I,
+    )
+    if not dedicated:
+        return False
+    # «глава посвящена экспериментальной верификации Положения N» is a
+    # validation anchor, not evidence that the result is developed there.
+    return not re.search(r"валидаци\p{L}*|верификаци\p{L}*|экспериментальн\p{L}*", dedicated.group(0), re.I)
+
 
 def _match_statement_to_chapters(statement: str, chapters: list[dict]) -> list[tuple[dict, float]]:
     statement_tokens = _semantic_tokens(statement)
@@ -430,6 +614,8 @@ def _match_statement_to_chapters(statement: str, chapters: list[dict]) -> list[t
         for token in token_set:
             frequency[token] = frequency.get(token, 0) + 1
 
+    explicit_primary = next((chapter for chapter in chapters if _explicit_statement_chapter_anchor(statement, chapter)), None)
+
     scored: list[tuple[dict, float]] = []
     for index, chapter in enumerate(chapters):
         score = _statement_chapter_score(statement, chapter)
@@ -440,14 +626,24 @@ def _match_statement_to_chapters(statement: str, chapters: list[dict]) -> list[t
             score += 0.48 * idf_match / max(1.0, idf_total)
         scored.append((chapter, score))
     scored.sort(key=lambda item: item[1], reverse=True)
+    if explicit_primary is not None:
+        explicit_index = next((i for i, row in enumerate(scored) if row[0].get("id") == explicit_primary.get("id")), None)
+        if explicit_index is not None:
+            chapter, score = scored.pop(explicit_index)
+            scored.insert(0, (chapter, max(score, 1.25)))
 
-    if scored and re.search(r"\b(?:экспериментальн\p{L}*|валидаци\p{L}*|применени\p{L}*)\b", str(scored[0][0].get("label") or ""), re.I):
+    if explicit_primary is None and scored and _is_validation_chapter(scored[0][0]):
         result_prefix = re.split(r",\s*(?:отлича\p{L}*|характериз\p{L}*|основан\p{L}*)", statement, maxsplit=1, flags=re.I)[0]
         result_sequence = _semantic_sequence(result_prefix)
+        top_heading_sequences = [
+            _semantic_sequence(str(scored[0][0].get("label") or "")),
+            *[_semantic_sequence(str(block.get("text") or "")) for block in scored[0][0].get("blocks", [])[:2] if block.get("type") == "heading"],
+        ]
+        top_result_overlap = max((_longest_contiguous_overlap(result_sequence, sequence) for sequence in top_heading_sequences), default=0)
 
         def plausible_primary(row: tuple[dict, float]) -> bool:
             chapter, score = row
-            if re.search(r"\b(?:экспериментальн\p{L}*|валидаци\p{L}*|применени\p{L}*)\b", str(chapter.get("label") or ""), re.I):
+            if _is_validation_chapter(chapter):
                 return False
             heading_sequences = [
                 _semantic_sequence(str(chapter.get("label") or "")),
@@ -459,9 +655,11 @@ def _match_statement_to_chapters(statement: str, chapters: list[dict]) -> list[t
             # strong result-name overlap is the better primary semantic scope.
             return score >= scored[0][1] * 0.65 or (phrase >= 3 and score >= max(0.12, scored[0][1] * 0.35))
 
-        alternative_index = next((
-            index for index, row in enumerate(scored[1:], start=1) if plausible_primary(row)
-        ), None)
+        alternative_index = None
+        if top_result_overlap < 4:
+            alternative_index = next((
+                index for index, row in enumerate(scored[1:], start=1) if plausible_primary(row)
+            ), None)
         if alternative_index is not None:
             scored.insert(0, scored.pop(alternative_index))
 
@@ -526,13 +724,13 @@ def _statement_chapter_roles(statement: str, chapters: list[dict]) -> list[tuple
     for chapter, score in sorted(scored, key=lambda item: item[1], reverse=True):
         if chapter.get("id") == primary.get("id"):
             continue
-        label = str(chapter.get("label") or "")
         chapter_text = _chapter_semantic_text(chapter)
         explicit_position = bool(number and re.search(rf"положени\p{{L}}*\s+{re.escape(number)}\b", chapter_text, re.I))
-        is_validation = bool(re.search(r"экспериментальн\p{L}*|валидаци\p{L}*|применени\p{L}*", label, re.I))
-        is_implementation = bool(re.search(r"программн\p{L}*\s+(?:инструмент\p{L}*|систем\p{L}*)|реализаци\p{L}*|инструментальн\p{L}*|архитектур\p{L}*", label, re.I))
+        explicit_validation = _explicit_validation_anchor(statement, chapter)
+        is_validation = _is_validation_chapter(chapter)
+        is_implementation = _is_implementation_chapter(chapter)
 
-        if is_validation and (explicit_position or score >= max(0.16, best * 0.38)):
+        if (is_validation or explicit_validation) and (explicit_position or explicit_validation or score >= max(0.16, best * 0.38)):
             rows.append((chapter, score, "validation"))
             continue
         if is_implementation and score >= max(0.14, best * 0.25):
@@ -557,32 +755,35 @@ def _infer_result_kind(text: str) -> str:
 
 
 
-def _technical_science_applicability(document: dict) -> bool | None:
-    # CORE-14 explicitly applies only to dissertations in technical sciences.
-    # Prefer the degree wording on the title pages over inferring the branch from
-    # the specialty code, because the same specialty may award different degrees.
+def _core14_applicability(document: dict) -> tuple[bool | None, str | None]:
+    # CORE-14 is worded specifically for dissertations in technical sciences.
+    # A master's VKR should not consume an LLM request only to end as uncertain.
     early: list[str] = []
     for index, block in enumerate(document.get("blocks", [])):
         page = block.get("page")
         if page is None:
-            if index >= 40:
+            if index >= 50:
                 break
         else:
             try:
                 if int(page) > 6:
                     continue
             except (TypeError, ValueError):
-                if index >= 40:
+                if index >= 50:
                     continue
         early.append(str(block.get("text") or ""))
     text = re.sub(r"\s+", " ", " ".join(early)).lower().replace("ё", "е")
+
+    if "выпускная квалификационная работа" in text or re.search(r"квалификаци\p{L}*\s*:\s*магистратур", text, re.I):
+        return False, "CORE-14 относится к диссертациям по техническим наукам; загруженный документ является магистерской ВКР."
+
     match = re.search(r"(?:кандидат(?:а)?|доктор(?:а)?)\s+([^.;:]{2,80}?)\s+наук\b", text, re.I)
     if not match:
-        return None
+        return None, None
     branch = re.sub(r"\s+", " ", match.group(1)).strip(" —-,:;")
     if "техническ" in branch:
-        return True
-    return False
+        return True, None
+    return False, "CORE-14 относится только к диссертациям по техническим наукам; на титульной странице явно указана иная отрасль науки."
 
 def _fallback_selectors(rule: dict) -> list[str]:
     scope = rule.get("scope")
@@ -676,13 +877,13 @@ async def build_routing(*, document: dict, map_value: dict, rules: list[dict]) -
     config = _load_config()
     specs = config.get("rules") or {}
     routed = []
-    core14_applicability = _technical_science_applicability(document)
+    core14_applicability, core14_reason = _core14_applicability(document)
     for rule in rules:
         explicit_spec = specs.get(rule.get("id"))
         if rule.get("id") == "CORE-14" and core14_applicability is False:
             explicit_spec = {
                 "strategy": "manual",
-                "reason": "CORE-14 относится только к диссертациям по техническим наукам; на титульной странице явно указана иная отрасль науки.",
+                "reason": core14_reason or "CORE-14 неприменим к этому типу документа.",
             }
         routed.append(_route_rule(rule, fragments, explicit_spec))
     explicit_rules = sum(1 for item in routed if item.get("explicit"))

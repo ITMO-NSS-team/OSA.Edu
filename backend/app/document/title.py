@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import regex as re
 
-TITLE_HINT = re.compile(r'(?:^|[^\p{L}])(?:модел(?:ь|и|ей)|алгоритм(?:ы|ов)?|метод(?:ы|ов)?|систем(?:а|ы)|технолог(?:ия|ии)|анализ|синтез|управлен(?:ие|ия)|генераци(?:я|и)|сегментаци(?:я|и)|разработк(?:а|и))(?!\p{L})', re.I)
+TITLE_HINT = re.compile(r'(?:^|[^\p{L}])(?:исследован\p{L}*|модел(?:ь|и|ей)|алгоритм(?:ы|ов)?|метод(?:ы|ов)?|систем(?:а|ы)|технолог(?:ия|ии)|анализ|синтез|управлен(?:ие|ия)|генераци(?:я|и)|сегментаци(?:я|и)|разработк(?:а|и))(?!\p{L})', re.I)
 EXCLUDED = re.compile(r'(?:министерств|университет|институт|факультет|кафедр|на\s+правах\s+рукописи|диссертац(?:ия|ии)|на\s+соискание|научн(?:ый|ая)\s+руководител|специальност|санкт-петербург|москва|\b20\d{2}\b)', re.I)
 COMMON = {"и", "в", "на", "с", "по", "для", "из", "к", "о", "об", "от", "до", "при", "без", "под", "над", "между", "основе"}
 
@@ -11,6 +11,9 @@ COMMON = {"и", "в", "на", "с", "по", "для", "из", "к", "о", "об"
 def extract_best_title(range_blocks: list[dict], all_blocks: list[dict] | None = None):
     all_blocks = all_blocks or range_blocks
     lexicon = _build_lexicon(all_blocks)
+    anchored = _title_from_vkr_anchors(all_blocks, lexicon)
+    if anchored is not None:
+        return anchored
     candidates: list[tuple[float, int, dict, str]] = []
     for block in range_blocks:
         lines = [_restore_joined_words(_clean_line(line), lexicon) for line in re.split(r'\n+', block.get("text", ""))]
@@ -35,6 +38,36 @@ def extract_best_title(range_blocks: list[dict], all_blocks: list[dict] | None =
         return None
     _, _, block, text = max(candidates, key=lambda x: (x[0], x[1]))
     return {**block, "text": text}
+
+
+def _title_from_vkr_anchors(blocks: list[dict], lexicon: dict[str, int]):
+    """Prefer the explicit ITMO-style title-page interval for VKR files.
+
+    On digital VKR title pages the work title is normally located between the
+    fixed heading ``ВЫПУСКНАЯ КВАЛИФИКАЦИОННАЯ РАБОТА`` and the first
+    ``Обучающийся:`` field.  This is a stronger signal than lexical title hints
+    and fixes titles beginning with generic words such as ``Исследование``.
+    """
+    if not blocks:
+        return None
+    first_page = next((b.get("page") for b in blocks if b.get("page") is not None), None)
+    page_blocks = [b for b in blocks if first_page is None or b.get("page") == first_page]
+    start = next((i for i, b in enumerate(page_blocks) if re.search(r"ВЫПУСКНАЯ\s+КВАЛИФИКАЦИОННАЯ\s+РАБОТА", _clean_line(b.get("text", "")), re.I)), None)
+    if start is None:
+        return None
+    end = next((i for i, b in enumerate(page_blocks[start + 1:], start=start + 1) if re.search(r"\bОбучающийся\s*:", _clean_line(b.get("text", "")), re.I)), None)
+    if end is None or end <= start + 1:
+        return None
+    selected = page_blocks[start + 1:end]
+    text = " ".join(_clean_line(b.get("text", "")) for b in selected)
+    text = re.sub(r"\s+", " ", text).strip(" .;,:–—-")
+    words = re.findall(r"[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*", text)
+    if not (4 <= len(words) <= 30) or len(text) < 20 or len(text) > 320:
+        return None
+    if EXCLUDED.search(text) or not re.search(r"[А-ЯЁа-яё]", text):
+        return None
+    source = selected[0]
+    return {**source, "text": text}
 
 
 def _title_variants(value: str) -> list[str]:
@@ -74,7 +107,7 @@ def _title_score(value: str) -> float:
     if len(words) < 4 or len(words) > 24:
         return -1
     score = min(len(text), 150) + len(words) * 4
-    if re.match(r'^(?:модел|алгоритм|метод|систем|технолог|анализ|синтез|управлен|генераци|сегментаци|разработк)', text, re.I):
+    if re.match(r'^(?:исследован|модел|алгоритм|метод|систем|технолог|анализ|синтез|управлен|генераци|сегментаци|разработк)', text, re.I):
         score += 55
     if re.search(r'(?:^|[^\p{L}])(?:больших\s+языковых\s+моделей|искусственного\s+интеллекта|машинного\s+обучения)(?!\p{L})', text, re.I):
         score += 15

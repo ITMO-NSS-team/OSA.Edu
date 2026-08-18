@@ -13,7 +13,7 @@ from .extraction import extract_document, read_extracted, save_extracted
 from .orchestration.checker import check_document
 from .reporting import make_report
 from .store import get_job, list_jobs, update_job
-from .util import merge_usage, now_iso, unique
+from .util import map_is_confirmed, merge_usage, now_iso, unique
 
 _queue_task: asyncio.Task[None] | None = None
 _queue_lock = asyncio.Lock()
@@ -83,6 +83,33 @@ async def _prepare_structure(job: dict[str, Any]) -> None:
         if await _is_cancelled(job["id"]):
             return
         document_map = document.get("map") or {}
+        if job.get("developerMode"):
+            invalid_codes = {"invalid_boundaries", "invalid_boundary", "empty_structure"}
+            invalid = [item for item in document_map.get("issues", []) if item.get("code") in invalid_codes]
+            if invalid or not document_map.get("elements"):
+                await update_job(job["id"], {
+                    "status": "awaiting_review", "progress": 30, "documentMap": document_map,
+                    "diagnostics": (document_map.get("usage") or {}).get("diagnostics", []),
+                    "error": "Режим разработчика не смог безопасно принять карту: обнаружены недействительные границы. Проверьте структуру вручную.",
+                    "finishedAt": None,
+                })
+                return
+            review = document_map.setdefault("review", {})
+            review["required"] = True
+            # Ambiguous elements remain ambiguous and will still downgrade
+            # semantic PASS to uncertain where appropriate.
+            review["confirmedByUser"] = False
+            review["autoConfirmed"] = True
+            review["confirmationMode"] = "developer_auto"
+            review["confirmedAt"] = now_iso()
+            save_extracted(job["id"], document)
+            await update_job(job["id"], {
+                "status": "queued_check", "progress": 32, "documentMap": document_map,
+                "diagnostics": (document_map.get("usage") or {}).get("diagnostics", []),
+                "error": None, "finishedAt": None,
+            })
+            return
+
         await update_job(job["id"], {
             "status": "awaiting_review", "progress": 30, "documentMap": document_map,
             "diagnostics": (document_map.get("usage") or {}).get("diagnostics", []),
@@ -105,7 +132,7 @@ async def _perform_check(job: dict[str, Any]) -> None:
         if not extracted_path:
             raise RuntimeError("Кэш документа не найден.")
         document = read_extracted(extracted_path)
-        if not (document.get("map") or {}).get("review", {}).get("confirmedByUser"):
+        if not map_is_confirmed(document.get("map")):
             raise RuntimeError("Сначала подтвердите выделенную структуру документа.")
 
         check_wall_started = time.perf_counter()

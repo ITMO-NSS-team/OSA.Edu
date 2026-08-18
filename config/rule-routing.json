@@ -71,14 +71,12 @@
       "strategy": "deterministic"
     },
     "CORE-3-5": {
-      "strategy": "candidate",
-      "candidateFamily": "filler",
-      "exhaustive": true
+      "strategy": "deterministic",
+      "detectorId": "lexical-replacements"
     },
     "CORE-3-6": {
-      "strategy": "candidate",
-      "candidateFamily": "condescending",
-      "exhaustive": true
+      "strategy": "deterministic",
+      "detectorId": "obvious-claims"
     },
     "CORE-3-7": {
       "strategy": "candidate",
@@ -86,18 +84,24 @@
       "exhaustive": true
     },
     "CORE-4-1": {
-      "strategy": "candidate",
-      "candidateFamily": "abbrev-first-use",
+      "strategy": "llm",
+      "selectors": [
+        "whole_document"
+      ],
       "exhaustive": true
     },
     "CORE-4-2": {
-      "strategy": "candidate",
-      "candidateFamily": "abbrev-in-heading",
+      "strategy": "llm",
+      "selectors": [
+        "whole_document"
+      ],
       "exhaustive": true
     },
     "CORE-4-3": {
-      "strategy": "candidate",
-      "candidateFamily": "abbrev-foreign",
+      "strategy": "llm",
+      "selectors": [
+        "whole_document"
+      ],
       "exhaustive": true
     },
     "CORE-4-4": {
@@ -244,9 +248,8 @@
       "strategy": "deterministic"
     },
     "CORE-11-5": {
-      "strategy": "candidate",
-      "candidateFamily": "to-est",
-      "exhaustive": true
+      "strategy": "deterministic",
+      "detectorId": "to-est"
     },
     "CORE-11-6": {
       "strategy": "candidate",
@@ -254,8 +257,10 @@
       "exhaustive": true
     },
     "CORE-12": {
-      "strategy": "candidate",
-      "candidateFamily": "abbrev-first-use",
+      "strategy": "llm",
+      "selectors": [
+        "whole_document"
+      ],
       "exhaustive": true
     },
     "CORE-13": {

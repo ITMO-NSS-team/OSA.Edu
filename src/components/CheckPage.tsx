@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { api } from "../api";
-import type { CheckProfile, Health, Job } from "../types";
+import { api } from "../../../../PycharmProjects/OSA.Edu/src/api";
+import type { CheckProfile, Health, Job } from "../../../../PycharmProjects/OSA.Edu/src/types";
 
 interface Props {
   health: Health;
@@ -20,6 +20,7 @@ interface Props {
 export function CheckPage(props: Props) {
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [developerMode, setDeveloperMode] = useState(() => localStorage.getItem("osaDeveloperMode") === "1");
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedModel = props.health.models.find((item) => item.id === props.model);
   const freeModels = props.health.models.filter((item) => item.tier === "free");
@@ -47,6 +48,7 @@ export function CheckPage(props: Props) {
       body.append("prompt", props.prompt);
       body.append("mapPrompt", props.mapPrompt);
       body.append("additionalCriteria", props.criteria);
+      body.append("developerMode", developerMode ? "true" : "false");
       const created = await api.createJobs(body);
       setFiles([]);
       props.onCreated(created);
@@ -55,7 +57,7 @@ export function CheckPage(props: Props) {
   }
 
   return <section className="page narrow">
-    <div className="page-title"><div><h1>Проверка</h1><p>Сначала выбранная модель выделит крупные смысловые фрагменты. Проверка правил начнётся только после вашего подтверждения структуры.</p></div></div>
+    <div className="page-title"><div><h1>Проверка</h1><p>{developerMode ? "Режим разработчика: карта будет принята автоматически, затем все работы последовательно пройдут полную проверку без вашего участия." : "Сначала выбранная модель выделит крупные смысловые фрагменты. Проверка правил начнётся только после вашего подтверждения структуры."}</p></div></div>
     {!props.health.configured.openrouter && <div className="inline-error">OpenRouter не настроен: добавьте OPENROUTER_API_KEY в файл .env и перезапустите сервер.</div>}
 
     <div className="panel form-grid">
@@ -73,6 +75,11 @@ export function CheckPage(props: Props) {
       <button className="button secondary" onClick={props.onOpenPrompt}>Открыть промпты</button>
     </div>
 
+    <label className="panel developer-toggle">
+      <input type="checkbox" checked={developerMode} onChange={(event) => { const checked = event.target.checked; setDeveloperMode(checked); localStorage.setItem("osaDeveloperMode", checked ? "1" : "0"); }} />
+      <span><strong>Режим разработчика · автопроверка</strong><small>Для массовых регрессионных прогонов. Структура каждого файла принимается автоматически и проверка запускается сразу. Неоднозначные элементы карты не скрываются: связанные правила останутся uncertain. Если границы карты недействительны, конкретная работа остановится на ручной проверке.</small></span>
+    </label>
+
     <div className="dropzone" onClick={() => inputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files); }}>
       <input ref={inputRef} type="file" accept=".pdf,.docx" multiple onChange={(event) => event.target.files && addFiles(event.target.files)} />
       <strong>Перетащите PDF или DOCX</strong><span>или нажмите, чтобы выбрать файлы</span>
@@ -84,7 +91,7 @@ export function CheckPage(props: Props) {
     </div>}
 
     <label className="panel block-label"><span>Дополнительные требования</span><textarea value={props.criteria} onChange={(event) => props.onCriteriaChange(event.target.value)} rows={5} placeholder="Одно правило на строку" /><small>Оставьте поле пустым, если дополнительных правил нет.</small></label>
-    <div className="actions end"><button className="button primary" disabled={!files.length || sending} onClick={submit}>{sending ? "Добавление…" : files.length > 1 ? `Подготовить структуру (${files.length})` : "Выделить структуру"}</button></div>
+    <div className="actions end"><button className="button primary" disabled={!files.length || sending} onClick={submit}>{sending ? "Добавление…" : developerMode ? (files.length > 1 ? `Запустить автопроверку (${files.length})` : "Запустить автопроверку") : files.length > 1 ? `Подготовить структуру (${files.length})` : "Выделить структуру"}</button></div>
   </section>;
 }
 

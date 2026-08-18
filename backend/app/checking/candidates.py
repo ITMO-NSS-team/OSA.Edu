@@ -4,15 +4,15 @@ import hashlib
 from typing import Any, Callable, Iterable
 import regex as re
 
-from .common import mapped_excluded_ids, contents_page_range, is_code_or_prompt, looks_like_contents, is_likely_table_context, formula_like_block
+from .common import mapped_excluded_ids, mapped_scientific_body_ids, contents_page_range, is_code_or_prompt, looks_like_contents, is_likely_table_context, formula_like_block
 from ..util import compact
 
 # Candidate-first checking keeps recall in code and lets the LLM make only a
 # small semantic decision. A candidate is never treated as a violation by itself.
 
 LEXICONS: dict[str, str] = {
-    'filler': r'\b(?:нужно|надо|значит|заключа(?:ется|ются|лось)|в\s+принципе|как\s+бы|некоторым\s+образом)\b',
-    'condescending': r'\b(?:очевидно|несомненно|безусловно|легко\s+(?:видеть|заметить|показать)|хорошо\s+известно|общеизвестно|разумеется|ясно,?\s+что|как\s+известно)\b',
+    'filler': r'\b(?:нужно|значит|заключа(?:ется|ются|лось))\b',
+    'condescending': r'\b(?:очевидно|несомненно|легко\s+видеть|хорошо\s+известно)\b',
     'overclaim': r'\b(?:уникальн\p{L}*|высокоэффективн\p{L}*|исключительн\p{L}*|беспрецедентн\p{L}*|значительн\p{L}+\s+вклад|наглядно\s+демонстрир\p{L}*|существенно\s+лучше|весьма\s+эффективн\p{L}*)\b',
     'diminutive': r'\b(?:лампочк\p{L}*|программк\p{L}*|строчк\p{L}*|стрелочк\p{L}*|кнопочк\p{L}*|табличк\p{L}*|файлик\p{L}*|скриптик\p{L}*)\b',
     'to-est': r'\bто\s+есть\b',
@@ -27,8 +27,8 @@ _FIRST_PERSON_VERB = re.compile(
     r'(?<![\p{L}\p{N}_-])(?:рассмотрим|предложим|получим|проведём|проведем|разработаем|исследуем|покажем|опишем|отметим|перейдём|перейдем|сравним|используем|применим|выберем|определим|сформулируем|представим|приведём|приведем|обозначим|построим|реализуем|оценим|будем|можем|видим|считаем|полагаем)(?![\p{L}\p{N}_-])',
     re.I,
 )
-_NUMERAL_RE = re.compile(r'(?<![\d.,:/-])(?<![\p{L}\p{N}_])([0-9])\s+([А-Яа-яЁё]{3,})')
-_NUMERAL_SKIP_BEFORE = re.compile(r'(?:глав\p{L}*|раздел\p{L}*|рисун\p{L}*|рис\.|табл\p{L}*|стр\.|пункт\p{L}*|формул\p{L}*|этап\p{L}*|верси\p{L}*|№|прилож\p{L}*)\s*$', re.I)
+_NUMERAL_RE = re.compile(r'(?<![\d.,:/–—-])(?<![\p{L}\p{N}_])([0-9])\s+([А-Яа-яЁё]{3,})')
+_NUMERAL_SKIP_BEFORE = re.compile(r'(?:глав\p{L}*|раздел\p{L}*|рисун\p{L}*|рис\.|табл\p{L}*|стр\.|пункт\p{L}*|подпункт\p{L}*|направлен\p{L}*|специальност\p{L}*|формул\p{L}*|этап\p{L}*|верси\p{L}*|положен\p{L}*|свойств\p{L}*|гипотез\p{L}*|задач\p{L}*|теорем\p{L}*|определен\p{L}*|определён\p{L}*|алгоритм\p{L}*|шаг\p{L}*|пример\p{L}*|№|прилож\p{L}*)\s*$', re.I)
 _NUMERAL_SKIP_AFTER = re.compile(r'^(?:мм|см|км|кг|мс|мкс|гб|мб|кб|бит|байт|раз|процент\p{L}*|%|шт)\b', re.I)
 _ABBREV_RE = re.compile(r'(?<![\p{L}\p{N}_@-])([A-ZА-ЯЁ]{2,12}(?:[-–][A-ZА-ЯЁ0-9]{1,12})?(?:@[A-Za-z0-9]{1,4})?\d{0,3})(?![\p{L}\p{N}_@])')
 _ABBREV_STOP = {
@@ -39,6 +39,8 @@ _ABBREV_STOP = {
     # Uppercase English service headings are words, not abbreviations.
     'CONTENT', 'CONTENTS', 'ABSTRACT', 'SYNOPSIS', 'INTRODUCTION', 'CONCLUSION',
     'REFERENCES', 'PUBLICATIONS', 'AUTHOR', 'CONTRIBUTION',
+    # Common all-caps Russian heading words / prepositions are typography, not acronyms.
+    'НА', 'ПО', 'ОТ', 'ДО', 'ДЛЯ', 'ОБЗОР', 'АНАЛИЗ', 'МЕТОДЫ', 'РЕЗУЛЬТАТЫ', 'ЭКСПЕРИМЕНТ',
 }
 
 
@@ -160,11 +162,14 @@ def _make(family: str, block: dict, start: int, end: int, *, context: str | None
 
 def _narrative_blocks(document: dict) -> list[dict]:
     excluded = mapped_excluded_ids(document)
+    scientific_ids = mapped_scientific_body_ids(document)
     contents_pages = contents_page_range(document)
     allowed = {'paragraph', 'list'}
     result: list[dict] = []
     for block in document.get('blocks', []):
         text = block.get('text', '')
+        if scientific_ids is not None and block.get('id') not in scientific_ids:
+            continue
         if block.get('id') in excluded or block.get('page') in contents_pages:
             continue
         if block.get('type') not in allowed or looks_like_contents(text) or is_code_or_prompt(text):
@@ -208,6 +213,69 @@ def _impersonal(document: dict) -> list[dict]:
     return result
 
 
+def _numeral_in_math_context(text: str, start: int, end: int) -> bool:
+    """Reject small-number candidates that are operands in an expression.
+
+    CORE-3-2 is a prose rule.  Expressions such as ``∆S-IDR ≤ 0`` or
+    ``x = 5`` must not become suggestions to spell the operand as a word.
+    """
+    left = text[max(0, start - 40):start]
+    right = text[end:min(len(text), end + 28)]
+    if re.search(r'\b(?:GPT|Claude(?:\s+Sonnet|\s+Opus|\s+Haiku)?|Gemini|Llama|Qwen|Mistral|Gemma)\s*$', left, re.I):
+        return True
+    if re.search(r'(?:<=|>=|!=|==|[=<>≤≥≈±])\s*$', left):
+        return True
+    if re.match(r'\s+где\b', right, re.I) and re.search(r'[A-Za-zА-ЯЁа-яё][A-Za-zА-ЯЁа-яё0-9_]{0,16}\s*$', left):
+        return True
+    if re.search(r'(?:[∆Δ]\s*)?[A-Za-zΑ-ωА-ЯЁа-яёρστμ][A-Za-zА-ЯЁа-яё0-9_@./-]{0,24}\s*(?:<=|>=|=|<|>|≤|≥|≈)\s*$', left):
+        return True
+    # A compact formula-like neighbourhood with several mathematical marks is
+    # safer to exclude; ordinary prose such as «5 итераций» has none.
+    window = text[max(0, start - 70):min(len(text), end + 70)]
+    marks = len(re.findall(r'[=<>≤≥≈±∆Δρστμ^_{}\[\]|]', window))
+    words = len(re.findall(r'[А-ЯЁа-яё]{3,}', window))
+    if marks >= 3 and words <= 8:
+        return True
+    if re.match(r'\s*(?:или|и|при|если|то)\b', right, re.I) and re.search(r'(?:<=|>=|[=<>≤≥≈])\s*$', left):
+        return True
+    return False
+
+
+
+
+def _numeral_is_structural_sequence(text: str, start: int, end: int) -> bool:
+    """Treat enumerated identifiers as identifiers, not prose quantities.
+
+    The one-token left-context guard catches ``Шаг 5`` but the second/third
+    numbers in ``Шаги 1, 2, 3`` previously leaked through. Evaluate the
+    complete local sequence up to the current number.
+    """
+    local = text[max(0, start - 80):end]
+    return bool(re.search(
+        r'\b(?:шаг\p{L}*|этап\p{L}*|пункт\p{L}*|подпункт\p{L}*|положен\p{L}*|свойств\p{L}*|гипотез\p{L}*|задач\p{L}*|теорем\p{L}*|определен\p{L}*|определён\p{L}*|алгоритм\p{L}*|пример\p{L}*)\s+'
+        r'\d(?:\s*(?:[,;/]|и|или|–|-)\s*\d)*$',
+        local, re.I
+    ))
+
+
+def _inside_embedded_table_tail(text: str, start: int) -> bool:
+    """Detect PDF blocks where a table was flattened into a paragraph.
+
+    PyMuPDF can occasionally merge a caption, column headers and table cells into
+    one paragraph block. Small integers inside that flattened tail are table data,
+    not prose numerals. Keep this local and conservative: require a recent table
+    caption plus a data-dense tail before the candidate.
+    """
+    prefix = text[max(0, start - 1600):start]
+    matches = list(re.finditer(r"\bТаблица\s+(?:(?:[А-ЯЁA-Z]\.)?\d+(?:\.\d+)*)\s*[—–-]", prefix, re.I))
+    if not matches:
+        return False
+    tail = prefix[matches[-1].start():]
+    numbers = len(re.findall(r"(?<!\p{L})\d+(?:[,.]\d+)?", tail))
+    table_words = bool(re.search(r"\b(?:Параметр\s+Значение|Смысловая\s+группа\s+Тип|Модель\s+|Метрика\s+|Идентификатор\s+Назначение)\b", tail, re.I))
+    return numbers >= 5 or table_words
+
+
 def _numerals(document: dict) -> list[dict]:
     result: list[dict] = []
     for block in _narrative_blocks(document):
@@ -218,8 +286,16 @@ def _numerals(document: dict) -> list[dict]:
             before = text[max(0, match.start() - 45):match.start()]
             after = text[match.end(1) + 1:match.end(1) + 24]
             local = _context(text, match.start(), match.end(), before=120, after=160)
+            if _inside_embedded_table_tail(text, match.start()):
+                continue
             scope_before = re.sub(r'([А-Яа-яЁё])(?:-|\u00ad)\s*([А-Яа-яЁё])', r'\1\2', before)
             if _NUMERAL_SKIP_BEFORE.search(scope_before) or _NUMERAL_SKIP_AFTER.match(after.strip()):
+                continue
+            if _numeral_is_structural_sequence(text, match.start(1), match.end(1)):
+                continue
+            if match.group(2).lower() == 'где' and re.search(r'[A-Za-zА-ЯЁа-яё][A-Za-zА-ЯЁа-яё0-9_]{0,16}\s*$', before):
+                continue
+            if _numeral_in_math_context(text, match.start(), match.end()):
                 continue
             if is_likely_table_context(local) or re.search(r'[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9_]{0,20}\s*=\s*$', before):
                 continue
@@ -235,6 +311,14 @@ def _numerals(document: dict) -> list[dict]:
 def _looks_like_pseudocode(value: str) -> bool:
     text = compact(value)
     if is_code_or_prompt(text):
+        return True
+    # Flattened algorithm listings often become one paragraph such as
+    # «Algorithm 2: ... Вход: ... Выход: ... 1 Этап 1. ... 2 for ...».  In that
+    # representation the leading line numbers are not prose numerals at all.
+    if re.search(r'\b(?:Algorithm|Алгоритм)\s+\d+\s*:', text, re.I) and (
+        (re.search(r'\b(?:Вход|Input)\s*:', text, re.I) and re.search(r'\b(?:Выход|Output)\s*:', text, re.I))
+        or len(re.findall(r'(?:^|[;:.])\s*\d{1,3}\s+(?:Этап\s+\d+|for\b|while\b|if\b|return\b)', text, re.I)) >= 2
+    ):
         return True
     # Common algorithm-listing artefacts from PDF extraction.  Requiring at
     # least two code markers keeps normal mathematical prose in scope.
@@ -257,12 +341,53 @@ def _abbreviation_occurrences(document: dict, token: str) -> list[dict]:
     return rows
 
 
+def _listed_abbreviation_tokens(document: dict) -> set[str]:
+    listed: set[str] = set()
+    for block in document.get('blocks', []):
+        if block.get('type') in {'bibliography', 'table', 'code', 'formula', 'figure'}:
+            continue
+        for line in str(block.get('text') or '').splitlines():
+            match = re.match(r'\s*([A-ZА-ЯЁ]{2,12}(?:[-–][A-ZА-ЯЁ0-9]{1,12})?\d{0,3})\s*[—–-]\s+.{3,}', line)
+            if match:
+                listed.add(match.group(1).upper().replace('–', '-'))
+    return listed
+
+
+def _looks_like_uppercase_word(token: str) -> bool:
+    # Long all-caps Cyrillic headings such as «ФЕДЕРАЛЬНОЕ» or «АННОТАЦИЯ»
+    # are ordinary words created by typography, not abbreviations.
+    return bool(
+        re.fullmatch(r'[А-ЯЁ]{6,}', token)
+        and len(re.findall(r'[АЕЁИОУЫЭЮЯ]', token)) >= 2
+    )
+
+
+def _abbrev_candidate_class(token: str, local_context: str, listed: set[str]) -> str:
+    key = token.upper().replace('–', '-')
+    if key in listed:
+        return 'abbreviation'
+    if re.fullmatch(r'[A-Z]{2,10}-(?:19|20)?\d{2,4}', key):
+        return 'conference_or_standard_designation'
+    if re.fullmatch(r'(?:GPT|LLAMA|GEMINI|CLAUDE|MISTRAL|QWEN|GEMMA)[-–]?\d+(?:[.-]\d+)*', key):
+        return 'model_version'
+    if re.fullmatch(r'[A-Z]{1,3}\d{1,4}', key) and re.search(r'\b(?:газ|веществ|молекул|диоксид|оксид|формул)', local_context, re.I):
+        return 'chemical_or_symbolic_designation'
+    if len(key) <= 3 and re.search(rf'\b{re.escape(token)}\s*[—–-]\s*(?:множеств\p{{L}}*|переменн\p{{L}}*|величин\p{{L}}*|значени\p{{L}}*)', local_context, re.I):
+        return 'chemical_or_symbolic_designation'
+    if re.search(r'\b(?:конференци\p{L}*|симулятор\p{L}*|платформ\p{L}*|сервис\p{L}*|продукт\p{L}*)\s+(?:\S+\s+){0,3}' + re.escape(token) + r'\b', local_context, re.I):
+        return 'proper_name_candidate'
+    if len(token) >= 4 and re.search(r'\bсимулятор\p{L}*\b', local_context, re.I):
+        return 'proper_name_candidate'
+    return 'abbreviation_candidate'
+
+
 def _abbrev_first_use(document: dict) -> list[dict]:
-    skip = {'toc', 'bibliography', 'table', 'code', 'formula', 'figure', 'caption'}
+    skip = {'title', 'heading', 'toc', 'bibliography', 'table', 'code', 'formula', 'figure', 'caption'}
     excluded = mapped_excluded_ids(document)
     toc_pages = contents_page_range(document)
     seen: set[str] = set()
     result: list[dict] = []
+    listed_tokens = _listed_abbreviation_tokens(document)
     for block in sorted(document.get('blocks', []), key=lambda x: int(x.get('order', 0))):
         if block.get('type') in skip or block.get('id') in excluded or block.get('page') in toc_pages or _looks_like_pseudocode(block.get('text', '')):
             continue
@@ -271,11 +396,33 @@ def _abbrev_first_use(document: dict) -> list[dict]:
             continue
         for match in _ABBREV_RE.finditer(text):
             token = match.group(1)
+            if _inside_embedded_table_tail(text, match.start()):
+                continue
+            # PDF kerning can split one token into e.g. ``V LP (q)``.
+            if re.search(r'\b[A-ZА-ЯЁ]\s+$', text[max(0, match.start() - 8):match.start()]):
+                continue
+            # Broken PDF line wrapping may split one uppercase word into tokens
+            # such as ``ПЕРЕ- СМОТР`` or ``ВОЗ- ВРАТ``. Neither half is an
+            # abbreviation candidate.
+            if (
+                re.match(r"[-–—]\s*[A-ZА-ЯЁ]{2,}", text[match.end():match.end() + 24])
+                or re.search(r"[A-ZА-ЯЁ]{2,}[-–—]\s*$", text[max(0, match.start() - 24):match.start()])
+            ):
+                continue
             key = token.upper().replace('–', '-')
+            if _looks_like_uppercase_word(token):
+                continue
             if key in seen or key in _ABBREV_STOP or _math_heavy_local_context(text, match.start(), match.end()):
                 continue
             seen.add(key)
             sentence = _sentence_span(text, match.start())
+            local_context = _context(text, sentence[0], sentence[1], before=260, after=220)
+            candidate_class = _abbrev_candidate_class(token, local_context, listed_tokens)
+            # Edition/version/formula designations are names, not abbreviations
+            # that should be expanded at their first occurrence. Filter these
+            # high-confidence cases before spending an LLM verdict.
+            if candidate_class in {'conference_or_standard_designation', 'model_version', 'chemical_or_symbolic_designation', 'proper_name_candidate'}:
+                continue
             occurrences = _abbreviation_occurrences(document, token)
             # The abbreviation list is often near the end of a thesis. Keep both
             # early and late supporting occurrences so the judge can see an
@@ -295,7 +442,7 @@ def _abbrev_first_use(document: dict) -> list[dict]:
             context = _context(text, sentence[0], sentence[1], before=260, after=220)
             if supporting:
                 context += '\nДругие употребления/список сокращений:\n' + '\n'.join(supporting)
-            result.append(_make('abbrev-first-use', block, match.start(), match.end(), context=context, meta={'token': token, 'occurrences': len(occurrences)}))
+            result.append(_make('abbrev-first-use', block, match.start(), match.end(), context=context, meta={'token': token, 'occurrences': len(occurrences), 'candidateClass': candidate_class, 'listedInAbbreviations': key in listed_tokens}))
     return result
 
 
@@ -327,20 +474,60 @@ def _looks_like_table_header_heading(document: dict, block: dict) -> bool:
             break
     return False
 
+_ABBREVIATION_SECTION_START_RE = re.compile(
+    r'^\s*(?:список|перечень)\s+(?:используемых\s+)?(?:сокращений|условных\s+обозначений)(?:\s+и\s+условных\s+обозначений)?\b',
+    re.I,
+)
+_ABBREVIATION_SECTION_END_RE = re.compile(
+    r'^\s*(?:термины\s+и\s+определения|введение|реферат|аннотация|abstract|introduction|глава\s+\d+|chapter\s+\d+)\b',
+    re.I,
+)
+_ABBREVIATION_ENTRY_RE = re.compile(
+    r'^\s*[A-ZА-ЯЁ][A-Za-zА-Яа-яЁё0-9@+./-]{0,30}\s*[—–-]\s+\S',
+)
+
+
+def _abbreviation_list_block_ids(document: dict) -> set[str]:
+    """Return blocks belonging to an explicit abbreviation/glossary list.
+
+    PDF typography can classify entries such as ``AI — Artificial Intelligence``
+    as ``toc`` or ``heading``. CORE-4-2 is about abbreviations in titles, the
+    table of contents and section headings; the dedicated abbreviation list is
+    intentionally outside that scope.
+    """
+    result: set[str] = set()
+    active = False
+    for block in document.get('blocks', []):
+        text = compact(block.get('text', ''))
+        if not active and _ABBREVIATION_SECTION_START_RE.search(text):
+            active = True
+        elif active and (
+            _ABBREVIATION_SECTION_END_RE.search(text)
+            or (block.get('type') == 'heading' and not _ABBREVIATION_ENTRY_RE.match(text))
+        ):
+            # Do not let a missing/novel end heading suppress CORE-4-2 for the
+            # rest of the document. A new non-entry heading closes the glossary.
+            active = False
+        if active and block.get('id'):
+            result.add(str(block['id']))
+    return result
+
+
 def _abbrev_in_heading(document: dict) -> list[dict]:
     allowed = {'title', 'heading', 'toc'}
     excluded = mapped_excluded_ids(document)
+    abbreviation_list_ids = _abbreviation_list_block_ids(document)
     result: list[dict] = []
     seen: dict[tuple[str, str], dict] = {}
     occurrence_counts: dict[tuple[str, str], int] = {}
     for block in document.get('blocks', []):
-        if block.get('type') not in allowed or block.get('id') in excluded:
+        if block.get('type') not in allowed or block.get('id') in excluded or block.get('id') in abbreviation_list_ids:
             continue
         if _looks_like_table_header_heading(document, block):
             continue
         for match in _ABBREV_RE.finditer(block.get('text', '')):
             token = match.group(1)
-            if token.upper() in _ABBREV_STOP:
+            if _looks_like_uppercase_word(token) or token.upper() in _ABBREV_STOP:
                 continue
             key = (token.upper().replace('–', '-'), str(block.get('type')))
             occurrence_counts[key] = occurrence_counts.get(key, 0) + 1

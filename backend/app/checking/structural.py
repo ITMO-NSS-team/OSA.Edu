@@ -1,9 +1,10 @@
 from __future__ import annotations
 import regex as re
-from .common import evidence, contextual, dedupe_evidence, result, is_actual_caption, looks_like_contents, is_code_or_prompt
+from .common import evidence, contextual, dedupe_evidence, result, is_actual_caption, looks_like_contents, is_code_or_prompt, mapped_excluded_ids
 from .bibliography import run_bibliography_rule
 from .abbreviations import run_abbreviation_check, combined_abbreviation_rules
-from ..document.numbered_items import collect_unique_numbered_items
+from ..document.numbered_items import collect_unique_defense_items
+from ..scope import main_work_ids
 
 DEFERRED_ABBREVIATIONS={'CORE-4-1','CORE-4-2','CORE-4-3','CORE-12'}
 
@@ -12,6 +13,17 @@ def _pass(rule,msg): return result(rule,'pass',msg,confidence=1)
 def _violation(rule,msg,ev,fix): return result(rule,'violation',msg,ev,1,'detector',fix)
 def _uncertain(rule,msg): return result(rule,'uncertain',msg,confidence=0)
 def _na(rule,msg): return result(rule,'not_applicable',msg,confidence=0)
+
+
+def _main_work_blocks(document:dict)->list[dict]:
+    """Canonical blocks for ordinary structural checks.
+
+    A mapped document is strictly scoped to the main dissertation. Without a map
+    we preserve legacy whole-document behaviour for compatibility.
+    """
+    ids=main_work_ids(document)
+    blocks=list(document.get('blocks',[]))
+    return blocks if ids is None else [b for b in blocks if str(b.get('id')) in ids]
 
 
 def _map_blocks(document:dict,types:set[str])->list[dict]:
@@ -25,14 +37,44 @@ def _map_blocks(document:dict,types:set[str])->list[dict]:
     return out
 
 
-def _positions_chapters(rule,document):
-    positions=len(collect_unique_numbered_items(document.get('fields',{}).get('defenseStatements',[])))
-    chapters=len(document.get('fields',{}).get('chapterHeadings',[]))
-    if not positions: return _uncertain(rule,'Не удалось определить число положений, выносимых на защиту.')
-    if chapters<positions:
-        ev=[evidence(b,b['text']) for b in document['fields'].get('chapterHeadings',[])]
-        return _violation(rule,f'Распознано положений: {positions}; глав: {chapters}. Отдельная содержательная глава для каждого положения по количеству невозможна.',ev,'Сопоставить каждое положение с отдельной содержательной главой.')
-    return _pass(rule,f'В тексте распознано {positions} положений и {chapters} глав: соответствие по количеству возможно. Часть правила о презентации требует отдельного файла.')
+def _positions_chapters(rule,document,routing_fragments=None):
+    positions=len(collect_unique_defense_items(document.get('fields',{}).get('defenseStatements',[])))
+    chapters=document.get('fields',{}).get('chapterHeadings',[])
+    if not positions:
+        return _uncertain(rule,'Положения, выносимые на защиту, не подтверждены как отдельная секция; соответствие «положение → отдельная глава» автоматически не оценивается.')
+
+    matrix=[
+        item for item in (routing_fragments or [])
+        if item.get('selector')=='defense_chapter_matrix'
+    ]
+    if len(matrix) < positions:
+        return _uncertain(rule,f'Распознано положений: {positions}, но надёжное смысловое сопоставление с главами построено только для {len(matrix)}. Проверка по одному количеству глав недостаточна.')
+
+    primary_ids=[]
+    ambiguous=[]
+    for row in matrix[:positions]:
+        ids=[str(value) for value in (row.get('chapterIds') or []) if value]
+        # When semantic evidence is absent, router intentionally exposes all
+        # chapters. That is conservative context, not proof of a one-to-one map.
+        if len(ids) != 1 or not row.get('complete'):
+            ambiguous.append(row)
+            continue
+        primary_ids.append(ids[0])
+    if ambiguous:
+        return _uncertain(rule,'Не для всех положений определена одна подтверждённая основная глава; автоматический вывод по CORE-1-6 был бы ненадёжным.')
+
+    duplicates=sorted({chapter_id for chapter_id in primary_ids if primary_ids.count(chapter_id)>1})
+    if duplicates:
+        ev=[evidence(b,b.get('text','')) for b in chapters if str(b.get('id')) in duplicates]
+        return _violation(
+            rule,
+            f'Для {positions} положений построено смысловое сопоставление с главами, но одна и та же основная глава назначена нескольким положениям. Требование отдельной содержательной главы для каждого положения не выполнено.',
+            ev,
+            'Разнести положения по отдельным содержательным главам либо скорректировать структуру/формулировки так, чтобы для каждого положения была своя основная глава.',
+        )
+    if len(set(primary_ids)) < positions:
+        return _uncertain(rule,'Не удалось подтвердить уникальную основную главу для каждого положения.')
+    return _pass(rule,f'Для всех {positions} положений построено отдельное смысловое сопоставление с {positions} различными основными главами. Часть правила о презентации требует отдельного файла.')
 
 
 def _defense_section(rule,document):
@@ -56,7 +98,7 @@ def _chapters_new_page(rule,document):
 
 def _heading_format(rule,document):
     ev=[]
-    for b in document.get('blocks',[]):
+    for b in _main_work_blocks(document):
         if b.get('type')!='heading' and not is_actual_caption(b): continue
         t=b.get('text','').strip()
         is_chapter=bool(re.match(r'^глава\s+\d+\b',t,re.I))
@@ -78,11 +120,29 @@ def _heading_format(rule,document):
 
 def _chapter_heading_order(rule,document):
     ev=[]
-    for b in document.get('blocks',[]):
+    for b in _main_work_blocks(document):
         for line in b.get('text','').splitlines():
             if re.match(r'^\s*\d+\s+глава\b',line,re.I): ev.append(evidence(b,line.strip()))
     return _violation(rule,'Обнаружен заголовок вида «1 Глава».',ev,'Использовать порядок «Глава 1».') if ev else _pass(rule,'Заголовки вида «1 Глава» не обнаружены.')
 
+
+
+def _is_strict_object_caption(block: dict) -> bool:
+    """True only for an actual numbered object caption, not a prose reference.
+
+    PDF extraction can occasionally classify «Таблица 1.1 показывает ...» as a
+    caption because it starts with the object name.  CORE-7-1 must treat that as
+    the *preceding reference*, while an object caption requires a separator after
+    the number (dash, colon or dot).
+    """
+    if block.get('type') != 'caption':
+        return False
+    text = (block.get('text') or '').strip()
+    return bool(re.match(
+        r'^(?:рис(?:унок)?|таблица|график|figure|fig\.?|table)\s*\.?\s*\d+(?:\.\d+)*(?:\s*[–—-]{1,2}\s*|\s*:\s*|\.(?!\d)\s+)\S',
+        text,
+        re.I,
+    ))
 
 def _object_key(text:str):
     m=re.match(r'^(рис(?:унок)?|табл(?:ица)?)\.?\s*(\d+(?:\.\d+)?)',text.strip(),re.I)
@@ -109,10 +169,10 @@ def _nearest_section(blocks,before):
 
 
 def _figure_order(rule,document):
-    captions=[]; blocks=document.get('blocks',[])
+    captions=[]; blocks=_main_work_blocks(document)
     for i,b in enumerate(blocks):
         key=_object_key(b.get('text',''))
-        if key and is_actual_caption(b): captions.append((b,i,key))
+        if key and _is_strict_object_caption(b): captions.append((b,i,key))
     if not captions: return _uncertain(rule,'Подписи рисунков или таблиц не удалось распознать.')
     ev=[]
     for b,i,key in captions:
@@ -123,7 +183,7 @@ def _figure_order(rule,document):
 
 def _figure_reference_no_see(rule,document):
     ev=[]
-    for b in document.get('blocks',[]):
+    for b in _main_work_blocks(document):
         for m in re.finditer(r'\bсм\.\s*(?:рис|рисунок)\.?\s*\d+',b.get('text',''),re.I): ev.append(evidence(b,contextual(b['text'],m.start(),len(m.group()))))
     order=_figure_order({**rule,'id':'CORE-7-1'},document)
     if order.get('status')=='violation': ev+=order.get('evidence',[])
@@ -132,14 +192,14 @@ def _figure_reference_no_see(rule,document):
 
 
 def _caption_format(rule,document):
-    captions=[b for b in document.get('blocks',[]) if is_actual_caption(b)]
+    captions=[b for b in _main_work_blocks(document) if _is_strict_object_caption(b)]
     if not captions: return _uncertain(rule,'Подписи объектов не распознаны.')
     ev=[evidence(b,b['text']) for b in captions if b.get('text','').strip().endswith('.')]
     return _violation(rule,'Подпись рисунка или название таблицы заканчивается точкой.',ev[:15],'Убрать точку в конце подписи или названия.') if ev else _uncertain(rule,'Точки в конце подписей не обнаружены, но положение подписи относительно объекта по текстовому слою не проверяется.')
 
 
 def _formula_numbering(rule,document):
-    formulas=[b for b in document.get('blocks',[]) if b.get('type')=='formula']
+    formulas=[b for b in _main_work_blocks(document) if b.get('type')=='formula']
     if not formulas: return _na(rule,'Формулы в извлечённом тексте не распознаны.')
     bad=[]; numbered=0
     for b in formulas:
@@ -155,12 +215,12 @@ def _formula_numbering(rule,document):
 
 
 def _formula_explanation(rule,document):
-    formulas=[b for b in document.get('blocks',[]) if b.get('type')=='formula']
+    formulas=[b for b in _main_work_blocks(document) if b.get('type')=='formula']
     return _na(rule,'Формулы в извлечённом тексте не распознаны.') if not formulas else _uncertain(rule,'Наличие слова «где», перенос строки и регистр после формул необходимо подтвердить визуально.')
 
 
 def _chapter_conclusions(rule,document):
-    chapters=document.get('fields',{}).get('chapterHeadings',[]); blocks=document.get('blocks',[])
+    chapters=document.get('fields',{}).get('chapterHeadings',[]); blocks=_main_work_blocks(document)
     if not chapters: return _uncertain(rule,'Заголовки глав не распознаны.')
     ev=[]
     for i,ch in enumerate(chapters):
@@ -195,8 +255,9 @@ def _bibliography_refs(rule,document):
         for m in re.finditer(r'(?:^|\n|\s)(\d{1,3})[.)]\s+(?=[А-ЯЁA-Z])',b.get('text',''),re.M): nums.add(int(m.group(1)))
     if not nums: return _uncertain(rule,'Нумерацию библиографии не удалось распознать.')
     bibids={b['id'] for b in entries}; cited=set()
+    excluded=mapped_excluded_ids(document)
     for b in document.get('blocks',[]):
-        if b['id'] in bibids: continue
+        if b['id'] in bibids or b['id'] in excluded: continue
         for br in re.finditer(r'\[([^\]]+)\]',b.get('text','')): cited|=_citation_numbers(br.group(1))
     missing=sorted(nums-cited)
     if not missing: return _pass(rule,'Для всех распознанных источников найдены ссылки в основном тексте, включая номера внутри диапазонов.')
@@ -215,7 +276,7 @@ def _is_code(value:str)->bool:
 
 
 def _code_explanation(rule,document):
-    blocks=document.get('blocks',[]); code=[b for b in blocks if _is_code(b.get('text',''))]
+    blocks=_main_work_blocks(document); code=[b for b in blocks if _is_code(b.get('text',''))]
     if not code:return _na(rule,'Фрагменты программного кода не обнаружены.')
     ev=[]
     for b in code:
@@ -225,17 +286,17 @@ def _code_explanation(rule,document):
 
 
 def _heading_periods(rule,document):
-    ev=[evidence(b,b['text']) for b in document.get('blocks',[]) if (b.get('type')=='heading' or is_actual_caption(b)) and b.get('text','').strip().endswith('.')]
+    ev=[evidence(b,b['text']) for b in _main_work_blocks(document) if (b.get('type')=='heading' or is_actual_caption(b)) and b.get('text','').strip().endswith('.')]
     return _violation(rule,'В конце заголовка или подписи стоит точка.',ev[:15],'Убрать точку.') if ev else _pass(rule,'В распознанных заголовках и подписях лишние точки не обнаружены.')
 
 
-def run_structural(rule:dict,document:dict)->dict:
+def run_structural(rule:dict,document:dict,routing_fragments:list[dict]|None=None)->dict:
     rid=rule['id']
     if rid in DEFERRED_ABBREVIATIONS:
         return _uncertain(rule,'Автоматическая проверка аббревиатур временно отключена: текущий детектор недостаточно надёжен для категорического вывода.')
     if rid == 'SOFT-055': return combined_abbreviation_rules(rule,document)
     if rid in {'SOFT-056','SOFT-077','SOFT-151'}: return run_abbreviation_check(rule,document)
-    if rid=='CORE-1-6': return _positions_chapters(rule,document)
+    if rid=='CORE-1-6': return _positions_chapters(rule,document,routing_fragments)
     if rid=='SOFT-026': return _defense_section(rule,document)
     if rid in {'CORE-5-3','SOFT-062'}: return _chapters_new_page(rule,document)
     if rid=='CORE-5-4': return _heading_format(rule,document)

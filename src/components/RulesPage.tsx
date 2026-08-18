@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { modeLabel, scopeLabel, severityLabel } from "../labels";
-import type { CheckProfile, Rule } from "../types";
+import { modeLabel, scopeLabel, severityLabel } from "../../../../PycharmProjects/OSA.Edu/src/labels";
+import type { CheckProfile, Rule } from "../../../../PycharmProjects/OSA.Edu/src/types";
 
 interface Props {
   profile: CheckProfile;

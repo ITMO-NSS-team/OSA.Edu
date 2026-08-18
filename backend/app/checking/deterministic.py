@@ -3,7 +3,8 @@ import regex as re
 from .common import (evidence, contextual, dedupe_evidence, narrative_blocks, result, is_actual_caption,
     is_code_or_prompt, formula_like_block, is_likely_table_context, looks_like_contents)
 from .bibliography import run_bibliography_rule
-from ..document.numbered_items import extract_numbered_items, collect_unique_numbered_items
+from ..document.numbered_items import extract_numbered_items, collect_unique_defense_items
+from ..scope import main_work_ids
 
 RULE_FALLBACK={'CORE-1-4':'defense-punctuation','CORE-1-5':'defense-symbols','SOFT-023':'defense-punctuation','SOFT-024':'defense-symbols'}
 
@@ -59,7 +60,10 @@ def _scope_blocks(document:dict,detector:str,rule:dict)->list[dict]:
     if detector in {'title-process','title-vague-efficiency','title-length'}: return [fields['title']] if fields.get('title') else []
     if detector=='goal-infinitive': return [fields['goal']] if fields.get('goal') else []
     if detector in {'initials-order','bibliography-junk','bibliography-pages'}: return fields.get('bibliographyBlocks',[])
-    if detector=='heading-final-period': return [b for b in document.get('blocks',[]) if b.get('type')=='heading' or is_actual_caption(b)]
+    if detector=='heading-final-period':
+        ids=main_work_ids(document); blocks=document.get('blocks',[])
+        scoped=blocks if ids is None else [b for b in blocks if str(b.get('id')) in ids]
+        return [b for b in scoped if b.get('type')=='heading' or is_actual_caption(b)]
     return narrative_blocks(document)
 
 
@@ -214,7 +218,7 @@ def _small_numerals(rule,document):
 
 
 def _defense(rule,document,punctuation=True):
-    items=collect_unique_numbered_items(document.get('fields',{}).get('defenseStatements',[]))
+    items=collect_unique_defense_items(document.get('fields',{}).get('defenseStatements',[]))
     if not items: return result(rule,'uncertain','Положения на защиту не удалось выделить как целые нумерованные пункты.')
     ev=[]
     if punctuation:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import regex as re
 from ..util import compact, normalized_quote
+from ..scope import main_work_ids, is_code_or_prompt as _scope_is_code_or_prompt
 
 
 def evidence(block:dict, quote:str) -> dict:
@@ -47,13 +48,27 @@ def mapped_excluded_ids(document:dict) -> set[str]:
     return excluded
 
 
+
+
+def mapped_scientific_body_ids(document: dict) -> set[str] | None:
+    """Return ids of authored prose in the canonical main work only.
+
+    3.8 intentionally excludes abstract/synopsis/front matter. Ordinary language
+    checks must not report the same issue from an early synopsis copy or from
+    attached publication reprints.
+    """
+    return main_work_ids(document)
+
+
 def looks_like_contents(value:str) -> bool:
     c=compact(value)
     return bool(re.search(r'оглавление|содержание',c,re.I) or (re.search(r'(?:\.\s*){5,}',c) and re.search(r'\b(?:глава|введение|заключение|раздел)\b',c,re.I)))
 
 
 def is_code_or_prompt(value:str) -> bool:
-    return bool(re.search(r'(?:Requirements:|Rules:|Generate ONLY|Return ONLY|No commentary|```|^\s*(?:def|class|import|from\s+\w+\s+import|SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET)\b)',value,re.I|re.M))
+    # Backwards-compatible export used by candidate detectors. The authoritative
+    # implementation lives in backend.app.scope.
+    return _scope_is_code_or_prompt(value)
 
 
 def contents_page_range(document: dict) -> set[int]:
@@ -81,12 +96,15 @@ def is_likely_table_context(value: str) -> bool:
 
 def narrative_blocks(document:dict) -> list[dict]:
     excluded=mapped_excluded_ids(document)
+    scientific_ids=mapped_scientific_body_ids(document)
     bibliography={b['id'] for b in document.get('fields',{}).get('bibliographyBlocks',[])}
     contents_pages = contents_page_range(document)
     out=[]
     allowed_types={'paragraph','list'}
     for b in document.get('blocks',[]):
         text=b.get('text','')
+        if scientific_ids is not None and b.get('id') not in scientific_ids:
+            continue
         if b['id'] in excluded or b['id'] in bibliography or b.get('type') not in allowed_types or looks_like_contents(text) or b.get('page') in contents_pages or is_code_or_prompt(text):
             continue
         letters=re.findall(r'\p{L}',text); cyr=re.findall(r'[А-ЯЁа-яё]',text)

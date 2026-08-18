@@ -81,6 +81,33 @@ def _retryable(error: BaseException) -> bool:
     ))
 
 
+
+def is_retryable_provider_error(error: BaseException) -> bool:
+    """True when the provider failure is transient and operation-level code
+    should *not* immediately resend the same expensive packet again.
+    """
+    return _retryable(error) and not is_fatal_provider_error(error)
+
+
+def adaptive_attempt_limit(provider: str, estimated_input_tokens: int) -> int:
+    """Cost-aware transport retry budget.
+
+    Small packets can cheaply tolerate transient provider failures. Large chapter
+    packets are capped so a bad API window cannot multiply the same 100k-token
+    request four times before a smaller recovery strategy gets control.
+    """
+    prefix = 'OPENROUTER' if provider == 'openrouter' else 'GEMINI'
+    configured = max(1, env_int(f'{prefix}_MAX_ATTEMPTS', 4))
+    compact = max(1, env_int('LLM_COMPACT_RETRY_MAX_INPUT_TOKENS', 15_000))
+    large = max(compact + 1, env_int('LLM_LARGE_RETRY_INPUT_TOKENS', 50_000))
+    if estimated_input_tokens <= compact:
+        adaptive = 4
+    elif estimated_input_tokens <= large:
+        adaptive = 3
+    else:
+        adaptive = 2
+    return max(1, min(configured, adaptive))
+
 def _content_text(content: Any) -> str:
     if isinstance(content,str): return content
     if isinstance(content,list):
@@ -115,25 +142,39 @@ def _retry_after_ms(response: httpx.Response) -> int:
     return 0
 
 
-async def ask_structured_json(*,provider:str,model:str,system_prompt:str,user_message:str,operation:str,packets:int=1,candidates:int=0) -> dict:
+async def ask_structured_json(*,provider:str,model:str,system_prompt:str,user_message:str,operation:str,packets:int=1,candidates:int=0,max_completion_tokens:int|None=None) -> dict:
     usage=empty_usage(); usage['packets']=packets; usage['candidates']=candidates
     estimated=estimate_tokens(system_prompt+'\n'+user_message)
-    max_attempts=env_int('OPENROUTER_MAX_ATTEMPTS' if provider=='openrouter' else 'GEMINI_MAX_ATTEMPTS',4)
+    max_attempts=adaptive_attempt_limit(provider, estimated)
     last_error: BaseException | None=None
     for attempt in range(1,max_attempts+1):
         reservation=await reserve_model_capacity(provider,model,estimated)
         usage['rateLimitWaitMs']+=reservation.wait_ms; usage['requests']+=1; usage['estimatedInputTokens']+=estimated
         started=time.monotonic()
         try:
-            if provider=='openrouter': raw,trace=await _openrouter(model,system_prompt,user_message,operation,False,usage)
+            if provider=='openrouter': raw,trace=await _openrouter(model,system_prompt,user_message,operation,False,usage,max_completion_tokens)
             else: raw,trace=await _gemini(model,system_prompt,user_message,operation)
             usage['traces'].append(trace)
-            return {'value':parse_json(raw),'raw':raw,'usage':usage}
+            try:
+                value = parse_json(raw)
+            except BaseException as parse_exc:
+                # Preserve the raw provider payload for operation-specific salvage.
+                # A long structured response can be truncated near the end while
+                # still containing many complete result objects that are safe to
+                # reuse instead of retransmitting the whole document.
+                try:
+                    setattr(parse_exc, 'raw_response', raw)
+                except Exception:
+                    pass
+                raise
+            return {'value':value,'raw':raw,'usage':usage}
+        except asyncio.CancelledError:
+            raise
         except BaseException as exc:
             last_error=exc
             retry=_retryable(exc) and attempt<max_attempts and not is_fatal_provider_error(exc)
             backoff=max(getattr(exc,'retry_after_ms',0),int(min(30_000,1800*(2**(attempt-1))+random.randint(0,699)))) if retry else 0
-            usage['diagnostics'].append({'at':now_iso(),'operation':operation,'attempt':attempt,'httpStatus':getattr(exc,'status',None) or None,'providerCode':getattr(exc,'provider_code','') or None,'message':str(exc),'retryable':retry,'retryAfterMs':getattr(exc,'retry_after_ms',0),'backoffMs':backoff,'provider':provider,'model':model,'providerName':getattr(exc,'provider_name','') or None,'requestId':getattr(exc,'request_id','') or None,'quotaMetric':getattr(exc,'quota_metric','') or None,'quotaDescription':getattr(exc,'quota_description','') or None,'networkCode':getattr(exc,'network_code','') or None})
+            usage['diagnostics'].append({'at':now_iso(),'operation':operation,'attempt':attempt,'httpStatus':getattr(exc,'status',None) or None,'providerCode':getattr(exc,'provider_code','') or None,'message':str(exc),'retryable':retry,'retryAfterMs':getattr(exc,'retry_after_ms',0),'backoffMs':backoff,'provider':provider,'model':model,'providerName':getattr(exc,'provider_name','') or None,'requestId':getattr(exc,'request_id','') or None,'quotaMetric':getattr(exc,'quota_metric','') or None,'quotaDescription':getattr(exc,'quota_description','') or None,'networkCode':getattr(exc,'network_code','') or None,'estimatedInputTokensPerAttempt':estimated,'adaptiveMaxAttempts':max_attempts})
             if not retry: break
             usage['retries']+=1; penalize_model_capacity(provider,model,backoff); await asyncio.sleep(backoff/1000)
         finally:
@@ -143,7 +184,7 @@ async def ask_structured_json(*,provider:str,model:str,system_prompt:str,user_me
     raise last_error
 
 
-async def _openrouter(model:str,system:str,user:str,operation:str,compat:bool,usage:dict) -> tuple[str,dict]:
+async def _openrouter(model:str,system:str,user:str,operation:str,compat:bool,usage:dict,max_completion_tokens:int|None=None) -> tuple[str,dict]:
     key=os.getenv('OPENROUTER_API_KEY','').strip()
     if not key: raise ModelHttpError('OPENROUTER_API_KEY не задан.',401,provider_code='missing_api_key',provider_name='OpenRouter')
     base=os.getenv('OPENROUTER_API_BASE_URL','https://openrouter.ai').rstrip('/')
@@ -153,7 +194,7 @@ async def _openrouter(model:str,system:str,user:str,operation:str,compat:bool,us
     def body(compat_mode:bool):
         pref={'allow_fallbacks':True,'require_parameters':False if compat_mode else env_bool('OPENROUTER_REQUIRE_PARAMETERS',False),'data_collection':'deny' if os.getenv('OPENROUTER_DATA_COLLECTION','allow').strip().lower()=='deny' else 'allow'}
         if env_bool('OPENROUTER_ZDR',False): pref['zdr']=True
-        result={'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':user}],'temperature':0.05,'max_completion_tokens':env_int('OPENROUTER_MAX_COMPLETION_TOKENS',16000 if operation=='structure' else 8000),'provider':pref,'metadata':{'operation':operation,'app':'OSA.Edu'}}
+        result={'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':user}],'temperature':0.05,'max_completion_tokens':max_completion_tokens or env_int('OPENROUTER_MAX_COMPLETION_TOKENS',16000 if operation=='structure' else 8000),'provider':pref,'metadata':{'operation':operation,'app':'OSA.Edu'}}
         if not compat_mode: result['response_format']={'type':'json_object'}
         return result
     timeout=max(5,env_int('LLM_REQUEST_TIMEOUT_MS',240000)/1000)

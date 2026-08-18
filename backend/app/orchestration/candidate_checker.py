@@ -54,6 +54,38 @@ def request_pairs_for(candidates: list[dict], rules: list[dict], pairs: list[tup
     return [(item['id'], rule['id']) for item in candidates for rule in rules]
 
 
+
+def build_recovery_requests(
+    requests: list[dict],
+    verdicts: dict[tuple[str, str], dict],
+    *,
+    pair_batch_size: int,
+) -> list[dict]:
+    """Split exact missing candidate/rule pairs into small recovery packets.
+
+    Re-sending one large malformed abbreviation packet repeatedly reproduces the
+    same long JSON failure.  Recovery therefore operates on exact pairs and caps
+    the number of requested verdicts in each packet.
+    """
+    limit = max(1, int(pair_batch_size))
+    recovery: list[dict] = []
+    for request in requests:
+        expected = request_pairs_for(request['candidates'], request['rules'], request.get('pairs'))
+        missing = [pair for pair in expected if pair not in verdicts]
+        for start in range(0, len(missing), limit):
+            chunk = missing[start:start + limit]
+            if not chunk:
+                continue
+            candidate_ids = {candidate_id for candidate_id, _rule_id in chunk}
+            rule_ids = {rule_id for _candidate_id, rule_id in chunk}
+            recovery.append({
+                'family': request['family'],
+                'candidates': [item for item in request['candidates'] if item['id'] in candidate_ids],
+                'rules': [rule for rule in request['rules'] if rule['id'] in rule_ids],
+                'pairs': chunk,
+            })
+    return recovery
+
 def _message(family: str, candidates: list[dict], rules: list[dict], pairs: list[tuple[str, str]] | None = None) -> str:
     rule_text = '\n\n'.join(
         f"RULE {rule['id']}\nТребование: {rule.get('requirement','')}\n"
@@ -131,15 +163,21 @@ def aggregate_candidate_results(plan: dict, verdicts: dict[tuple[str, str], dict
             unclear = [(candidate, verdict) for candidate, verdict in processed if verdict.get('violation') is None]
             violations = [(candidate, verdict) for candidate, verdict in processed if verdict.get('violation') is True]
             total = len(candidates)
-            checked = len(processed)
-            exhaustive = bool(routed.get('exhaustive', True)) and checked == total and not unclear
+            responded = len(processed)
+            terminal = responded - len(unclear)
+            exhaustive = bool(routed.get('exhaustive', True)) and terminal == total
             coverage = {
                 'kind': 'candidate',
                 'candidateCount': total,
-                'checkedCandidateCount': checked,
+                # Backwards-compatible field: an answer was returned for this candidate.
+                'checkedCandidateCount': responded,
+                'respondedCandidateCount': responded,
+                'terminalCandidateCount': terminal,
+                'unclearCandidateCount': len(unclear),
                 'packetCount': total,
-                'checkedPacketCount': checked,
-                'fraction': 1.0 if total == 0 else checked / total,
+                'checkedPacketCount': responded,
+                'fraction': 1.0 if total == 0 else responded / total,
+                'terminalFraction': 1.0 if total == 0 else terminal / total,
                 'exhaustive': exhaustive,
             }
             common = {
@@ -180,12 +218,12 @@ def aggregate_candidate_results(plan: dict, verdicts: dict[tuple[str, str], dict
                 results.append({
                     **common,
                     'status': 'pass',
-                    'explanation': f'Проверены все найденные кандидаты ({checked}); подтверждённых нарушений нет.',
+                    'explanation': f'Проверены все найденные кандидаты ({terminal}); подтверждённых нарушений нет.',
                     'evidence': [],
                     'evidenceStatus': 'not_required',
                 })
                 continue
-            missing = total - checked
+            missing = total - responded
             detail = []
             if missing:
                 detail.append(f'не обработано кандидатов: {missing}')
@@ -261,6 +299,8 @@ async def execute_candidate_plan(
                     )
                     merge_usage(usage, response['usage'])
                     verdicts.update(_parse_verdicts(response['value'], request))
+                except asyncio.CancelledError:
+                    raise
                 except BaseException as exc:
                     merge_usage(usage, getattr(exc, 'llm_usage', None))
                     if is_fatal_provider_error(exc):
@@ -290,26 +330,22 @@ async def execute_candidate_plan(
     # 26/48 or 69/91. Retry only the exact missing pairs, preserving all successful
     # verdicts from the first pass.
     retry_rounds = max(1, env_int('CANDIDATE_MISSING_RETRY_ROUNDS', 2))
+    recovery_pair_batch = max(4, env_int('CANDIDATE_RECOVERY_PAIR_BATCH_SIZE', 16))
     for retry_round in range(1, retry_rounds + 1):
-        retry_requests: list[dict] = []
-        for request in requests:
-            expected = request_pairs_for(request['candidates'], request['rules'], request.get('pairs'))
-            missing = [pair for pair in expected if pair not in verdicts]
-            if not missing:
-                continue
-            candidate_ids = {candidate_id for candidate_id, _rule_id in missing}
-            rule_ids = {rule_id for _candidate_id, rule_id in missing}
-            retry_requests.append({
-                'family': request['family'],
-                'candidates': [item for item in request['candidates'] if item['id'] in candidate_ids],
-                'rules': [rule for rule in request['rules'] if rule['id'] in rule_ids],
-                'pairs': missing,
-            })
+        # If a large JSON packet was malformed, retrying the same 48+ verdicts
+        # tends to reproduce the failure.  Split missing exact pairs; on the next
+        # round halve the packet again for an adaptive final recovery.
+        round_batch_size = max(4, recovery_pair_batch // (2 ** (retry_round - 1)))
+        retry_requests = build_recovery_requests(
+            requests,
+            verdicts,
+            pair_batch_size=round_batch_size,
+        )
         if not retry_requests:
             break
         await run_requests(
             retry_requests,
-            phase=f'повтор пропущенных пар {retry_round}/{retry_rounds}',
+            phase=f'повтор пропущенных пар {retry_round}/{retry_rounds} (до {round_batch_size} пар)',
             report_progress=False,
         )
         if fatal is not None:

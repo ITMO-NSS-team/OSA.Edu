@@ -14,6 +14,7 @@ SCOPE_OVERRIDES = {
 }
 MODE_OVERRIDES = {
     'core:1.6':'structural','core:2.1':'semantic','core:5.1':'manual','core:5.2':'manual',
+    'core:4.1':'semantic','core:4.2':'semantic','core:4.3':'semantic','core:12':'semantic',
     'core:7.3':'manual','core:8.2':'semantic','core:8.3':'semantic','core:14':'semantic','core:15':'semantic','core:16':'manual',
 }
 STRUCTURAL_RULES = {
@@ -34,13 +35,9 @@ CANDIDATE_FAMILY_BY_RULE = {
     'core:3.5':'filler',
     'core:3.6':'condescending',
     'core:3.7':'overclaim',
-    'core:4.1':'abbrev-first-use',
-    'core:4.2':'abbrev-in-heading',
-    'core:4.3':'abbrev-foreign',
     'core:11.2':'sentence-start',
     'core:11.5':'to-est',
     'core:11.6':'diminutive',
-    'core:12':'abbrev-first-use',
     # Exact soft duplicates reuse the same candidates in the full profile.
     'soft:27':'impersonal',
     'soft:35':'numerals',

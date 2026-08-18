@@ -268,3 +268,15 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
   font-size: 0.85rem;
   line-height: 1.45;
 }
+
+.developer-toggle { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.developer-toggle input { width: 18px; height: 18px; margin-top: 2px; flex: 0 0 auto; }
+.developer-toggle span { display: grid; gap: 4px; }
+.developer-toggle small { line-height: 1.45; }
+
+.report-health { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin: 0 0 14px; border-radius: 10px; border: 1px solid #d7dce1; background: #f7f8f9; }
+.report-health strong { min-width: 170px; }
+.report-health span { color: #525a61; }
+.report-health.ready { background: #eef8f0; border-color: #b9d8c0; }
+.report-health.review_required { background: #fff8e8; border-color: #e2c980; }
+.report-health.technical_incomplete { background: #fff0f0; border-color: #e1b4b4; }

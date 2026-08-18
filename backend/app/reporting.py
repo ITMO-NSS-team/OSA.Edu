@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 from typing import Any
 
 from .config import APP_VERSION
@@ -75,6 +76,56 @@ def _build_score_groups(rules: list[dict[str, Any]], results: list[dict[str, Any
     return list(groups.values())
 
 
+
+
+def _report_health(results: list[dict[str, Any]], document_map: dict[str, Any] | None, warnings: list[str]) -> dict[str, Any]:
+    technical_ids = sorted({
+        str(item.get("ruleId")) for item in results
+        if item.get("technicalIncomplete")
+        or (item.get("status") == "not_checked" and str(item.get("checkedBy") or "").startswith("llm"))
+        or (
+            item.get("status") == "uncertain"
+            and str(item.get("checkedBy") or "").startswith("llm")
+            and isinstance(item.get("coverage"), dict)
+            and not bool(item.get("coverage", {}).get("exhaustive", True))
+        )
+    })
+    technical_warning = any(re.search(r"без итогового ответа|техническ\w* неполн|verifier evidence не заверш", str(value), re.I) for value in warnings)
+    manual_ids = sorted({
+        str(item.get("ruleId")) for item in results
+        if item.get("status") in {"uncertain", "not_checked"} and str(item.get("ruleId") or "") not in technical_ids
+    })
+    map_issues = [
+        item for item in (document_map or {}).get("issues", [])
+        if item.get("severity") == "warning" or item.get("code") in {"unsupported_defense_statements", "missing_introduction", "missing_chapters", "missing_conclusion"}
+    ]
+    ambiguous = sum(1 for item in (document_map or {}).get("elements", []) if item.get("state") == "ambiguous")
+    reasons: list[str] = []
+    if technical_ids or technical_warning:
+        if technical_ids:
+            reasons.append("Технически не завершены правила: " + ", ".join(technical_ids) + ".")
+        if technical_warning and not technical_ids:
+            reasons.append("Во время проверки зафиксирован технически неполный LLM-этап.")
+        status = "technical_incomplete"
+        label = "Технически неполный"
+    else:
+        if map_issues:
+            reasons.append("Структурная карта содержит элементы, требующие внимания.")
+        if ambiguous:
+            reasons.append(f"Неоднозначных элементов карты: {ambiguous}.")
+        if manual_ids:
+            reasons.append(f"Ручной проверки требуют правила: {len(manual_ids)}.")
+        status = "review_required" if map_issues or ambiguous or manual_ids else "ready"
+        label = "Готов с ручной проверкой" if status == "review_required" else "Готов"
+    return {
+        "status": status,
+        "label": label,
+        "reasons": reasons[:8],
+        "technicalIncompleteRuleIds": technical_ids,
+        "manualReviewRuleIds": manual_ids,
+    }
+
+
 def make_report(
     rules: list[dict[str, Any]],
     results: list[dict[str, Any]],
@@ -100,10 +151,25 @@ def make_report(
     checked_candidates = sum(int(x.get("checkedCandidateCount", 0) or 0) for x in candidate_rows)
     candidate_coverage = min(1.0, checked_candidates / total_candidates) if total_candidates else 1.0
 
+    abbreviation_coverage = 1.0
+    abbreviation_row = next((
+        x.get("coverage") for x in prepared
+        if str(x.get("ruleId")) == "CORE-12" and isinstance(x.get("coverage"), dict)
+    ), None)
+    if abbreviation_row:
+        ab_total = int(abbreviation_row.get("candidateCount", 0) or 0)
+        ab_checked = int(abbreviation_row.get("checkedCandidateCount", 0) or 0)
+        abbreviation_coverage = min(1.0, ab_checked / ab_total) if ab_total else 1.0
+
+    health = _report_health(prepared, document_map, warnings)
+
     groups = _build_score_groups(rules, prepared)
     pass_weight = sum(x["weight"] for x in groups if x["status"] == "pass")
     violation_weight = sum(x["weight"] for x in groups if x["status"] == "violation")
-    score = None if coverage < 0.6 or pass_weight + violation_weight == 0 else round(100 * pass_weight / (pass_weight + violation_weight))
+    # A numeric score on a technically incomplete report looks more precise than
+    # the underlying run actually is. Repo-stable keeps suppressing it until all technical
+    # stages needed for the selected profile have completed.
+    score = None if (health.get("status") == "technical_incomplete" or coverage < 0.6 or pass_weight + violation_weight == 0) else round(100 * pass_weight / (pass_weight + violation_weight))
 
     counts = {
         "critical": sum(1 for x in violations if x.get("severity") == "critical"),
@@ -117,7 +183,10 @@ def make_report(
         "notChecked": count("not_checked"),
     }
     if score is None:
-        summary = f"Проверено {len(checked)} из {len(applicable)} применимых правил. Покрытие недостаточно для итоговой оценки."
+        if health.get("status") == "technical_incomplete":
+            summary = f"Проверено {len(checked)} из {len(applicable)} применимых правил. Оценка не рассчитана: отчёт технически неполный."
+        else:
+            summary = f"Проверено {len(checked)} из {len(applicable)} применимых правил. Покрытие недостаточно для итоговой оценки."
     else:
         summary = (
             f"Проверено {len(checked)} из {len(applicable)} применимых правил. "
@@ -152,9 +221,12 @@ def make_report(
         "issueGroups": list(issue_groups.values()),
         "summary": summary,
         "score": score,
-        "scoreIsProvisional": score is not None and coverage < 0.9,
+        "scoreIsProvisional": score is not None and (coverage < 0.9 or health.get("status") != "ready"),
+        "reportHealth": health,
         "coverage": coverage,
         "candidateCoverage": candidate_coverage,
+        "automaticCandidateCoverage": candidate_coverage,
+        "abbreviationCoverage": abbreviation_coverage,
         "counts": counts,
         "checkedRules": len(checked),
         "totalRules": len(rules),
@@ -193,14 +265,26 @@ def _escape_table(value: str) -> str:
     return " ".join(str(value).replace("|", "\\|").split())
 
 
+def _meaningful_diagnostic(item: dict) -> bool:
+    if not isinstance(item, dict):
+        return False
+    return any(
+        item.get(key) not in (None, "", 0, False)
+        for key in ("httpStatus", "providerCode", "message", "requestId", "networkCode", "quotaMetric")
+    )
+
+
 def report_to_markdown(name: str, report: dict[str, Any]) -> str:
     score = "не рассчитана" if report.get("score") is None else f"{report['score']}/100" + (" (предварительно)" if report.get("scoreIsProvisional") else "")
     catalog = {x.get("id"): x for x in report.get("ruleCatalog", [])}
     lines = [
         f"# Протокол нормоконтроля — {name}", "",
+        f"**Статус отчёта:** {(report.get('reportHealth') or {}).get('label', '—')}",
+        *([f"**Почему:** {' '.join((report.get('reportHealth') or {}).get('reasons', []))}"] if (report.get('reportHealth') or {}).get('reasons') else []),
         f"**Оценка по проверенным правилам:** {score}",
         f"**Покрытие правил:** {round(float(report.get('coverage',0))*100)} % ({report.get('checkedRules',0)} проверенных из {report.get('totalRules',0)} правил профиля)",
-        f"**Отправлено назначенных фрагментов:** {round(float(report.get('candidateCoverage',0))*100)} %", "",
+        f"**Покрытие автоматических кандидатов:** {round(float(report.get('automaticCandidateCoverage', report.get('candidateCoverage',0)))*100)} %",
+        f"**Классификация сокращений:** {round(float(report.get('abbreviationCoverage',1))*100)} %", "",
         f"Нарушено: {report['counts']['violation']}; выполнено: {report['counts']['pass']}; неопределённо: {report['counts']['uncertain']}; не обработано: {report['counts']['notChecked']}; неприменимо: {report['counts']['notApplicable']}.", "",
         "> Оценка не является решением о допуске к защите. Смысловые замечания и исправления необходимо проверить вручную.", "",
         "## Краткий итог", str(report.get("summary", "")), "",
@@ -216,7 +300,7 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
         lines += [
             "## Структурная карта", "",
             f"- Статус: {'готова' if document_map.get('status') == 'ready' else 'частичная'}",
-            f"- Подтверждена пользователем: {'да' if review.get('confirmedByUser') else 'нет'}",
+            f"- Подтверждение карты: {'автоматически (режим разработчика)' if review.get('confirmationMode') == 'developer_auto' else 'пользователем' if review.get('confirmedByUser') else 'нет'}",
             f"- Обработано блоков одним запросом: {extraction.get('processedBlocks',0)} из {extraction.get('totalBlocks',0)}",
             f"- Всего смысловых диапазонов: {len(elements)}; показано основных: {len(displayed)}",
             f"- Неоднозначных элементов: {sum(1 for x in elements if x.get('state') == 'ambiguous')}", "",
@@ -251,7 +335,19 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
             coverage = result.get("coverage")
             if coverage:
                 if coverage.get('kind') == 'candidate':
-                    lines.append(f"- **Кандидаты:** {coverage.get('checkedCandidateCount',0)} из {coverage.get('candidateCount',0)}; поиск и проверка кандидатов завершены: {'да' if coverage.get('exhaustive') else 'нет'}")
+                    total = coverage.get('candidateCount', 0)
+                    responded = coverage.get('respondedCandidateCount', coverage.get('checkedCandidateCount', 0))
+                    terminal = coverage.get('terminalCandidateCount', responded)
+                    unclear = coverage.get('unclearCandidateCount', max(0, responded - terminal))
+                    lines.append(
+                        f"- **Кандидаты:** ответы {responded} из {total}; однозначные verdict: {terminal} из {total}; "
+                        f"неоднозначных: {unclear}; полная проверка: {'да' if coverage.get('exhaustive') else 'нет'}"
+                    )
+                elif coverage.get('domain') == 'abbreviation_candidates':
+                    lines.append(
+                        f"- **Классификация обозначений:** {coverage.get('checkedCandidateCount',0)} из {coverage.get('candidateCount',0)}; "
+                        f"ручная классификация: {coverage.get('ambiguousCandidateCount',0)}; полное покрытие: {'да' if coverage.get('exhaustive') else 'нет'}"
+                    )
                 else:
                     lines.append(f"- **Фрагменты:** {coverage.get('checkedCandidateCount',0)} из {coverage.get('candidateCount',0)}; полная область: {'да' if coverage.get('exhaustive') else 'нет'}")
             if result.get("termFindings"):
@@ -269,9 +365,19 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
                 for evidence in result["evidence"]:
                     page = f", стр. {evidence.get('page')}" if evidence.get("page") else ""
                     offset = f", символы {evidence.get('start')}–{evidence.get('end')}" if evidence.get("start") is not None and evidence.get("end") is not None else ""
-                    lines.append(f"  - {evidence.get('location','')}{page}{offset}: «{evidence.get('quote','')}»")
+                    token = str(evidence.get("token") or "").strip()
+                    entity_kind = str(evidence.get("entityKind") or "").strip()
+                    if token:
+                        lines.append(f"  - **Обозначение:** `{token}`" + (f" · тип: `{entity_kind}`" if entity_kind else ""))
+                        lines.append(f"    - {evidence.get('location','')}{page}{offset}: «{evidence.get('quote','')}»")
+                    else:
+                        lines.append(f"  - {evidence.get('location','')}{page}{offset}: «{evidence.get('quote','')}»")
                     if evidence.get("context") and evidence.get("context") != evidence.get("quote"):
                         lines.append(f"    - Контекст: «{evidence.get('context')}»")
+                    if evidence.get("reason"):
+                        lines.append(f"    - Причина: {evidence.get('reason')}")
+                    if evidence.get("fix"):
+                        lines.append(f"    - Исправление: {evidence.get('fix')}")
             if result.get("fix"):
                 lines.append(f"- **Исправление:** {result['fix']}")
             lines.append("")
@@ -293,7 +399,7 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
         f"- Повторных попыток: {usage.get('retries',0)}",
         f"- Проверено пакетов: {usage.get('packets',0)}",
         f"- Передано правил/объектов: {usage.get('candidates',0)}",
-        f"- Маршрутизация: {routing.get('strategy','')}; явно задано: {routing.get('explicitRules',0)}; fallback: {routing.get('fallbackRules',0)}; фрагментов: {routing.get('fragments',0)}; запросов проверки: {routing.get('checkRequests',0)} (candidate: {routing.get('candidateRequests',0)}, semantic: {routing.get('semanticRequests',0)})",
+        f"- Маршрутизация: {routing.get('strategy','')}; явно задано: {routing.get('explicitRules',0)}; fallback: {routing.get('fallbackRules',0)}; фрагментов: {routing.get('fragments',0)}; физических запросов проверки: {routing.get('physicalRequests', routing.get('checkRequests',0))}; план первого прохода: {routing.get('plannedCheckRequests', routing.get('checkRequests',0))}; evidence verifier: {routing.get('evidenceVerifierRequests',0)}; сокращения: {routing.get('abbreviationMode','deterministic')}",
         f"- Оценочно входных токенов: {usage.get('estimatedInputTokens',0)}",
         f"- Ожидание rate limiter: {round(float(usage.get('rateLimitWaitMs',0))/1000)} с",
         f"- Время запросов к модели: {round(float(usage.get('requestDurationMs',0))/1000)} с", "",
@@ -304,7 +410,7 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
         for trace in traces:
             lines.append(f"- {trace.get('operation')}: {trace.get('provider')}/{trace.get('model')}; upstream={trace.get('providerName') or '—'}; HTTP {trace.get('httpStatus')}; compatibility={'да' if trace.get('compatibilityMode') else 'нет'}; request={trace.get('requestId') or '—'}")
         lines.append("")
-    diagnostics = usage.get("diagnostics", []) or []
+    diagnostics = [item for item in (usage.get("diagnostics", []) or []) if _meaningful_diagnostic(item)]
     if diagnostics:
         lines += ["## Диагностика API", ""]
         for item in diagnostics:

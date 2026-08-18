@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { CheckPage } from "./components/CheckPage";
-import { PromptPage } from "./components/PromptPage";
-import { ReportsPage } from "./components/ReportsPage";
-import { RulesPage } from "./components/RulesPage";
+import { CheckPage } from "../../../Downloads/OSA.Edu-3.9.3-rc1-abbreviation-llm-inventory/src/components/CheckPage";
+import { PromptPage } from "../../../Downloads/OSA.Edu-3.9.3-rc1-abbreviation-llm-inventory/src/components/PromptPage";
+import { ReportsPage } from "../../../Downloads/OSA.Edu-3.9.3-rc1-abbreviation-llm-inventory/src/components/ReportsPage";
+import { RulesPage } from "../../../Downloads/OSA.Edu-3.9.3-rc1-abbreviation-llm-inventory/src/components/RulesPage";
 import type { CheckProfile, Health, Job, Rule } from "./types";
 
 type Page = "check" | "prompt" | "rules" | "reports";

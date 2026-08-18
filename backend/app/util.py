@@ -60,3 +60,8 @@ def merge_usage(target: dict[str, Any], value: dict[str, Any] | None) -> None:
 
 def json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def map_is_confirmed(map_value: dict | None) -> bool:
+    review = (map_value or {}).get('review', {}) if isinstance(map_value, dict) else {}
+    return bool(review.get('confirmedByUser') or review.get('autoConfirmed'))

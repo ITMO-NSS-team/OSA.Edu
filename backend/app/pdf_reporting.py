@@ -56,6 +56,15 @@ _MAX_QUOTE_CHARS = 2400
 _MAX_DIAGNOSTICS = 60
 
 
+def _meaningful_diagnostic(item: dict) -> bool:
+    if not isinstance(item, dict):
+        return False
+    return any(
+        item.get(key) not in (None, "", 0, False)
+        for key in ("httpStatus", "providerCode", "message", "requestId", "networkCode", "quotaMetric")
+    )
+
+
 def report_to_pdf(
     name: str,
     report: dict[str, Any],
@@ -121,13 +130,18 @@ def _cover(
     score = report.get("score")
     score_text = "не рассчитана" if score is None else f"{score}/100" + (" (предварительно)" if report.get("scoreIsProvisional") else "")
     coverage = round(float(report.get("coverage", 0) or 0) * 100)
-    candidate_coverage = round(float(report.get("candidateCoverage", 0) or 0) * 100)
+    candidate_coverage = round(float(report.get("automaticCandidateCoverage", report.get("candidateCoverage", 0)) or 0) * 100)
+    abbreviation_coverage = round(float(report.get("abbreviationCoverage", 1) or 0) * 100)
     counts = report.get("counts", {}) or {}
 
+    health = report.get("reportHealth") or {}
+    health_label = str(health.get("label") or "—")
     rows = [
+        [_p("Статус отчёта", styles["metric_label"]), _p(health_label, styles["metric_value"])],
         [_p("Оценка", styles["metric_label"]), _p(score_text, styles["metric_value"])],
         [_p("Покрытие правил", styles["metric_label"]), _p(f"{coverage}% ({report.get('checkedRules', 0)} из {report.get('totalRules', 0)})", styles["metric_value"])],
-        [_p("Отправлено назначенных фрагментов", styles["metric_label"]), _p(f"{candidate_coverage}%", styles["metric_value"])],
+        [_p("Покрытие автоматических кандидатов", styles["metric_label"]), _p(f"{candidate_coverage}%", styles["metric_value"])],
+        [_p("Классификация сокращений", styles["metric_label"]), _p(f"{abbreviation_coverage}%", styles["metric_value"])],
         [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "-", styles["metric_value"])],
     ]
     metric_table = Table(rows, colWidths=[62 * mm, 112 * mm], hAlign="LEFT")
@@ -173,8 +187,9 @@ def _cover(
         status_table,
         Spacer(1, 4 * mm),
         Paragraph(_safe(str(report.get("summary", ""))), styles["summary"]),
+        *([Paragraph(_safe(" ".join(str(x) for x in health.get("reasons", []) if x)), styles["muted"]), Spacer(1, 2 * mm)] if health.get("reasons") else []),
         Spacer(1, 2 * mm),
-        Table([[_p("Оценка не является решением о допуске к защите. Смысловые замечания и исправления необходимо проверить вручную.", styles["notice"]) ]], colWidths=[174 * mm], style=TableStyle([
+        Table([[_p("Оценка не является решением о допуске к защите. В production-интерпретации приоритет имеют подтверждённые evidence и статус отчёта; смысловые замечания и неопределённые правила необходимо проверить вручную.", styles["notice"]) ]], colWidths=[174 * mm], style=TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF7E6")),
             ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E4C982")),
             ("LEFTPADDING", (0, 0), (-1, -1), 8),
@@ -200,7 +215,7 @@ def _structure_section(document_map: dict[str, Any] | None, styles: dict[str, Pa
         Paragraph("Структурная карта", styles["section"]),
         Paragraph(
             f"Статус: {'готова' if document_map.get('status') == 'ready' else 'частичная'}; "
-            f"подтверждена пользователем: {'да' if review.get('confirmedByUser') else 'нет'}; "
+            f"подтверждение карты: {'автоматически (режим разработчика)' if review.get('confirmationMode') == 'developer_auto' else 'пользователем' if review.get('confirmedByUser') else 'нет'}; "
             f"обработано блоков: {extraction.get('processedBlocks', 0)} из {extraction.get('totalBlocks', 0)}; "
             f"неоднозначных элементов: {sum(1 for item in elements if item.get('state') == 'ambiguous')}.",
             styles["body"],
@@ -215,7 +230,7 @@ def _structure_section(document_map: dict[str, Any] | None, styles: dict[str, Pa
             state = "; требует проверки" if item.get("state") == "ambiguous" else ""
             rows.append([
                 _p(str(item.get("type", "")), styles["table_cell"]),
-                _p(str(item.get("label", "")), styles["table_cell"]),
+                _p(str(item.get("label", "")) + (" [вторичная копия]" if item.get("canonicalRole") == "secondary_copy" else ""), styles["table_cell"]),
                 _p(f"{item.get('startBlockId', '')} - {item.get('endBlockId', '')}{pages_text}{state}", styles["table_cell"]),
             ])
         table = LongTable(rows, colWidths=[34 * mm, 88 * mm, 52 * mm], repeatRows=1)
@@ -260,9 +275,19 @@ def _rule_result(result: dict[str, Any], rule: dict[str, Any] | None, styles: di
     coverage = result.get("coverage") or {}
     if coverage:
         if coverage.get('kind') == 'candidate':
+            total = coverage.get('candidateCount', 0)
+            responded = coverage.get('respondedCandidateCount', coverage.get('checkedCandidateCount', 0))
+            terminal = coverage.get('terminalCandidateCount', responded)
+            unclear = coverage.get('unclearCandidateCount', max(0, responded - terminal))
             coverage_text = (
-                f"кандидаты: {coverage.get('checkedCandidateCount', 0)} из {coverage.get('candidateCount', 0)}; "
-                f"поиск и проверка кандидатов завершены: {'да' if coverage.get('exhaustive') else 'нет'}"
+                f"ответы: {responded} из {total}; однозначные verdict: {terminal} из {total}; "
+                f"неоднозначных: {unclear}; полная проверка: {'да' if coverage.get('exhaustive') else 'нет'}"
+            )
+        elif coverage.get('domain') == 'abbreviation_candidates':
+            coverage_text = (
+                f"классифицировано обозначений: {coverage.get('checkedCandidateCount', 0)} из {coverage.get('candidateCount', 0)}; "
+                f"ручная классификация: {coverage.get('ambiguousCandidateCount', 0)}; "
+                f"полное покрытие: {'да' if coverage.get('exhaustive') else 'нет'}"
             )
         else:
             coverage_text = (
@@ -309,12 +334,27 @@ def _rule_result(result: dict[str, Any], rule: dict[str, Any] | None, styles: di
             if item.get("start") is not None and item.get("end") is not None:
                 meta += f", символы {item.get('start')}–{item.get('end')}"
             quote, shortened = _shorten(str(item.get("quote", "")), _MAX_QUOTE_CHARS)
-            quote_text = f"<b>{_safe(meta)}</b><br/>{_safe(quote)}"
+            token = str(item.get("token") or "").strip()
+            entity_kind = str(item.get("entityKind") or "").strip()
+            token_line = ""
+            if token:
+                token_line = f"<b>Обозначение:</b> {_safe(token)}" + (f" &nbsp; <b>Тип:</b> {_safe(entity_kind)}" if entity_kind else "") + "<br/>"
+            quote_text = token_line + f"<b>{_safe(meta)}</b><br/>{_safe(quote)}"
             context = str(item.get("context") or "").strip()
             if context and context != str(item.get("quote", "")).strip():
                 context_value, context_shortened = _shorten(context, min(_MAX_QUOTE_CHARS, 900))
                 quote_text += f"<br/><i>Контекст:</i> {_safe(context_value)}"
                 shortened = shortened or context_shortened
+            reason = str(item.get("reason") or "").strip()
+            if reason:
+                reason_value, reason_shortened = _shorten(reason, 600)
+                quote_text += f"<br/><i>Причина:</i> {_safe(reason_value)}"
+                shortened = shortened or reason_shortened
+            item_fix = str(item.get("fix") or "").strip()
+            if item_fix:
+                fix_value, fix_shortened = _shorten(item_fix, 600)
+                quote_text += f"<br/><i>Исправление:</i> {_safe(fix_value)}"
+                shortened = shortened or fix_shortened
             if shortened:
                 quote_text += "<br/><i>Текст сокращён в PDF; полный вариант доступен в JSON/Markdown.</i>"
             quote_table = Table([[Paragraph(quote_text, styles["quote"]) ]], colWidths=[170 * mm])
@@ -350,7 +390,7 @@ def _technical_section(report: dict[str, Any], profile: str | None, styles: dict
         ["Ожидание rate limiter", f"{round(float(usage.get('rateLimitWaitMs', 0) or 0) / 1000)} с"],
         ["Время запросов к модели", f"{round(float(usage.get('requestDurationMs', 0) or 0) / 1000)} с"],
         ["Активное wall-clock время", f"{round(sum(float((technical.get('performance') or {}).get(k, 0) or 0) for k in ('extractionMs','structureMs','checkingMs','reportMs')) / 1000)} с"],
-        ["Маршрутизация", f"{routing.get('strategy', '')}; явно задано: {routing.get('explicitRules', 0)}; fallback: {routing.get('fallbackRules', 0)}; фрагментов: {routing.get('fragments', 0)}; запросов проверки: {routing.get('checkRequests', 0)} (candidate: {routing.get('candidateRequests', 0)}, semantic: {routing.get('semanticRequests', 0)})"],
+        ["Маршрутизация", f"{routing.get('strategy', '')}; явно задано: {routing.get('explicitRules', 0)}; fallback: {routing.get('fallbackRules', 0)}; фрагментов: {routing.get('fragments', 0)}; физических запросов: {routing.get('physicalRequests', routing.get('checkRequests', 0))}; план первого прохода: {routing.get('plannedCheckRequests', routing.get('checkRequests', 0))}; verifier: {routing.get('evidenceVerifierRequests', 0)}; сокращения: {routing.get('abbreviationMode','deterministic')}"],
     ]
     table_rows = [[_p("Параметр", styles["table_head"]), _p("Значение", styles["table_head"])]] + [[_p(str(key), styles["table_cell"]), _p(str(value), styles["table_cell"])] for key, value in rows]
     table = LongTable(table_rows, colWidths=[55 * mm, 119 * mm], repeatRows=1)
@@ -368,7 +408,7 @@ def _technical_section(report: dict[str, Any], profile: str | None, styles: dict
             )
             result.append(Paragraph(f"- {_safe(value)}", styles["small"]))
 
-    diagnostics = usage.get("diagnostics", []) or []
+    diagnostics = [item for item in (usage.get("diagnostics", []) or []) if _meaningful_diagnostic(item)]
     if diagnostics:
         result.extend([Spacer(1, 3 * mm), Paragraph("Диагностика API", styles["subsection"])])
         for item in diagnostics[:_MAX_DIAGNOSTICS]:

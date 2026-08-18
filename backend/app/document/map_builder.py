@@ -10,6 +10,8 @@ from ..defaults import model_definition
 from ..llm.client import ask_structured_json, estimate_tokens
 from ..util import normalized_quote, now_iso
 from .title import extract_best_title
+from .numbered_items import collect_unique_defense_items, collect_unique_numbered_items
+from .units import canonicalize_document_units
 
 ALLOWED_TYPES = {
     "title", "abstract", "introduction", "goal", "tasks", "defense_statements",
@@ -96,7 +98,9 @@ def refresh_map(document: dict[str, Any], map_value: dict[str, Any]) -> dict[str
     index = {b["id"]: i for i, b in enumerate(blocks)}
     elements = [_materialize_element(x, blocks, index) for x in map_value.get("elements", [])]
     elements = [x for x in elements if x is not None]
-    issues = _validate_map(elements, blocks)
+    elements = _stabilize_elements(elements, blocks, index)
+    elements, unit_issues = canonicalize_document_units(elements, blocks, index)
+    issues = _dedupe_issues([*unit_issues, *_validate_map(elements, blocks)])
     return {
         **map_value,
         "elements": elements,
@@ -147,7 +151,11 @@ def _parse_structure(value: Any, blocks: list[dict[str, Any]]) -> dict[str, Any]
     elements.sort(key=lambda x: block_index.get(x["startBlockId"], 0))
     for i, element in enumerate(elements):
         element["id"] = f"section-{i + 1}"
-    issues = [*_parse_issues(value, elements), *_validate_map(elements, blocks)]
+    model_issues = _parse_issues(value, elements)
+    elements = _stabilize_elements(elements, blocks, block_index)
+    elements, unit_issues = canonicalize_document_units(elements, blocks, block_index)
+    model_issues = _drop_resolved_model_issues(model_issues, elements)
+    issues = [*model_issues, *unit_issues, *_validate_map(elements, blocks)]
     return {"elements": elements, "issues": _dedupe_issues(issues), "warnings": warnings}
 
 
@@ -172,9 +180,30 @@ def _materialize_element(element: dict[str, Any], blocks: list[dict[str, Any]], 
         # what downstream title rules use, so keep the map/report consistent.
         if fallback:
             label = fallback
+    elif element.get("type") == "chapter":
+        # Structure models sometimes collapse a factual heading to merely
+        # «Глава 1». Prefer the actual source heading so routing/report labels are
+        # stable across runs and remain useful to a reviewer.
+        if re.fullmatch(r"(?:глава|chapter)\s+\d+\.?", label, re.I):
+            heading_parts=[]
+            for block in range_blocks[:3]:
+                text=re.sub(r"\s+", " ", str(block.get("text") or "")).strip()
+                if not text:
+                    continue
+                if block.get("type") == "heading" or not heading_parts:
+                    heading_parts.append(text)
+                else:
+                    break
+            source_heading=" ".join(heading_parts).strip()
+            if len(source_heading) > len(label) + 4 and re.match(r"^(?:глава|chapter)\s+\d+", source_heading, re.I):
+                label=source_heading
     elif element.get("type") == "goal":
         fallback = _extract_goal(range_text)
-    elif element.get("type") == "chapter_conclusions" and _obvious_chapter_conclusions(label, range_blocks):
+    elif element.get("type") in {"tasks", "defense_statements"} and _obvious_list_section(element.get("type"), range_blocks):
+        # When a mapped range contains a complete 1..N list (or a defense bullet
+        # list), there is no useful reason to preserve a stale LLM ambiguity.
+        state = "confirmed"
+    elif element.get("type") == "chapter_conclusions" and _range_has_explicit_conclusion_heading(range_blocks):
         # An exact heading like «3.5 Выводы по главе» is not genuinely
         # ambiguous even when the structure model marks it so.
         state = "confirmed"
@@ -191,9 +220,201 @@ def _materialize_element(element: dict[str, Any], blocks: list[dict[str, Any]], 
 
 def _obvious_chapter_conclusions(label: str, blocks: list[dict[str, Any]]) -> bool:
     values = [label, *[str(block.get("text") or "") for block in blocks[:3]]]
-    pattern = re.compile(r"^(?:\d+(?:\.\d+)*\.?\s*)?выводы(?:\s+(?:к|по)\s+главе(?:\s+\d+)?)?\.?$", re.I)
+    # Real VKR headings often combine limitations and conclusions in one final
+    # section, e.g. «3.4 Ограничения методологии и выводы по главе».  Treat a
+    # heading ending in the explicit phrase as deterministic, not ambiguous.
+    pattern = re.compile(
+        # Accept both plain headings ("2.12 Выводы по главе") and common
+        # extended variants such as "2.12 Выводы по главе: карта индуктивных
+        # смещений". The outer helper still requires a heading-like block, so
+        # this does not turn narrative prose containing the phrase into map
+        # structure.
+        r"^(?:\d+(?:\.\d+)*\.?\s*)?.{0,120}?\bвыводы(?:\s+(?:к|по)\s+главе(?:\s+\d+)?)?(?:\s*[:—–-]\s*.{1,120})?\.?$",
+        re.I,
+    )
     return any(pattern.match(re.sub(r"\s+", " ", value).strip()) for value in values if value)
 
+
+def _range_has_explicit_conclusion_heading(blocks: list[dict[str, Any]]) -> bool:
+    return any(_explicit_conclusion_heading(block) for block in blocks[:5])
+
+
+def _obvious_list_section(element_type: str, blocks: list[dict[str, Any]]) -> bool:
+    if element_type == "defense_statements":
+        items = collect_unique_defense_items(blocks)
+    else:
+        items = collect_unique_numbered_items(blocks)
+    if len(items) < 2:
+        return False
+    numbers = [int(item.get("number") or 0) for item in items]
+    return numbers == list(range(1, len(numbers) + 1))
+
+
+def _explicit_conclusion_heading(block: dict[str, Any]) -> bool:
+    text = re.sub(r"\s+", " ", str(block.get("text") or "")).strip()
+    if not text or len(text) > 220:
+        return False
+    # Require a heading-like block or a very short standalone line.  This avoids
+    # turning prose such as «далее сформулированы выводы по главе» into structure.
+    if block.get("type") != "heading" and len(text) > 150:
+        return False
+    return _obvious_chapter_conclusions(text, [block])
+
+
+def _stabilize_elements(
+    elements: list[dict[str, Any]],
+    blocks: list[dict[str, Any]],
+    index: dict[str, int],
+) -> list[dict[str, Any]]:
+    """Keep DocumentMap factual and deterministically resolve obvious ranges.
+
+    The structure LLM may mark an unambiguous numbered list as ambiguous or may
+    invent a one-block ``chapter_conclusions`` range at the end of a chapter.
+    This pass confirms only structurally provable lists, removes unsupported LLM
+    conclusion ranges, and adds a conclusion range only when an explicit heading
+    exists in the source blocks.  User-created ranges are never removed.
+    """
+    kept: list[dict[str, Any]] = []
+    for element in elements:
+        start = index.get(element.get("startBlockId"))
+        end = index.get(element.get("endBlockId"))
+        if start is None or end is None or start > end:
+            continue
+        range_blocks = blocks[start:end + 1]
+        element = dict(element)
+        if element.get("type") in {"tasks", "defense_statements"} and _obvious_list_section(str(element.get("type")), range_blocks):
+            element["state"] = "confirmed"
+        if (
+            element.get("type") == "chapter_conclusions"
+            and element.get("source") != "user"
+            and not _range_has_explicit_conclusion_heading(range_blocks)
+        ):
+            # Never materialize a conclusion section that has no explicit source
+            # heading. Missing conclusions are handled later as virtual incomplete
+            # checking context, not by inventing structure in DocumentMap.
+            continue
+        kept.append(element)
+
+    kept = _normalize_chapter_boundaries(kept, blocks, index)
+    chapters = [item for item in kept if item.get("type") == "chapter"]
+    conclusions = [item for item in kept if item.get("type") == "chapter_conclusions"]
+    existing_ids = {str(item.get("id") or "") for item in kept}
+    for chapter in chapters:
+        chapter_start = index.get(chapter.get("startBlockId"))
+        chapter_end = index.get(chapter.get("endBlockId"))
+        if chapter_start is None or chapter_end is None or chapter_start > chapter_end:
+            continue
+        if any(
+            chapter_start <= index.get(item.get("startBlockId"), -1) <= chapter_end
+            for item in conclusions
+        ):
+            continue
+        heading_index = next(
+            (i for i in range(chapter_start, chapter_end + 1) if _explicit_conclusion_heading(blocks[i])),
+            None,
+        )
+        if heading_index is None:
+            continue
+        heading = blocks[heading_index]
+        candidate_id = f"section-auto-conclusion-{chapter.get('id') or heading.get('id')}"
+        if candidate_id in existing_ids:
+            continue
+        auto = _materialize_element({
+            "id": candidate_id,
+            "type": "chapter_conclusions",
+            "label": re.sub(r"\s+", " ", str(heading.get("text") or "Выводы по главе")).strip(),
+            "startBlockId": heading.get("id"),
+            "endBlockId": chapter.get("endBlockId"),
+            "blockIds": [heading.get("id")],
+            "pages": [],
+            "text": "",
+            "quote": str(heading.get("text") or ""),
+            "confidence": 1.0,
+            "state": "confirmed",
+            "source": "deterministic",
+        }, blocks, index)
+        if auto:
+            kept.append(auto)
+            conclusions.append(auto)
+            existing_ids.add(candidate_id)
+
+    kept.sort(key=lambda item: (index.get(item.get("startBlockId"), 10**9), 0 if item.get("type") == "chapter" else 1))
+    return kept
+
+
+
+def _normalize_chapter_boundaries(
+    elements: list[dict[str, Any]],
+    blocks: list[dict[str, Any]],
+    index: dict[str, int],
+) -> list[dict[str, Any]]:
+    """Make chapter ranges factual and contiguous up to the next top-level section.
+
+    Structure models sometimes stop a chapter several pages before its explicit
+    ``chapter_conclusions`` heading.  Downstream semantic checks would then call a
+    truncated range "complete".  For model/deterministic map elements the source
+    document gives a safer boundary: a chapter ends immediately before the next
+    chapter or global conclusion/bibliography.  Explicit user-created ranges are
+    left untouched.
+    """
+    top_level = [
+        item for item in elements
+        if item.get("type") in {"chapter", "conclusion", "bibliography"}
+        and index.get(item.get("startBlockId")) is not None
+    ]
+    top_level.sort(key=lambda item: index[item.get("startBlockId")])
+    result: list[dict[str, Any]] = []
+    for item in elements:
+        if item.get("type") != "chapter" or item.get("source") == "user":
+            result.append(item)
+            continue
+        start = index.get(item.get("startBlockId"))
+        if start is None:
+            result.append(item)
+            continue
+        next_start = next((
+            index.get(other.get("startBlockId"))
+            for other in top_level
+            if index.get(other.get("startBlockId"), -1) > start
+        ), None)
+        if next_start is None:
+            result.append(item)
+            continue
+        target_end = max(start, next_start - 1)
+        target_id = blocks[target_end].get("id")
+        if not target_id or target_id == item.get("endBlockId"):
+            result.append(item)
+            continue
+        rematerialized = _materialize_element({**item, "endBlockId": target_id}, blocks, index)
+        result.append(rematerialized or item)
+    return result
+
+def _confirmed_defense_marker(elements: list[dict[str, Any]]) -> bool:
+    pattern=re.compile(r"(?:основн\p{L}*\s+)?положени\p{L}*[^.]{0,80}выносим\p{L}*[^.]{0,40}защит", re.I)
+    return any(
+        item.get("type") == "defense_statements"
+        and item.get("state") == "confirmed"
+        and pattern.search(" ".join([str(item.get("label") or ""), str(item.get("text") or ""), str(item.get("quote") or "")]))
+        for item in elements
+    )
+
+
+def _drop_resolved_model_issues(issues: list[dict[str, Any]], elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_id = {str(item.get("id")): item for item in elements}
+    result: list[dict[str, Any]] = []
+    for issue in issues:
+        refs = [str(value) for value in issue.get("elementIds", []) if value]
+        live = [by_id[value] for value in refs if value in by_id]
+        message=str(issue.get("message") or "")
+        is_ambiguity = "ambig" in str(issue.get("code") or "").lower() or re.search(r"неоднознач", message, re.I)
+        if _confirmed_defense_marker(elements) and re.search(r"положени.*(?:не\s+подтвержд|маркер|явн)", message, re.I):
+            continue
+        if refs and not live:
+            continue
+        if is_ambiguity and live and all(item.get("state") == "confirmed" for item in live):
+            continue
+        result.append(issue)
+    return result
 
 def _exact_quote(value: str, blocks: list[dict[str, Any]]) -> str:
     requested = re.sub(r'\s+', ' ', value).strip()
