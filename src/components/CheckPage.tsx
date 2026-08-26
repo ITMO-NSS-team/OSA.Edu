@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { api } from "../../../../PycharmProjects/OSA.Edu/src/api";
-import type { CheckProfile, Health, Job } from "../../../../PycharmProjects/OSA.Edu/src/types";
+import { api } from "../api";
+import type { CheckProfile, Health, Job } from "../types";
 
 interface Props {
   health: Health;

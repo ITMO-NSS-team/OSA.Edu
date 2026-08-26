@@ -4,6 +4,8 @@ from typing import Any
 import regex as re
 
 from .title import extract_best_title
+from .section_signals import find_defense_heading_span, is_defense_heading
+from .numbered_items import collect_unique_defense_items
 
 ALLOWED_BLOCK_TYPES = {
     "paragraph", "heading", "title", "list", "caption", "table", "formula",
@@ -186,11 +188,12 @@ def _is_named_heading(text: str) -> bool:
     if len(text) > 190:
         return False
     return bool(
-        re.match(
+        is_defense_heading(text)
+        or re.match(
             r"^(?:введение|заключение|реферат|аннотация|synopsis|abstract|"
             r"выводы(?:\s+по\s+главе)?|список\s+(?:использованных\s+)?(?:источников|литературы|сокращений)|"
             r"словарь\s+терминов|научная\s+новизна|цель|задачи(?:\s+исследования)?|"
-            r"положения,?\s+выносимые\s+на\s+защиту|оглавление|содержание|"
+            r"оглавление|содержание|"
             r"приложение(?:\s+[А-ЯA-Z\d]+)?)\.?$",
             text,
             re.I,
@@ -204,7 +207,7 @@ def _extract_fields(blocks: list[dict]) -> dict[str, Any]:
     title = extract_best_title(first, blocks)
     goal = next((b for b in blocks if re.search(r"(?<![\p{L}\p{N}_])цель(?:ю)?\s+(?:(?:диссертационной\s+)?работы|исследования)?\s*(?:является|состоит|заключается|–|-|:)", b.get("text", ""), re.I)), None)
     tasks = _extract_following_list(blocks, re.compile(r"задач(?:и|ами|ей)?\s+(?:работы|исследования)|для достижения.*цели", re.I), 12)
-    defense = _extract_section(blocks, re.compile(r"положени[яй],?\s+выносимые\s+на\s+защиту", re.I), 18)
+    defense = _extract_defense_section(blocks, 24)
     chapter_headings = [
         block for block in blocks
         if block.get("type") == "heading"
@@ -238,13 +241,13 @@ def _extract_following_list(blocks: list[dict], heading_pattern, limit: int) -> 
     return selected
 
 
-def _extract_section(blocks: list[dict], heading_pattern, limit: int) -> list[dict]:
-    index = next((i for i, b in enumerate(blocks) if heading_pattern.search(b.get("text", ""))), -1)
-    if index < 0:
+def _extract_defense_section(blocks: list[dict], limit: int) -> list[dict]:
+    anchor = next((i for i, b in enumerate(blocks) if find_defense_heading_span(b.get("text", ""))), -1)
+    if anchor < 0:
         return []
-    selected: list[dict] = []
-    for block in blocks[index + 1:index + 1 + limit]:
-        if block.get("type") == "heading" and not re.search(r"положени", block.get("text", ""), re.I):
-            break
-        selected.append(block)
-    return [b for b in selected if b.get("type") == "list" or re.search(r"(?:метод|алгоритм|модель|технолог|комплекс|система|классификац|бенчмарк)", b.get("text", ""), re.I)]
+    window = blocks[anchor:min(len(blocks), anchor + 1 + limit)]
+    items = collect_unique_defense_items(window)
+    if not items:
+        return []
+    source_ids = {str((item.get("source") or {}).get("id") or "") for item in items}
+    return [block for block in window[1:] if str(block.get("id") or "") in source_ids]

@@ -174,7 +174,7 @@ def apply_consistency_checks(results: list[dict]) -> list[dict]:
     # CORE-1-3 is conditional on whether the solution is pioneering. A document-only
     # PASS without evidence cannot establish that external novelty condition. It is
     # safer to keep the rule uncertain than to silently approve the missing
-    # limiting part, which happened in the Bashkova regression case.
+    # limiting part when evidence does not actually establish a prototype relation.
     core_13 = by.get("CORE-1-3")
     if core_13 and core_13.get("status") == "pass" and not core_13.get("evidence"):
         replacement = _replace_status(

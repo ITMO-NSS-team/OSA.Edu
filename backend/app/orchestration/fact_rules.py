@@ -6,6 +6,7 @@ from typing import Any
 import regex as re
 
 from ..rules.contracts import fact_items, is_fact_rule
+from ..rules.manifest import manifest_entry
 from ..util import normalized_quote, unique
 
 _STRONG_PROTOTYPE_CUE = re.compile(
@@ -135,7 +136,7 @@ def enrich_matrix(rule_id: str, matrix: dict | None, fragment: dict) -> dict | N
             item["pythonAdjustments"] = changes
         rows.append(item)
     adjusted["items"] = rows
-    adjusted["factEngine"] = "3.6.0"
+    adjusted["factEngine"] = "3.9.2-repo-stable"
     return adjusted
 
 
@@ -148,40 +149,43 @@ def _row_status(matrix: dict, name: str) -> str:
     return str((row or {}).get("status") or "ambiguous")
 
 
+def _fact_engine_config(rule_id: str) -> dict:
+    entry = manifest_entry(rule_id)
+    if entry is None:
+        return {}
+    return entry.engine.model_dump(exclude_none=True)
+
+
 def _fragment_decision(rule_id: str, matrix: dict | None) -> tuple[str, list[str]]:
     required = fact_items(rule_id)
     if not matrix or not matrix.get("complete"):
         return "uncertain", ["не подтверждено полное покрытие назначенной области"]
     statuses = {name: _row_status(matrix, name) for name in required}
+    policy = _fact_engine_config(rule_id).get("decisionPolicy") or {}
+
+    if policy.get("type") == "ordered_facts":
+        for step in policy.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            fact = str(step.get("fact") or "")
+            if fact not in statuses or statuses.get(fact) != str(step.get("value") or ""):
+                continue
+            details = [fact]
+            for dependent in step.get("includeIfNotFoundOrAmbiguous") or []:
+                dep = str(dependent)
+                if statuses.get(dep) in {"not_found", "ambiguous"}:
+                    details.append(dep)
+            return str(step.get("status") or "uncertain"), details
+        default = str(policy.get("default") or "uncertain")
+        if default == "pass" and any(value == "ambiguous" for value in statuses.values()):
+            # Precision invariant: an unhandled ambiguous required fact can never
+            # silently become PASS even if a future manifest step is incomplete.
+            return "uncertain", [name for name, value in statuses.items() if value == "ambiguous"]
+        return default, []
+
+    # Generic safe fallback for a malformed/missing declarative policy.
     missing = [name for name, status in statuses.items() if status == "not_found"]
     ambiguous = [name for name, status in statuses.items() if status == "ambiguous"]
-
-    if rule_id in {"CORE-2-3", "CORE-15"}:
-        analog_name = required[0]
-        prototype_name = required[1]
-        disadvantage_name = required[2]
-        if statuses.get(analog_name) == "not_found":
-            return "violation", [analog_name]
-        # A non-unique/uncertain prototype makes the dependent disadvantages
-        # non-decidable. Precision takes priority over forcing a red verdict.
-        if statuses.get(prototype_name) == "ambiguous":
-            return "uncertain", [prototype_name, *([disadvantage_name] if statuses.get(disadvantage_name) != "found" else [])]
-        if statuses.get(prototype_name) == "not_found":
-            return "violation", [prototype_name]
-        if statuses.get(disadvantage_name) == "ambiguous":
-            return "uncertain", [disadvantage_name]
-        if statuses.get(disadvantage_name) == "not_found":
-            return "violation", [disadvantage_name]
-        return "pass", []
-
-    if rule_id == "CORE-8-2":
-        name = required[0]
-        if statuses.get(name) == "found":
-            return "pass", []
-        if statuses.get(name) == "not_found":
-            return "violation", [name]
-        return "uncertain", [name]
-
     if missing:
         return "violation", missing
     if ambiguous:
@@ -269,10 +273,9 @@ def aggregate_fact_rule(rule: dict, routed: dict, items: list[dict]) -> dict:
         },
     }
     if status == "violation":
-        if rule_id in {"CORE-2-3", "CORE-15"}:
-            out["fix"] = "В соответствующей главе явно связать уже рассматриваемые в работе существующие решения с ближайшей точкой сравнения и описать её ограничение, устраняемое предлагаемым результатом. Не добавлять внешние аналоги только ради выполнения правила."
-        elif rule_id == "CORE-8-2":
-            out["fix"] = "В выводах соответствующей главы добавить содержательное сопоставление разработанного результата с уже рассмотренным в работе известным решением или классом подходов и указать устраняемое ограничение."
+        fix = str(_fact_engine_config(rule_id).get("fix") or "").strip()
+        if fix:
+            out["fix"] = fix
     incomplete_expected = any(not bool(by_fragment.get(str(fid), {}).get("complete")) for fid in expected)
     if any(item.get("technicalIncomplete") for item in items) or incomplete_expected:
         out["technicalIncomplete"] = True

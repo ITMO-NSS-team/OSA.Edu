@@ -55,6 +55,34 @@ def parse_json(raw: str) -> Any:
         return json.loads(stripped[start:end+1])
 
 
+def salvage_json_objects(raw: str, *, required_key: str) -> list[dict[str, Any]]:
+    """Recover individually valid JSON objects from a malformed/truncated response.
+
+    Only complete objects that independently parse and contain ``required_key``
+    are returned.  This is deliberately conservative and is used by operation-
+    specific parsers, which still validate IDs and field schemas afterwards.
+    """
+    text = str(raw or "")
+    decoder = json.JSONDecoder()
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _end = decoder.raw_decode(text[index:])
+        except Exception:
+            continue
+        if not isinstance(value, dict) or required_key not in value:
+            continue
+        identity = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if identity in seen:
+            continue
+        seen.add(identity)
+        out.append(value)
+    return out
+
+
 def is_fatal_provider_error(error: BaseException) -> bool:
     status=getattr(error,'status',0); code=getattr(error,'provider_code','')
     text=f'{code} {error}'

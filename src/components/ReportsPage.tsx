@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../../../../PycharmProjects/OSA.Edu/src/api";
-import { jobStatusLabel, modeLabel, statusLabel } from "../../../../PycharmProjects/OSA.Edu/src/labels";
-import type { DocumentElementType, DocumentMap, DocumentMapElement, Job, Rule, RuleResult, ProviderDiagnostic, RuleStatus, StructureBlock, StructureDetails } from "../../../../PycharmProjects/OSA.Edu/src/types";
+import { api } from "../api";
+import { jobStatusLabel, modeLabel, statusLabel } from "../labels";
+import type { DocumentElementType, DocumentMap, DocumentMapElement, Job, Rule, RuleResult, ProviderDiagnostic, RuleStatus, StructureBlock, StructureDetails } from "../types";
 
 type StatusFilter = RuleStatus | "all";
 interface Props {
@@ -161,7 +161,7 @@ function Report({ job, status, query, onStatus, onQuery, onAction }: { job: Job;
     {job.error && <div className="inline-error">Последняя попытка завершилась ошибкой: {job.error}</div>}
     {report.documentMap && <ReadOnlyMap map={report.documentMap} />}
     <div className="status-grid">{STATUS_ORDER.map((item) => <button key={item} className={`status-card ${item} ${status === item ? "active" : ""}`} onClick={() => onStatus(item)}><strong>{countForStatus(report, item)}</strong><span>{statusLabel[item]}</span></button>)}</div>
-    <div className="panel report-controls"><button className={status === "all" ? "text-button active" : "text-button"} onClick={() => onStatus("all")}>Все правила ({report.ruleResults.length})</button><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Поиск по правилам отчёта" /><span>Правила: {Math.round(report.coverage * 100)} % · кандидаты: {Math.round((report.automaticCandidateCoverage ?? report.candidateCoverage ?? 1) * 100)} % · сокращения: {Math.round((report.abbreviationCoverage ?? 1) * 100)} %</span></div>
+    <div className="panel report-controls"><button className={status === "all" ? "text-button active" : "text-button"} onClick={() => onStatus("all")}>Все правила ({report.ruleResults.length})</button><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Поиск по правилам отчёта" /><span>Правила: {Math.round(report.coverage * 100)} % · кандидаты: {Math.round((report.automaticCandidateCoverage ?? report.candidateCoverage ?? 1) * 100)} % · карта обозначений: {Math.round((report.abbreviationCoverage ?? 1) * 100)} % · правила по обозначениям: {Math.round((report.abbreviationRuleCoverage ?? 1) * 100)} %</span></div>
     <div className="result-list">{results.map((result) => <RuleResultCard key={result.ruleId} result={result} rule={catalog.get(result.ruleId)} />)}{!results.length && <div className="empty panel">В этой категории правил нет.</div>}</div>
     <details className="panel technical-details"><summary>Промпты, маршрутизация и API</summary><div className="technical-body">
       <p><b>Модель:</b> {report.technical.model}</p><p><b>Версия:</b> {report.technical.appVersion}</p><p><b>Хеш промпта:</b> {report.technical.promptHash}</p><p><b>Профиль:</b> {job.profile === "core" ? "Ядро" : "Полный набор"}</p>
@@ -171,7 +171,7 @@ function Report({ job, status, query, onStatus, onQuery, onAction }: { job: Job;
       <label><span>Промпт проверки правил</span><textarea readOnly value={job.prompt} rows={12} /></label><label><span>Промпт структуры</span><textarea readOnly value={job.mapPrompt} rows={12} /></label>
       {report.warnings.length > 0 && <div><b>Предупреждения:</b><ul>{report.warnings.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}
     </div></details>
-    <div className="actions end report-actions"><a className="button primary" href={api.reportPdfUrl(job.id)}>PDF</a><a className="button secondary" href={api.reportJsonUrl(job.id)}>JSON</a><a className="button secondary" href={api.reportMarkdownUrl(job.id)}>Markdown</a>{retryableCount > 0 && <button className="button secondary" onClick={() => void onAction(job.id, "retryFailed")}>Повторить неудачные LLM-проверки ({retryableCount})</button>}<button className="button secondary" onClick={() => void onAction(job.id, "retry")}>Повторить всю проверку</button><button className="button danger" onClick={() => void onAction(job.id, "delete")}>Удалить</button></div>
+    <div className="actions end report-actions"><a className="button primary" href={api.reportPdfUrl(job.id)}>Отчёт для пользователя</a><a className="button secondary" href={api.developerReportPdfUrl(job.id)}>Отчёт для разработчика</a><a className="button secondary" href={api.reportJsonUrl(job.id)}>JSON</a><a className="button secondary" href={api.reportMarkdownUrl(job.id)}>Markdown</a>{retryableCount > 0 && <button className="button secondary" onClick={() => void onAction(job.id, "retryFailed")}>Повторить неудачные LLM-проверки ({retryableCount})</button>}<button className="button secondary" onClick={() => void onAction(job.id, "retry")}>Повторить всю проверку</button><button className="button danger" onClick={() => void onAction(job.id, "delete")}>Удалить</button></div>
   </div>;
 }
 

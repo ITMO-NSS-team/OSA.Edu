@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import regex as re
 
-DEFENSE_HEADING = re.compile(r'(?:основные\s+)?положения,?\s+выносимые\s+на\s+защиту\.?', re.I)
+from .section_signals import find_defense_heading_span
 
 # Numbered lists in theses are not uniform: 1., 1), and (1) all occur in
 # practice. Keep the generic collector numeric-only so ordinary list checks do
@@ -16,9 +16,10 @@ _SECTION_TERMINATOR = re.compile(
     r'Практическая\s+значимость(?:\s+(?:работы|результатов))?|'
     r'Теоретическая\s+значимость(?:\s+(?:работы|результатов))?|'
     r'Личный\s+вклад(?:\s+автора)?|'
+    r'Методологическ\p{L}*\s+основ\p{L}*\s+работы|'
     r'Апробация(?:\s+работы)?|'
     r'Публикации(?:\s+по\s+теме(?:\s+(?:работы|диссертации))?)?|'
-    r'Структура\s+работы|'
+    r'Структура\s+(?:дипломной\s+)?работы|'
     r'Работа\s+состоит|'
     r'Использование\s+(?:AI|ИИ|систем\s+искусственного\s+интеллекта))\b'
     r')',
@@ -45,14 +46,14 @@ def _collect_items(blocks: list[dict], *, allow_bullets: bool) -> list[dict]:
     if not blocks:
         return []
 
-    has_heading = any(DEFENSE_HEADING.search(_clean(block.get("text", ""))) for block in blocks)
+    has_heading = any(find_defense_heading_span(_clean(block.get("text", ""))) for block in blocks)
     inside = not has_heading
     pieces: list[dict] = []
     for block in blocks:
         text = _clean(block.get("text", ""))
-        headings = list(DEFENSE_HEADING.finditer(text))
-        if headings:
-            text = text[headings[-1].end():]
+        heading_span = find_defense_heading_span(text)
+        if heading_span:
+            text = text[heading_span[1]:]
             inside = True
         elif not inside:
             continue

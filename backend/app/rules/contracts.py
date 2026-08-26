@@ -1,49 +1,45 @@
 from __future__ import annotations
 
-"""Pilot rule contracts for the 3.8 fact-first engine.
+"""Compatibility API backed by the canonical rule manifest.
 
-Only the semantic rules that caused the largest false-positive regressions are
-migrated in this release. Other rules keep their existing path. The contract is
-intentionally declarative so additional rules can move to the same engine without
-adding another bespoke prompt/decision function.
+Fact-rule contracts used to live in this Python module. They now live beside each
+rule in config/rule-manifest.json so routing, engine selection and fact semantics
+cannot drift apart.
 """
 
-RULE_CONTRACTS: dict[str, dict] = {
-    "CORE-2-3": {
-        "kind": "semantic_fact",
-        "scope": "defense_chapter_matrix",
-        "facts": ["analogs", "prototype", "prototype_disadvantages"],
-        "externalKnowledge": "forbidden",
-        "fixPolicy": "document_only",
-        "dedupGroup": "prototype_analysis",
-    },
-    "CORE-15": {
-        "kind": "semantic_fact",
-        "scope": "defense_chapter_matrix",
-        "facts": ["analogs_inside_chapter", "prototype_inside_chapter", "prototype_disadvantages_inside_chapter"],
-        "externalKnowledge": "forbidden",
-        "fixPolicy": "document_only",
-        "dedupGroup": "prototype_analysis",
-    },
-    "CORE-8-2": {
-        "kind": "semantic_fact",
-        "scope": "primary_chapter_conclusions",
-        "facts": ["comparison_with_prototype_in_chapter_conclusions"],
-        "externalKnowledge": "forbidden",
-        "fixPolicy": "document_only",
-        "dedupGroup": "prototype_comparison",
-    },
-}
+from .manifest import load_rule_manifest, manifest_entry
 
 
 def contract_for(rule_id: str) -> dict | None:
-    return RULE_CONTRACTS.get(str(rule_id))
+    entry = manifest_entry(rule_id)
+    if entry is None or entry.engine.kind.value != 'semantic_fact':
+        return None
+    engine = entry.engine
+    return {
+        'kind': engine.kind.value,
+        'scope': entry.scope,
+        'facts': list(engine.facts),
+        'externalKnowledge': engine.externalKnowledge,
+        'fixPolicy': engine.fixPolicy,
+        'dedupGroup': engine.dedupGroup,
+        **({'guidance': engine.guidance} if engine.guidance else {}),
+        **({'sharedFactsFrom': engine.sharedFactsFrom} if engine.sharedFactsFrom else {}),
+        **({'factNameMap': dict(engine.factNameMap)} if engine.factNameMap else {}),
+    }
 
 
 def fact_items(rule_id: str) -> list[str]:
     value = contract_for(rule_id) or {}
-    return list(value.get("facts") or [])
+    return list(value.get('facts') or [])
 
 
 def is_fact_rule(rule_id: str) -> bool:
-    return (contract_for(rule_id) or {}).get("kind") == "semantic_fact"
+    return bool(contract_for(rule_id))
+
+
+# Read-only compatibility snapshot for code that imports the old symbol.
+RULE_CONTRACTS = {
+    rule_id: contract_for(rule_id)
+    for rule_id, entry in load_rule_manifest().rules.items()
+    if entry.engine.kind.value == 'semantic_fact'
+}

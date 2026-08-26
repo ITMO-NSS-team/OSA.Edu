@@ -19,7 +19,8 @@ from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
 from .llm.rate_limiter import configured_rate_limits
 from .queue import start_queue
-from .pdf_reporting import report_to_pdf
+from .pdf_reporting import report_to_pdf as developer_report_to_pdf
+from .user_pdf_reporting import report_to_user_pdf
 from .reporting import report_to_markdown
 from .rules.registry import load_rule_registry
 from .store import create_jobs, delete_job, get_job, list_jobs, recover_interrupted_jobs, update_job
@@ -373,11 +374,12 @@ async def report_markdown(job_id: str):
 
 @app.get("/api/jobs/{job_id}/report.pdf")
 async def report_pdf(job_id: str):
+    """Concise report intended for the thesis author."""
     job = await get_job(job_id)
     if not job or not job.get("report"):
         return _error(404, "Отчёт ещё не готов.")
     try:
-        content = report_to_pdf(
+        content = report_to_user_pdf(
             job["originalName"],
             job["report"],
             profile=job.get("profile"),
@@ -385,7 +387,30 @@ async def report_pdf(job_id: str):
         )
     except Exception as exc:
         return _error(500, f"Не удалось сформировать PDF: {exc}")
-    filename = quote(f"{job['originalName']}-protocol.pdf")
+    filename = quote(f"{job['originalName']}-report.pdf")
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
+@app.get("/api/jobs/{job_id}/developer-report.pdf")
+async def developer_report_pdf(job_id: str):
+    """Full technical report with routing, evidence and LLM diagnostics."""
+    job = await get_job(job_id)
+    if not job or not job.get("report"):
+        return _error(404, "Отчёт ещё не готов.")
+    try:
+        content = developer_report_to_pdf(
+            job["originalName"],
+            job["report"],
+            profile=job.get("profile"),
+            generated_at=job.get("finishedAt"),
+        )
+    except Exception as exc:
+        return _error(500, f"Не удалось сформировать технический PDF: {exc}")
+    filename = quote(f"{job['originalName']}-developer-report.pdf")
     return Response(
         content=content,
         media_type="application/pdf",

@@ -11,6 +11,7 @@ from ..llm.client import ask_structured_json, estimate_tokens
 from ..util import normalized_quote, now_iso
 from .title import extract_best_title
 from .numbered_items import collect_unique_defense_items, collect_unique_numbered_items
+from .section_signals import find_defense_heading_span, is_defense_heading
 from .units import canonicalize_document_units
 
 ALLOWED_TYPES = {
@@ -70,14 +71,14 @@ async def build_document_map(document: dict[str, Any], *, provider: str, model: 
     )
     parsed = _parse_structure(response["value"], blocks)
     return {
-        "version": 2,
+        "version": 3,
         "createdAt": now_iso(),
         "provider": provider,
         "model": model,
         "promptHash": _prompt_hash(prompt),
         "status": "partial" if any(x.get("severity") == "warning" for x in parsed["issues"]) else "ready",
         "elements": parsed["elements"],
-        "relations": [],
+        "relations": parsed["relations"],
         "issues": parsed["issues"],
         "warnings": parsed["warnings"],
         "usage": response["usage"],
@@ -88,7 +89,7 @@ async def build_document_map(document: dict[str, Any], *, provider: str, model: 
 
 def map_can_be_reused(map_value: dict | None, provider: str, model: str, prompt: str) -> bool:
     return bool(
-        map_value and map_value.get("version") == 2 and map_value.get("provider") == provider
+        map_value and map_value.get("version") == 3 and map_value.get("provider") == provider
         and map_value.get("model") == model and map_value.get("promptHash") == _prompt_hash(prompt)
     )
 
@@ -104,6 +105,7 @@ def refresh_map(document: dict[str, Any], map_value: dict[str, Any]) -> dict[str
     return {
         **map_value,
         "elements": elements,
+        "relations": _validate_existing_relations(map_value.get("relations", []), elements),
         "issues": issues,
         "status": "partial" if any(x.get("severity") == "warning" for x in issues) else "ready",
     }
@@ -155,9 +157,77 @@ def _parse_structure(value: Any, blocks: list[dict[str, Any]]) -> dict[str, Any]
     elements = _stabilize_elements(elements, blocks, block_index)
     elements, unit_issues = canonicalize_document_units(elements, blocks, block_index)
     model_issues = _drop_resolved_model_issues(model_issues, elements)
+    relations = _parse_relations(value, elements)
     issues = [*model_issues, *unit_issues, *_validate_map(elements, blocks)]
-    return {"elements": elements, "issues": _dedupe_issues(issues), "warnings": warnings}
+    return {"elements": elements, "relations": relations, "issues": _dedupe_issues(issues), "warnings": warnings}
 
+
+
+def _parse_relations(value: Any, elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    raw_relations = value.get("relations", []) if isinstance(value, dict) and isinstance(value.get("relations"), list) else []
+    chapter_by_start = {
+        str(item.get("startBlockId")): item
+        for item in elements
+        if item.get("type") == "chapter" and item.get("startBlockId")
+    }
+    defense = [item for item in elements if item.get("type") == "defense_statements" and item.get("canonicalRole") != "secondary_copy"]
+    source_id = defense[0].get("id") if defense else None
+    result: list[dict[str, Any]] = []
+    seen: set[tuple[int, str]] = set()
+    for raw in raw_relations:
+        if not isinstance(raw, dict) or raw.get("type") != "defense_statement_primary_chapter":
+            continue
+        try:
+            statement_index = int(raw.get("statementIndex"))
+        except (TypeError, ValueError):
+            continue
+        if statement_index < 0:
+            continue
+        target_start = str(raw.get("chapterStartBlockId") or raw.get("targetStartBlockId") or "").strip()
+        chapter = chapter_by_start.get(target_start)
+        if chapter is None:
+            continue
+        key = (statement_index, target_start)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            confidence = max(0.0, min(1.0, float(raw.get("confidence", 0.0))))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        state = "confirmed" if raw.get("state") == "confirmed" else "ambiguous"
+        result.append({
+            "type": "defense_statement_primary_chapter",
+            "statementIndex": statement_index,
+            "sourceSectionId": source_id,
+            "targetSectionId": chapter.get("id"),
+            "targetStartBlockId": target_start,
+            "role": "primary",
+            "confidence": confidence,
+            "state": state,
+            "reason": re.sub(r"\s+", " ", str(raw.get("reason") or "")).strip()[:500],
+            "source": "llm_document_map",
+        })
+    return result
+
+
+def _validate_existing_relations(relations: Any, elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(relations, list):
+        return []
+    # Existing normalized relations use targetStartBlockId. Re-run them through
+    # the same validator shape so edited/confirmed maps cannot retain dangling links.
+    payload = {"relations": [
+        {
+            "type": row.get("type"),
+            "statementIndex": row.get("statementIndex"),
+            "chapterStartBlockId": row.get("targetStartBlockId") or row.get("chapterStartBlockId"),
+            "confidence": row.get("confidence", 0.0),
+            "state": row.get("state", "ambiguous"),
+            "reason": row.get("reason", ""),
+        }
+        for row in relations if isinstance(row, dict)
+    ]}
+    return _parse_relations(payload, elements)
 
 def _materialize_element(element: dict[str, Any], blocks: list[dict[str, Any]], index: dict[str, int]) -> dict[str, Any] | None:
     start, end = index.get(element.get("startBlockId")), index.get(element.get("endBlockId"))
@@ -390,11 +460,10 @@ def _normalize_chapter_boundaries(
     return result
 
 def _confirmed_defense_marker(elements: list[dict[str, Any]]) -> bool:
-    pattern=re.compile(r"(?:основн\p{L}*\s+)?положени\p{L}*[^.]{0,80}выносим\p{L}*[^.]{0,40}защит", re.I)
     return any(
         item.get("type") == "defense_statements"
         and item.get("state") == "confirmed"
-        and pattern.search(" ".join([str(item.get("label") or ""), str(item.get("text") or ""), str(item.get("quote") or "")]))
+        and any(find_defense_heading_span(str(item.get(key) or "")) for key in ("label", "text", "quote"))
         for item in elements
     )
 
@@ -407,7 +476,7 @@ def _drop_resolved_model_issues(issues: list[dict[str, Any]], elements: list[dic
         live = [by_id[value] for value in refs if value in by_id]
         message=str(issue.get("message") or "")
         is_ambiguity = "ambig" in str(issue.get("code") or "").lower() or re.search(r"неоднознач", message, re.I)
-        if _confirmed_defense_marker(elements) and re.search(r"положени.*(?:не\s+подтвержд|маркер|явн)", message, re.I):
+        if _confirmed_defense_marker(elements) and re.search(r"(?:положени|защит|defen[cs]e).*(?:не\s+подтвержд|маркер|явн)", message, re.I):
             continue
         if refs and not live:
             continue

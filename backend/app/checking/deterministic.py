@@ -12,7 +12,7 @@ SPECS={
 'lexical-replacements':[(r'\bнужно\b','Заменить «нужно» на «необходимо».'),(r'\bзначит\b','Заменить «значит» на «следовательно». '),(r'\bзаключается\s+в\b','Проверить замену на «состоит в».')],
 'obvious-claims':[(r'\b(?:очевидно|несомненно|легко\s+видеть|хорошо\s+известно|довольно\s+очевидно)\b','Убрать оценочное слово и привести обоснование или ссылку.')],
 'praise-claims':[(r'\b(?:уникальн\p{L}*|высокоэффективн\p{L}*|совершенно\s+бесспорн\p{L}*|значительн\p{L}*\s+вклад|наглядно\s+демонстрир\p{L}*)\b','Заменить оценку измеримым сравнением или нейтральным утверждением.')],
-'title-process':[(r'^(?:разработка|исследование|создание|проектирование|реализация|разработка\s+и\s+исследование)\b','Начать название с существительного, обозначающего результат.')],
+'title-process':[(r'^(?:разработка|исследование|изучение)\b','Переформулировать название через научный результат, а не процесс.')],
 'title-vague-efficiency':[(r'\bповышени[ея]\s+(?:эффективности|качества)\b','Указать конкретный измеримый результат.')],
 'bibliography-junk':[(r'\bISBN\b',None),(r'\bed\.\s+by\b',None),(r'\b[A-ZА-ЯЁ][\p{L}-]+,\s+[A-ZА-ЯЁ]\.', 'Убрать запятую между фамилией и инициалами и унифицировать формат.'),(r'\s&\s','Убрать символ & и оформить авторов единообразно.')],
 'bibliography-pages':[(r'\bp\.\s*\d+\s*[-–—]\s*\d+\b','Для диапазона страниц англоязычной статьи использовать «pp. 12-25».')],
@@ -97,6 +97,27 @@ def _praise(rule, document):
     if ev:
         return result(rule,'violation',rule.get('requirement','Необоснованная оценочная формулировка.'),ev,.99,'detector','Заменить оценку измеримым сравнением с прототипом или нейтральным утверждением.')
     return result(rule,'pass','Необоснованные восторженные оценки не обнаружены; статистические сочетания вроде «число уникальных запросов» исключены.',confidence=.99)
+
+def _title_process(rule, document):
+    title = document.get('fields', {}).get('title')
+    if not title:
+        return result(rule, 'uncertain', 'Название работы не удалось надёжно извлечь.', confidence=.2)
+    text = str(title.get('text') or '').strip()
+    match = re.match(r'^(разработка|исследование|изучение)\b', text, re.I)
+    if not match:
+        return result(
+            rule, 'pass',
+            'Название не начинается с процессуальных существительных «разработка», «исследование» или «изучение».',
+            confidence=.99,
+        )
+    token = match.group(1)
+    return result(
+        rule, 'violation',
+        f'Название начинается с процессуального существительного «{token}» и формулирует процесс, а не научный результат.',
+        [evidence(title, text)], .99, 'detector',
+        'Переформулировать название через научный результат (например, метод, модель, алгоритм, систему, оценку или иной фактически полученный результат).',
+    )
+
 
 def _title_length(rule,document):
     title=document.get('fields',{}).get('title')
@@ -271,6 +292,10 @@ def _generic(rule,document,detector):
                 # Conservative exclusions for common numeric false positives.
                 q=contextual(b['text'],m.start(),len(m.group()))
                 if _noisy_match(rule.get('id',''),q): continue
+                if detector == 'obvious-claims':
+                    left = b.get('text','')[max(0, m.start() - 36):m.start()]
+                    if re.search(r'\bне\s*$', left, re.I):
+                        continue
                 if detector=='decimal-comma' and (re.search(r'\b(?:v?\d+\.\d+\.\d+|\d{1,3}(?:\.\d{1,3}){3})\b',q,re.I) or re.search(r'\b(?:рис|табл|гл)\.\s*\d+\.\d+',q,re.I)): continue
                 if detector=='thousands-spacing' and re.search(r'\b(?:19|20)\d{2}\b',m.group()): continue
                 ev.append(evidence(b,q)); fix=fix or pattern_fix
@@ -282,6 +307,7 @@ def run_deterministic(rule:dict,document:dict)->dict:
     detector=rule.get('detectorId') or RULE_FALLBACK.get(rule['id'])
     if rule['id'] in {'CORE-9-2','CORE-9-3'}: return run_bibliography_rule(rule,document)
     if not detector: return result(rule,'not_checked','Для правила не назначен детерминированный детектор.')
+    if detector=='title-process': return _title_process(rule,document)
     if detector=='title-length': return _title_length(rule,document)
     if detector=='personal-pronouns': return _personal(rule,document)
     if detector=='praise-claims': return _praise(rule,document)

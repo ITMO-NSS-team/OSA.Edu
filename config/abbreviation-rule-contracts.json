@@ -1,0 +1,181 @@
+{
+  "version": 2,
+  "generatedFrom": "config/rule-manifest.json",
+  "description": "Compatibility projection only. Runtime contracts live in the canonical rule manifest.",
+  "rules": {
+    "CORE-4-1": {
+      "notApplicableWhenAny": [
+        {
+          "isAbbreviation": [
+            "no"
+          ]
+        },
+        {
+          "firstUseHasRussianFullTermBefore": [
+            "not_applicable"
+          ]
+        },
+        {
+          "contextLanguage": [
+            "english"
+          ]
+        }
+      ],
+      "uncertainWhenAny": [
+        {
+          "isAbbreviation": [
+            "uncertain"
+          ]
+        },
+        {
+          "firstUseHasRussianFullTermBefore": [
+            "uncertain"
+          ]
+        },
+        {
+          "contextLanguage": [
+            "unknown"
+          ]
+        }
+      ],
+      "decision": {
+        "fact": "firstUseHasRussianFullTermBefore",
+        "pass": [
+          "yes"
+        ],
+        "violation": [
+          "no"
+        ]
+      },
+      "evidence": "first_use",
+      "passWhenAny": [
+        {
+          "listedInAbbreviationList": [
+            "yes"
+          ]
+        }
+      ]
+    },
+    "CORE-4-2": {
+      "notApplicableWhenAny": [
+        {
+          "isAbbreviation": [
+            "no"
+          ]
+        },
+        {
+          "hasHeadingUse": [
+            "no"
+          ]
+        }
+      ],
+      "uncertainWhenAny": [
+        {
+          "isAbbreviation": [
+            "uncertain"
+          ]
+        }
+      ],
+      "decision": {
+        "fact": "hasHeadingUse",
+        "violation": [
+          "yes"
+        ]
+      },
+      "evidence": "heading_uses"
+    },
+    "CORE-4-3": {
+      "notApplicableWhenAny": [
+        {
+          "isAbbreviation": [
+            "no"
+          ]
+        },
+        {
+          "isForeignAbbreviation": [
+            "no",
+            "not_applicable"
+          ]
+        },
+        {
+          "contextLanguage": [
+            "english"
+          ]
+        },
+        {
+          "hasRussianExplanationAnywhere": [
+            "not_applicable"
+          ]
+        }
+      ],
+      "uncertainWhenAny": [
+        {
+          "isAbbreviation": [
+            "uncertain"
+          ]
+        },
+        {
+          "isForeignAbbreviation": [
+            "uncertain"
+          ]
+        },
+        {
+          "contextLanguage": [
+            "unknown"
+          ]
+        },
+        {
+          "hasRussianExplanationAnywhere": [
+            "uncertain"
+          ]
+        }
+      ],
+      "decision": {
+        "fact": "hasRussianExplanationAnywhere",
+        "pass": [
+          "yes"
+        ],
+        "violation": [
+          "no"
+        ]
+      },
+      "evidence": "definition_context"
+    },
+    "CORE-12": {
+      "notApplicableWhenAny": [
+        {
+          "isAbbreviation": [
+            "no"
+          ]
+        },
+        {
+          "hasExplanationAnywhere": [
+            "not_applicable"
+          ]
+        }
+      ],
+      "uncertainWhenAny": [
+        {
+          "isAbbreviation": [
+            "uncertain"
+          ]
+        },
+        {
+          "hasExplanationAnywhere": [
+            "uncertain"
+          ]
+        }
+      ],
+      "decision": {
+        "fact": "hasExplanationAnywhere",
+        "pass": [
+          "yes"
+        ],
+        "violation": [
+          "no"
+        ]
+      },
+      "evidence": "definition_context"
+    }
+  }
+}

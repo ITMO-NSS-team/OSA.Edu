@@ -17,6 +17,7 @@ LEXICONS: dict[str, str] = {
     'diminutive': r'\b(?:лампочк\p{L}*|программк\p{L}*|строчк\p{L}*|стрелочк\p{L}*|кнопочк\p{L}*|табличк\p{L}*|файлик\p{L}*|скриптик\p{L}*)\b',
     'to-est': r'\bто\s+есть\b',
     'sentence-start': r'(?:^|[.!?…]\s+)(?:А|Но|Так\s+как|То\s+есть|Т\.?\s*к\.|Т\.?\s*е\.)\s+',
+    'novelty-claim': r'\b(?:впервые|нов(?:ый|ая|ое|ые)\s+(?:метод|алгоритм|модель|подход))\b',
 }
 
 _PRONOUNS = re.compile(
@@ -191,6 +192,14 @@ def _lexical(document: dict, family: str) -> list[dict]:
                 continue
             if family == 'sentence-start' and _continues_previous_sentence(document, block, match.start()):
                 continue
+            if family == 'condescending':
+                # CORE-3-6 forbids unsupported assertions such as «очевидно», but
+                # explicit negation has the opposite meaning. Keep this lexical
+                # contract local and generic rather than teaching the model
+                # document-specific phrases.
+                left = text[max(0, match.start() - 36):match.start()]
+                if re.search(r'\bне\s*$', left, re.I):
+                    continue
             start, end = _sentence_span(text, match.start())
             result.append(_make(family, block, start, end, context=_block_context(document, block, match.start(), match.end()), meta={'marker': match.group(0)}))
     return _dedupe(result)
@@ -571,6 +580,7 @@ _BUILDERS: dict[str, Callable[[dict], list[dict]]] = {
     'diminutive': lambda doc: _lexical(doc, 'diminutive'),
     'to-est': lambda doc: _lexical(doc, 'to-est'),
     'sentence-start': lambda doc: _lexical(doc, 'sentence-start'),
+    'novelty-claim': lambda doc: _lexical(doc, 'novelty-claim'),
     'abbrev-first-use': _abbrev_first_use,
     'abbrev-in-heading': _abbrev_in_heading,
     'abbrev-foreign': _abbrev_foreign,

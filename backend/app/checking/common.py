@@ -36,7 +36,7 @@ def result(rule:dict,status:str,explanation:str,evidence_items:list[dict]|None=N
 
 
 def is_actual_caption(block:dict) -> bool:
-    return block.get('type')=='caption' and bool(re.match(r'^(?:рис(?:унок)?|таблица|график)\s*\d+(?:\.\d+)?\s*(?:[.–—-]{1,2}|:)',(block.get('text') or '').strip(),re.I))
+    return block.get('type')=='caption' and bool(re.match(r'^(?:рис(?:унок)?|таблица|график)\s*\d+(?:\.\d+)*(?:\s*[–—-]{1,2}\s*|\s*:\s*|\.(?!\d)\s+)\S',(block.get('text') or '').strip(),re.I))
 
 
 def mapped_excluded_ids(document:dict) -> set[str]:
@@ -88,9 +88,16 @@ def formula_like_block(value: str) -> bool:
 def is_likely_table_context(value: str) -> bool:
     compact_value = compact(value)
     numbers = len(re.findall(r'(?<!\p{L})\d+(?:[,.]\d+)?', compact_value))
+    interval_cells = len(re.findall(r'\[[+-]?\d+(?:[,.]\d+)?\s*;\s*[+-]?\d+(?:[,.]\d+)?\]', compact_value))
+    numeric_chars = len(re.findall(r'[0-9%.,;\[\]]', compact_value))
+    density = numeric_chars / max(1, len(compact_value))
+    # Flattened tables often lose their explicit block type. Detect them from
+    # layout-like numeric repetition rather than domain-specific column names.
+    repeated_delimited_cells = len(re.findall(r'(?:^|\s)[^\s]{1,24}(?:\s+[^\s]{1,24}){5,}', compact_value))
     return bool(
-        re.search(r'(?:Модель\s+Обслуживание|Precision\s+Recall)', compact_value, re.I)
-        or (re.search(r'(?:Датасет|Конфигурация|Кодировщик|Шум\s+Поиск|Судья\s+Необходим)', compact_value, re.I) and numbers >= 2)
+        interval_cells >= 3
+        or (numbers >= 18 and density >= .10)
+        or (numbers >= 10 and repeated_delimited_cells >= 1 and density >= .07)
     )
 
 

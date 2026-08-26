@@ -1,0 +1,4286 @@
+{
+  "version": 2,
+  "description": "Canonical machine-readable rule metadata. Normative wording stays in rules-data/*.csv; runtime control flow must come from this manifest, not from wording heuristics.",
+  "rules": {
+    "CORE-1-1": {
+      "layer": "core",
+      "sourceNumber": "1.1",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "defense-statement-form",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_statements_complete"
+        ],
+        "exhaustive": true,
+        "requiresArtifacts": [
+          "defense_statements"
+        ]
+      }
+    },
+    "CORE-1-2": {
+      "layer": "core",
+      "sourceNumber": "1.2",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "defense-statement-form",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_statements_complete"
+        ],
+        "exhaustive": true,
+        "requiresArtifacts": [
+          "defense_statements"
+        ]
+      }
+    },
+    "CORE-1-3": {
+      "layer": "core",
+      "sourceNumber": "1.3",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "defense-statement-form",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_statements_complete"
+        ],
+        "exhaustive": true,
+        "requiresArtifacts": [
+          "defense_statements"
+        ]
+      }
+    },
+    "CORE-1-4": {
+      "layer": "core",
+      "sourceNumber": "1.4",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "deterministic",
+      "dedupKey": "core:1.4",
+      "engine": {
+        "kind": "deterministic"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "requiresArtifacts": [
+          "defense_statements"
+        ]
+      }
+    },
+    "CORE-1-5": {
+      "layer": "core",
+      "sourceNumber": "1.5",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "deterministic",
+      "dedupKey": "core:1.5",
+      "engine": {
+        "kind": "deterministic"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "requiresArtifacts": [
+          "defense_statements"
+        ]
+      }
+    },
+    "CORE-1-6": {
+      "layer": "core",
+      "sourceNumber": "1.6",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "structural",
+      "dedupKey": "core:1.6",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "Часть правила относится к отсутствующей презентации.",
+        "requiresArtifacts": [
+          "defense_statements"
+        ]
+      }
+    },
+    "CORE-2-1": {
+      "layer": "core",
+      "sourceNumber": "2.1",
+      "scope": "document",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "core:2.1",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "CORE-2-2": {
+      "layer": "core",
+      "sourceNumber": "2.2",
+      "scope": "document",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "core:2.2",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "CORE-2-3": {
+      "layer": "core",
+      "sourceNumber": "2.3",
+      "scope": "document",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "core:2.3",
+      "engine": {
+        "kind": "semantic_fact",
+        "facts": [
+          "analogs",
+          "prototype",
+          "prototype_disadvantages"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "document_only",
+        "dedupGroup": "prototype_analysis",
+        "guidance": "Смысловой критерий CORE-2-3: проверяй содержание, а не буквальные маркеры. Не требуй слов «аналог» и «прототип» как обязательных формулировок. analogs=found, если в главе названы или однозначно определены существующие решения/подходы и есть содержательное сравнение с ними. prototype=found, если одно конкретное существующее решение или baseline функционально выделено как ближайшая точка сравнения, основа, от которой отталкивается новый метод, или наиболее близкий подход — даже без слова «прототип». prototype_disadvantages=found, если для этого же решения описаны ограничения/недостатки и понятно, какое из них устраняет или обходит предлагаемое решение. Если сравниваются несколько близких решений, но нельзя уверенно выбрать одно основное, ставь prototype=ambiguous, а не not_found. Нарушение ставь только при реальном отсутствии требуемого смысла после просмотра всей назначенной главы, а не из-за отсутствия терминов «прототип»/«аналог».",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "analogs",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "analogs",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "prototype",
+              "value": "ambiguous",
+              "status": "uncertain",
+              "includeIfNotFoundOrAmbiguous": [
+                "prototype_disadvantages"
+              ]
+            },
+            {
+              "fact": "prototype",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "prototype_disadvantages",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "prototype_disadvantages",
+              "value": "not_found",
+              "status": "violation"
+            }
+          ],
+          "default": "pass"
+        },
+        "fix": "В соответствующей главе явно связать уже рассматриваемые в работе существующие решения с ближайшей точкой сравнения и описать её ограничение, устраняемое предлагаемым результатом. Не добавлять внешние аналоги только ради выполнения правила."
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_chapter_matrix"
+        ],
+        "exhaustive": true,
+        "requiresArtifacts": [
+          "defense_statements"
+        ]
+      }
+    },
+    "CORE-3-1": {
+      "layer": "core",
+      "sourceNumber": "3.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "candidate",
+      "dedupKey": "impersonal-style",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "impersonal"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "impersonal",
+        "exhaustive": true
+      }
+    },
+    "CORE-3-2": {
+      "layer": "core",
+      "sourceNumber": "3.2",
+      "scope": "figure_table",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "candidate",
+      "dedupKey": "small-numerals",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "numerals"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "numerals",
+        "exhaustive": true
+      }
+    },
+    "CORE-3-3": {
+      "layer": "core",
+      "sourceNumber": "3.3",
+      "scope": "list",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:numbered-list-capitalization",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "numbered-list-capitalization"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-3-4": {
+      "layer": "core",
+      "sourceNumber": "3.4",
+      "scope": "list",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:numbered-list-ending",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "numbered-list-ending"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-3-5": {
+      "layer": "core",
+      "sourceNumber": "3.5",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "filler-language",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "lexical-replacements"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "detectorId": "lexical-replacements"
+      }
+    },
+    "CORE-3-6": {
+      "layer": "core",
+      "sourceNumber": "3.6",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "condescending-language",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "obvious-claims"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "detectorId": "obvious-claims"
+      }
+    },
+    "CORE-3-7": {
+      "layer": "core",
+      "sourceNumber": "3.7",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "candidate",
+      "dedupKey": "evaluative-language",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "overclaim"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "overclaim",
+        "exhaustive": true
+      }
+    },
+    "CORE-4-1": {
+      "layer": "core",
+      "sourceNumber": "4.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "abbreviation-introduction",
+      "engine": {
+        "kind": "abbreviation_fact_map",
+        "inventory": "abbreviation",
+        "contract": {
+          "notApplicableWhenAny": [
+            {
+              "isAbbreviation": [
+                "no"
+              ]
+            },
+            {
+              "firstUseHasRussianFullTermBefore": [
+                "not_applicable"
+              ]
+            },
+            {
+              "contextLanguage": [
+                "english"
+              ]
+            }
+          ],
+          "uncertainWhenAny": [
+            {
+              "isAbbreviation": [
+                "uncertain"
+              ]
+            },
+            {
+              "firstUseHasRussianFullTermBefore": [
+                "uncertain"
+              ]
+            },
+            {
+              "contextLanguage": [
+                "unknown"
+              ]
+            }
+          ],
+          "decision": {
+            "fact": "firstUseHasRussianFullTermBefore",
+            "pass": [
+              "yes"
+            ],
+            "violation": [
+              "no"
+            ]
+          },
+          "evidence": "first_use",
+          "passWhenAny": [
+            {
+              "listedInAbbreviationList": [
+                "yes"
+              ]
+            }
+          ]
+        },
+        "reportPolicy": {
+          "requiresExpansion": true,
+          "requiresRussianExplanation": false,
+          "violationExplanation": "По карте обозначений Python подтвердил сокращения, которых нет в отдельном списке сокращений и которые не раскрыты при первом употреблении: {terms}.",
+          "fix": "Добавить сокращение в отдельный список сокращений либо дать полный русский термин перед первым употреблением."
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "whole_document"
+        ],
+        "exhaustive": true
+      }
+    },
+    "CORE-4-2": {
+      "layer": "core",
+      "sourceNumber": "4.2",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "abbreviation-heading",
+      "engine": {
+        "kind": "abbreviation_fact_map",
+        "inventory": "abbreviation",
+        "contract": {
+          "notApplicableWhenAny": [
+            {
+              "isAbbreviation": [
+                "no"
+              ]
+            },
+            {
+              "hasHeadingUse": [
+                "no"
+              ]
+            }
+          ],
+          "uncertainWhenAny": [
+            {
+              "isAbbreviation": [
+                "uncertain"
+              ]
+            }
+          ],
+          "decision": {
+            "fact": "hasHeadingUse",
+            "violation": [
+              "yes"
+            ]
+          },
+          "evidence": "heading_uses"
+        },
+        "reportPolicy": {
+          "requiresExpansion": false,
+          "requiresRussianExplanation": false,
+          "violationExplanation": "По карте обозначений в названии/оглавлении/заголовках подтверждены именно сокращения: {terms}.",
+          "fix": "Убрать подтверждённые сокращения из заголовков либо использовать полный термин согласно правилу."
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "whole_document"
+        ],
+        "exhaustive": true
+      }
+    },
+    "CORE-4-3": {
+      "layer": "core",
+      "sourceNumber": "4.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "abbreviation-translation",
+      "engine": {
+        "kind": "abbreviation_fact_map",
+        "inventory": "abbreviation",
+        "contract": {
+          "notApplicableWhenAny": [
+            {
+              "isAbbreviation": [
+                "no"
+              ]
+            },
+            {
+              "isForeignAbbreviation": [
+                "no",
+                "not_applicable"
+              ]
+            },
+            {
+              "contextLanguage": [
+                "english"
+              ]
+            },
+            {
+              "hasRussianExplanationAnywhere": [
+                "not_applicable"
+              ]
+            }
+          ],
+          "uncertainWhenAny": [
+            {
+              "isAbbreviation": [
+                "uncertain"
+              ]
+            },
+            {
+              "isForeignAbbreviation": [
+                "uncertain"
+              ]
+            },
+            {
+              "contextLanguage": [
+                "unknown"
+              ]
+            },
+            {
+              "hasRussianExplanationAnywhere": [
+                "uncertain"
+              ]
+            }
+          ],
+          "decision": {
+            "fact": "hasRussianExplanationAnywhere",
+            "pass": [
+              "yes"
+            ],
+            "violation": [
+              "no"
+            ]
+          },
+          "evidence": "definition_context"
+        },
+        "reportPolicy": {
+          "requiresExpansion": false,
+          "requiresRussianExplanation": true,
+          "violationExplanation": "По карте обозначений подтверждены иностранные сокращения без русского пояснения: {terms}.",
+          "fix": "Добавить русский полный термин или перевод для подтверждённых иностранных сокращений."
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "whole_document"
+        ],
+        "exhaustive": true
+      }
+    },
+    "CORE-4-4": {
+      "layer": "core",
+      "sourceNumber": "4.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "core:4.4",
+      "engine": {
+        "kind": "semantic",
+        "globalFactKeys": [
+          "abbreviationGlossary",
+          "termDefinitions"
+        ]
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Проверяется научное ядро; терминологическая понятность остаётся экспертной оценкой."
+      }
+    },
+    "CORE-5-1": {
+      "layer": "core",
+      "sourceNumber": "5.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "core:5.1",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Из текстового слоя нельзя надёжно определить шрифт, кегль и интервал."
+      }
+    },
+    "CORE-5-2": {
+      "layer": "core",
+      "sourceNumber": "5.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "core:5.2",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Из текстового слоя нельзя надёжно определить выравнивание абзацев."
+      }
+    },
+    "CORE-5-3": {
+      "layer": "core",
+      "sourceNumber": "5.3",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "core:5.3",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-5-4": {
+      "layer": "core",
+      "sourceNumber": "5.4",
+      "scope": "figure_table",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "caption-terminal-punctuation",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-5-5": {
+      "layer": "core",
+      "sourceNumber": "5.5",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:dash-spacing",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "dash-spacing"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-5-6": {
+      "layer": "core",
+      "sourceNumber": "5.6",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:quote-consistency",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "quote-consistency"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-5-7": {
+      "layer": "core",
+      "sourceNumber": "5.7",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:spacing",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "spacing"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-6-1": {
+      "layer": "core",
+      "sourceNumber": "6.1",
+      "scope": "title",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:title-process",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "title-process"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-6-2": {
+      "layer": "core",
+      "sourceNumber": "6.2",
+      "scope": "title",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:title-vague-efficiency",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "title-vague-efficiency"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-6-3": {
+      "layer": "core",
+      "sourceNumber": "6.3",
+      "scope": "title",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:title-length",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "title-length"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-6-4": {
+      "layer": "core",
+      "sourceNumber": "6.4",
+      "scope": "goal",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "core:6.4",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "title_goal"
+        ],
+        "exhaustive": true
+      }
+    },
+    "CORE-7-1": {
+      "layer": "core",
+      "sourceNumber": "7.1",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "core:7.1",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-7-2": {
+      "layer": "core",
+      "sourceNumber": "7.2",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "caption-terminal-punctuation",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "По текстовому слою проверяется пунктуация, но не положение подписи."
+      }
+    },
+    "CORE-7-3": {
+      "layer": "core",
+      "sourceNumber": "7.3",
+      "scope": "figure_table",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "core:7.3",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Подписи осей требуют визуального анализа графиков."
+      }
+    },
+    "CORE-7-4": {
+      "layer": "core",
+      "sourceNumber": "7.4",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "core:7.4",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "PDF может терять номер и расположение формулы."
+      }
+    },
+    "CORE-7-5": {
+      "layer": "core",
+      "sourceNumber": "7.5",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "core:7.5",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "PDF может терять перенос строки после формулы."
+      }
+    },
+    "CORE-8-1": {
+      "layer": "core",
+      "sourceNumber": "8.1",
+      "scope": "list",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "core:8.1",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-8-2": {
+      "layer": "core",
+      "sourceNumber": "8.2",
+      "scope": "chapter",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "core:8.2",
+      "engine": {
+        "kind": "semantic_fact",
+        "facts": [
+          "comparison_with_prototype_in_chapter_conclusions"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "document_only",
+        "dedupGroup": "prototype_comparison",
+        "guidance": "Смысловой критерий CORE-8-2: НЕ требуй буквальную фразу «отличающийся тем, что». Считай comparison_with_prototype_in_chapter_conclusions=found, если вывод содержательно сопоставляет разработанное решение с известным методом, классом подходов или обычной практикой: называет или однозначно идентифицирует сравниваемое решение, указывает его ограничение/отличие и описывает, чем разработанный метод это ограничение устраняет, заменяет или принципиально делает иначе. Конкретное название прототипа не обязательно, если класс известного подхода определён однозначно. Например, конструкция «алгоритм устраняет ограничение ..., присущее E-SINDy: произведение ... заменяется ...» является полноценным сравнением. Простое перечисление результатов или преимуществ без сравниваемого известного решения — not_found.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "comparison_with_prototype_in_chapter_conclusions",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "comparison_with_prototype_in_chapter_conclusions",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        },
+        "fix": "В выводах соответствующей главы добавить содержательное сопоставление разработанного результата с уже рассмотренным в работе известным решением или классом подходов и указать устраняемое ограничение."
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "primary_chapter_conclusions"
+        ],
+        "exhaustive": true,
+        "requiresArtifacts": [
+          "defense_statements"
+        ],
+        "requiresCompleteSelectors": [
+          "primary_chapter_conclusions"
+        ]
+      }
+    },
+    "CORE-8-3": {
+      "layer": "core",
+      "sourceNumber": "8.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "core:8.3",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "conclusion"
+        ],
+        "exhaustive": true
+      }
+    },
+    "CORE-9-1": {
+      "layer": "core",
+      "sourceNumber": "9.1",
+      "scope": "bibliography",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "core:9.1",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-9-2": {
+      "layer": "core",
+      "sourceNumber": "9.2",
+      "scope": "bibliography",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:bibliography-junk",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "bibliography-junk"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-9-3": {
+      "layer": "core",
+      "sourceNumber": "9.3",
+      "scope": "bibliography",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:bibliography-pages",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "bibliography-pages"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-9-4": {
+      "layer": "core",
+      "sourceNumber": "9.4",
+      "scope": "bibliography",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "core:9.4",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-10-1": {
+      "layer": "core",
+      "sourceNumber": "10.1",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "core:10.1",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Нужны презентация и запись доклада."
+      }
+    },
+    "CORE-10-2": {
+      "layer": "core",
+      "sourceNumber": "10.2",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "core:10.2",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Нужна запись доклада."
+      }
+    },
+    "CORE-10-3": {
+      "layer": "core",
+      "sourceNumber": "10.3",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "core:10.3",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Нужна презентация."
+      }
+    },
+    "CORE-10-4": {
+      "layer": "core",
+      "sourceNumber": "10.4",
+      "scope": "presentation",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "core:10.4",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Нужна презентация."
+      }
+    },
+    "CORE-10-5": {
+      "layer": "core",
+      "sourceNumber": "10.5",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "core:10.5",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Нужна презентация."
+      }
+    },
+    "CORE-10-6": {
+      "layer": "core",
+      "sourceNumber": "10.6",
+      "scope": "presentation",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "manual",
+      "dedupKey": "core:10.6",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Правило относится к презентации и докладу."
+      }
+    },
+    "CORE-10-7": {
+      "layer": "core",
+      "sourceNumber": "10.7",
+      "scope": "presentation",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "manual",
+      "dedupKey": "core:10.7",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Нужна запись доклада."
+      }
+    },
+    "CORE-11-1": {
+      "layer": "core",
+      "sourceNumber": "11.1",
+      "scope": "figure_table",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:yo-letter",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "yo-letter"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "allowPass": false,
+        "reason": "Проверяется высокоточный словарь типичных замен е/ё; отсутствие всех возможных случаев не доказывается."
+      }
+    },
+    "CORE-11-2": {
+      "layer": "core",
+      "sourceNumber": "11.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "candidate",
+      "dedupKey": "sentence-start",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "sentence-start"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "sentence-start",
+        "exhaustive": true
+      }
+    },
+    "CORE-11-3": {
+      "layer": "core",
+      "sourceNumber": "11.3",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:forbidden-abbreviations",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "forbidden-abbreviations"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-11-4": {
+      "layer": "core",
+      "sourceNumber": "11.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:colon-a-imenno",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "colon-a-imenno"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-11-5": {
+      "layer": "core",
+      "sourceNumber": "11.5",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "to-est",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "to-est"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "detectorId": "to-est"
+      }
+    },
+    "CORE-11-6": {
+      "layer": "core",
+      "sourceNumber": "11.6",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "candidate",
+      "dedupKey": "diminutive-language",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "diminutive"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "diminutive",
+        "exhaustive": true
+      }
+    },
+    "CORE-12": {
+      "layer": "core",
+      "sourceNumber": "12",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "abbreviation-introduction",
+      "engine": {
+        "kind": "abbreviation_fact_map",
+        "inventory": "abbreviation",
+        "contract": {
+          "notApplicableWhenAny": [
+            {
+              "isAbbreviation": [
+                "no"
+              ]
+            },
+            {
+              "hasExplanationAnywhere": [
+                "not_applicable"
+              ]
+            }
+          ],
+          "uncertainWhenAny": [
+            {
+              "isAbbreviation": [
+                "uncertain"
+              ]
+            },
+            {
+              "hasExplanationAnywhere": [
+                "uncertain"
+              ]
+            }
+          ],
+          "decision": {
+            "fact": "hasExplanationAnywhere",
+            "pass": [
+              "yes"
+            ],
+            "violation": [
+              "no"
+            ]
+          },
+          "evidence": "definition_context"
+        },
+        "reportPolicy": {
+          "requiresExpansion": true,
+          "requiresRussianExplanation": false,
+          "violationExplanation": "По карте обозначений подтверждены сокращения без document-grounded расшифровки: {terms}.",
+          "fix": "Добавить расшифровку подтверждённых сокращений в тексте или явном списке сокращений."
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "whole_document"
+        ],
+        "exhaustive": true
+      }
+    },
+    "CORE-13": {
+      "layer": "core",
+      "sourceNumber": "13",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "structural",
+      "dedupKey": "core:13",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-14": {
+      "layer": "core",
+      "sourceNumber": "14",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "core:14",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "implementation_context"
+        ],
+        "exhaustive": true
+      },
+      "applicability": {
+        "predicate": "technical_dissertation"
+      }
+    },
+    "CORE-15": {
+      "layer": "core",
+      "sourceNumber": "15",
+      "scope": "chapter",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "core:15",
+      "engine": {
+        "kind": "semantic_fact",
+        "facts": [
+          "analogs_inside_chapter",
+          "prototype_inside_chapter",
+          "prototype_disadvantages_inside_chapter"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "document_only",
+        "dedupGroup": "prototype_analysis",
+        "sharedFactsFrom": "CORE-2-3",
+        "factNameMap": {
+          "analogs": "analogs_inside_chapter",
+          "prototype": "prototype_inside_chapter",
+          "prototype_disadvantages": "prototype_disadvantages_inside_chapter"
+        },
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "analogs_inside_chapter",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "analogs_inside_chapter",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "prototype_inside_chapter",
+              "value": "ambiguous",
+              "status": "uncertain",
+              "includeIfNotFoundOrAmbiguous": [
+                "prototype_disadvantages_inside_chapter"
+              ]
+            },
+            {
+              "fact": "prototype_inside_chapter",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "prototype_disadvantages_inside_chapter",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "prototype_disadvantages_inside_chapter",
+              "value": "not_found",
+              "status": "violation"
+            }
+          ],
+          "default": "pass"
+        },
+        "fix": "В соответствующей главе явно связать уже рассматриваемые в работе существующие решения с ближайшей точкой сравнения и описать её ограничение, устраняемое предлагаемым результатом. Не добавлять внешние аналоги только ради выполнения правила."
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_chapter_matrix"
+        ],
+        "exhaustive": true,
+        "requiresArtifacts": [
+          "defense_statements"
+        ]
+      }
+    },
+    "CORE-16": {
+      "layer": "core",
+      "sourceNumber": "16",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "core:16",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Цветовое кодирование требует визуального анализа текста и слайдов."
+      }
+    },
+    "CORE-17": {
+      "layer": "core",
+      "sourceNumber": "17",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:see-figure",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "see-figure"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "CORE-18": {
+      "layer": "core",
+      "sourceNumber": "18",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "structural",
+      "dedupKey": "core:18",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-19": {
+      "layer": "core",
+      "sourceNumber": "19",
+      "scope": "figure_table",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "caption-terminal-punctuation",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "CORE-20": {
+      "layer": "core",
+      "sourceNumber": "20",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "candidate",
+      "dedupKey": "detector:first-new",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "novelty-claim"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "novelty-claim",
+        "exhaustive": true
+      }
+    },
+    "SOFT-001": {
+      "layer": "soft",
+      "sourceNumber": "1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:1",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-002": {
+      "layer": "soft",
+      "sourceNumber": "2",
+      "scope": "document",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:2",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-003": {
+      "layer": "soft",
+      "sourceNumber": "3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:3",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-004": {
+      "layer": "soft",
+      "sourceNumber": "4",
+      "scope": "document",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:4",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-005": {
+      "layer": "soft",
+      "sourceNumber": "5",
+      "scope": "document",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:5",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-006": {
+      "layer": "soft",
+      "sourceNumber": "6",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:6",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-007": {
+      "layer": "soft",
+      "sourceNumber": "7",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:7",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-008": {
+      "layer": "soft",
+      "sourceNumber": "8",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:8",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-009": {
+      "layer": "soft",
+      "sourceNumber": "9",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:9",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_statements"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-010": {
+      "layer": "soft",
+      "sourceNumber": "10",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:10",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_chapters"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-011": {
+      "layer": "soft",
+      "sourceNumber": "11",
+      "scope": "chapter",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:11",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_chapters"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-012": {
+      "layer": "soft",
+      "sourceNumber": "12",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:12",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "chapter"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-013": {
+      "layer": "soft",
+      "sourceNumber": "13",
+      "scope": "list",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:13",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "chapter_conclusions"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-014": {
+      "layer": "soft",
+      "sourceNumber": "14",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:14",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "chapter_conclusions"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-015": {
+      "layer": "soft",
+      "sourceNumber": "15",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:15",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "conclusion_global"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-016": {
+      "layer": "soft",
+      "sourceNumber": "16",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:16",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "implementation_context"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-017": {
+      "layer": "soft",
+      "sourceNumber": "17",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:17",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-018": {
+      "layer": "soft",
+      "sourceNumber": "18",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:18",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-019": {
+      "layer": "soft",
+      "sourceNumber": "19",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:19",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_statements"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-020": {
+      "layer": "soft",
+      "sourceNumber": "20",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:20",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_statements"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-021": {
+      "layer": "soft",
+      "sourceNumber": "21",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:21",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_statements"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-022": {
+      "layer": "soft",
+      "sourceNumber": "22",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:22",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_statements"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-023": {
+      "layer": "soft",
+      "sourceNumber": "23",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "deterministic",
+      "dedupKey": "soft:23",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "defense-punctuation"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "detectorId": "defense-punctuation",
+        "selectors": [
+          "defense_statements"
+        ],
+        "exhaustive": true,
+        "allowPass": true
+      }
+    },
+    "SOFT-024": {
+      "layer": "soft",
+      "sourceNumber": "24",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "deterministic",
+      "dedupKey": "soft:24",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "defense-symbols"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "detectorId": "defense-symbols",
+        "selectors": [
+          "defense_statements"
+        ],
+        "exhaustive": true,
+        "allowPass": true
+      }
+    },
+    "SOFT-025": {
+      "layer": "soft",
+      "sourceNumber": "25",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:25",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "defense_chapters"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-026": {
+      "layer": "soft",
+      "sourceNumber": "26",
+      "scope": "defense_statements",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "structural",
+      "dedupKey": "soft:26",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-027": {
+      "layer": "soft",
+      "sourceNumber": "27",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "candidate",
+      "dedupKey": "impersonal-style",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "impersonal"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "impersonal",
+        "exhaustive": true
+      }
+    },
+    "SOFT-028": {
+      "layer": "soft",
+      "sourceNumber": "28",
+      "scope": "list",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:numbered-list-capitalization",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "numbered-list-capitalization"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-029": {
+      "layer": "soft",
+      "sourceNumber": "29",
+      "scope": "presentation",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "detector:heading-final-period",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-030": {
+      "layer": "soft",
+      "sourceNumber": "30",
+      "scope": "list",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:numbered-list-ending",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "numbered-list-ending"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-031": {
+      "layer": "soft",
+      "sourceNumber": "31",
+      "scope": "list",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:bullet-list-ending",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "bullet-list-ending"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-032": {
+      "layer": "soft",
+      "sourceNumber": "32",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:dash-spacing",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "dash-spacing"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-033": {
+      "layer": "soft",
+      "sourceNumber": "33",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "manual",
+      "dedupKey": "soft:33",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-034": {
+      "layer": "soft",
+      "sourceNumber": "34",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:quote-consistency",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "quote-consistency"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-035": {
+      "layer": "soft",
+      "sourceNumber": "35",
+      "scope": "figure_table",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "candidate",
+      "dedupKey": "small-numerals",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "numerals"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "numerals",
+        "exhaustive": true
+      }
+    },
+    "SOFT-036": {
+      "layer": "soft",
+      "sourceNumber": "36",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "semantic",
+      "dedupKey": "soft:36",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-037": {
+      "layer": "soft",
+      "sourceNumber": "37",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:yo-letter",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "yo-letter"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "allowPass": false,
+        "reason": "Проверяется высокоточный словарь типичных замен е/ё."
+      }
+    },
+    "SOFT-038": {
+      "layer": "soft",
+      "sourceNumber": "38",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:lexical-replacements",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "lexical-replacements"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-039": {
+      "layer": "soft",
+      "sourceNumber": "39",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "candidate",
+      "dedupKey": "evaluative-language",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "overclaim"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "overclaim",
+        "exhaustive": true
+      }
+    },
+    "SOFT-040": {
+      "layer": "soft",
+      "sourceNumber": "40",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "candidate",
+      "dedupKey": "diminutive-language",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "diminutive"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "diminutive",
+        "exhaustive": true
+      }
+    },
+    "SOFT-041": {
+      "layer": "soft",
+      "sourceNumber": "41",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:41",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-042": {
+      "layer": "soft",
+      "sourceNumber": "42",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "candidate",
+      "dedupKey": "sentence-start",
+      "engine": {
+        "kind": "candidate",
+        "candidateFamily": "sentence-start"
+      },
+      "routing": {
+        "strategy": "candidate",
+        "candidateFamily": "sentence-start",
+        "exhaustive": true
+      }
+    },
+    "SOFT-043": {
+      "layer": "soft",
+      "sourceNumber": "43",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:43",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-044": {
+      "layer": "soft",
+      "sourceNumber": "44",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:colon-and-to-est",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "colon-and-to-est"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-045": {
+      "layer": "soft",
+      "sourceNumber": "45",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:above-written",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "above-written"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-046": {
+      "layer": "soft",
+      "sourceNumber": "46",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:lexical-cliches",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "lexical-cliches"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-047": {
+      "layer": "soft",
+      "sourceNumber": "47",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:jargon",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "jargon"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-048": {
+      "layer": "soft",
+      "sourceNumber": "48",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:first-new",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "first-new"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-049": {
+      "layer": "soft",
+      "sourceNumber": "49",
+      "scope": "title",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:49",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-050": {
+      "layer": "soft",
+      "sourceNumber": "50",
+      "scope": "title",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:title-process",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "title-process"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-051": {
+      "layer": "soft",
+      "sourceNumber": "51",
+      "scope": "title",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:title-length",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "title-length"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-052": {
+      "layer": "soft",
+      "sourceNumber": "52",
+      "scope": "title",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:52",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-053": {
+      "layer": "soft",
+      "sourceNumber": "53",
+      "scope": "goal",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:goal-infinitive",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "goal-infinitive"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-054": {
+      "layer": "soft",
+      "sourceNumber": "54",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "semantic",
+      "dedupKey": "soft:54",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-055": {
+      "layer": "soft",
+      "sourceNumber": "55",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:55",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-056": {
+      "layer": "soft",
+      "sourceNumber": "56",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "structural",
+      "dedupKey": "soft:56",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-057": {
+      "layer": "soft",
+      "sourceNumber": "57",
+      "scope": "document",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "manual",
+      "dedupKey": "soft:57",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-058": {
+      "layer": "soft",
+      "sourceNumber": "58",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:58",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-059": {
+      "layer": "soft",
+      "sourceNumber": "59",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:python-capitalization",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "python-capitalization"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-060": {
+      "layer": "soft",
+      "sourceNumber": "60",
+      "scope": "bibliography",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:initials-order",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "initials-order"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "allowPass": false,
+        "reason": "Код проверяет порядок инициалов в библиографии; отдельные случаи в основном тексте требуют просмотра."
+      }
+    },
+    "SOFT-061": {
+      "layer": "soft",
+      "sourceNumber": "61",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:61",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-062": {
+      "layer": "soft",
+      "sourceNumber": "62",
+      "scope": "formula",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "structural",
+      "dedupKey": "soft:62",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+      }
+    },
+    "SOFT-063": {
+      "layer": "soft",
+      "sourceNumber": "63",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:63",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-064": {
+      "layer": "soft",
+      "sourceNumber": "64",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:64",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+      }
+    },
+    "SOFT-065": {
+      "layer": "soft",
+      "sourceNumber": "65",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:65",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-066": {
+      "layer": "soft",
+      "sourceNumber": "66",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:66",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+      }
+    },
+    "SOFT-067": {
+      "layer": "soft",
+      "sourceNumber": "67",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:67",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-068": {
+      "layer": "soft",
+      "sourceNumber": "68",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:68",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-069": {
+      "layer": "soft",
+      "sourceNumber": "69",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:69",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-070": {
+      "layer": "soft",
+      "sourceNumber": "70",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:70",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+      }
+    },
+    "SOFT-071": {
+      "layer": "soft",
+      "sourceNumber": "71",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:71",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-072": {
+      "layer": "soft",
+      "sourceNumber": "72",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:72",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural",
+        "allowPass": false,
+        "reason": "Текстовый слой позволяет проверить только часть визуального требования."
+      }
+    },
+    "SOFT-073": {
+      "layer": "soft",
+      "sourceNumber": "73",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:73",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-074": {
+      "layer": "soft",
+      "sourceNumber": "74",
+      "scope": "formula",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:decimal-comma",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "decimal-comma"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-075": {
+      "layer": "soft",
+      "sourceNumber": "75",
+      "scope": "formula",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:thousands-spacing",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "thousands-spacing"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-076": {
+      "layer": "soft",
+      "sourceNumber": "76",
+      "scope": "formula",
+      "severity": "minor",
+      "weight": 1,
+      "mode": "deterministic",
+      "dedupKey": "detector:percent-spacing",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "percent-spacing"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-077": {
+      "layer": "soft",
+      "sourceNumber": "77",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:77",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-078": {
+      "layer": "soft",
+      "sourceNumber": "78",
+      "scope": "bibliography",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:78",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "bibliography"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-079": {
+      "layer": "soft",
+      "sourceNumber": "79",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:79",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-080": {
+      "layer": "soft",
+      "sourceNumber": "80",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:80",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-081": {
+      "layer": "soft",
+      "sourceNumber": "81",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:81",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-082": {
+      "layer": "soft",
+      "sourceNumber": "82",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:82",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-083": {
+      "layer": "soft",
+      "sourceNumber": "83",
+      "scope": "presentation",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:83",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-084": {
+      "layer": "soft",
+      "sourceNumber": "84",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:84",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-085": {
+      "layer": "soft",
+      "sourceNumber": "85",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:85",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-086": {
+      "layer": "soft",
+      "sourceNumber": "86",
+      "scope": "presentation",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:86",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-087": {
+      "layer": "soft",
+      "sourceNumber": "87",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:87",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-088": {
+      "layer": "soft",
+      "sourceNumber": "88",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:88",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-089": {
+      "layer": "soft",
+      "sourceNumber": "89",
+      "scope": "presentation",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "manual",
+      "dedupKey": "soft:89",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-090": {
+      "layer": "soft",
+      "sourceNumber": "90",
+      "scope": "presentation",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "manual",
+      "dedupKey": "soft:90",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-091": {
+      "layer": "soft",
+      "sourceNumber": "91",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:91",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-092": {
+      "layer": "soft",
+      "sourceNumber": "92",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:92",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-093": {
+      "layer": "soft",
+      "sourceNumber": "93",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:93",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-094": {
+      "layer": "soft",
+      "sourceNumber": "94",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:94",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-095": {
+      "layer": "soft",
+      "sourceNumber": "95",
+      "scope": "figure_table",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:95",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "chapter"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-096": {
+      "layer": "soft",
+      "sourceNumber": "96",
+      "scope": "document",
+      "severity": "critical",
+      "weight": 5,
+      "mode": "semantic",
+      "dedupKey": "soft:96",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "chapter"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-097": {
+      "layer": "soft",
+      "sourceNumber": "97",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:97",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "implementation_context"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-098": {
+      "layer": "soft",
+      "sourceNumber": "98",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:98",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "implementation_context"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-099": {
+      "layer": "soft",
+      "sourceNumber": "99",
+      "scope": "defense",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:99",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-100": {
+      "layer": "soft",
+      "sourceNumber": "100",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:100",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Для окончательного вывода могут потребоваться внешние сведения о публикациях или апробации."
+      }
+    },
+    "SOFT-101": {
+      "layer": "soft",
+      "sourceNumber": "101",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:101",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Для окончательного вывода могут потребоваться внешние сведения о публикациях или апробации."
+      }
+    },
+    "SOFT-102": {
+      "layer": "soft",
+      "sourceNumber": "102",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:102",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Для окончательного вывода могут потребоваться внешние сведения о публикациях или апробации."
+      }
+    },
+    "SOFT-103": {
+      "layer": "soft",
+      "sourceNumber": "103",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:103",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "bibliography"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-104": {
+      "layer": "soft",
+      "sourceNumber": "104",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:104",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-105": {
+      "layer": "soft",
+      "sourceNumber": "105",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:105",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Для окончательного вывода могут потребоваться внешние сведения о публикациях или апробации."
+      }
+    },
+    "SOFT-106": {
+      "layer": "soft",
+      "sourceNumber": "106",
+      "scope": "process",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:106",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-107": {
+      "layer": "soft",
+      "sourceNumber": "107",
+      "scope": "process",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:107",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-108": {
+      "layer": "soft",
+      "sourceNumber": "108",
+      "scope": "defense",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:108",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-109": {
+      "layer": "soft",
+      "sourceNumber": "109",
+      "scope": "process",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:109",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-110": {
+      "layer": "soft",
+      "sourceNumber": "110",
+      "scope": "process",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:110",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-111": {
+      "layer": "soft",
+      "sourceNumber": "111",
+      "scope": "process",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:111",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-112": {
+      "layer": "soft",
+      "sourceNumber": "112",
+      "scope": "process",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:112",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-113": {
+      "layer": "soft",
+      "sourceNumber": "113",
+      "scope": "defense",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:113",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-114": {
+      "layer": "soft",
+      "sourceNumber": "114",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:114",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-115": {
+      "layer": "soft",
+      "sourceNumber": "115",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:115",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-116": {
+      "layer": "soft",
+      "sourceNumber": "116",
+      "scope": "defense",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:116",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-117": {
+      "layer": "soft",
+      "sourceNumber": "117",
+      "scope": "defense",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:117",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-118": {
+      "layer": "soft",
+      "sourceNumber": "118",
+      "scope": "defense",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:118",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-119": {
+      "layer": "soft",
+      "sourceNumber": "119",
+      "scope": "defense",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:119",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-120": {
+      "layer": "soft",
+      "sourceNumber": "120",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:120",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-121": {
+      "layer": "soft",
+      "sourceNumber": "121",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:specialty-dot",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "specialty-dot"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-122": {
+      "layer": "soft",
+      "sourceNumber": "122",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:122",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-123": {
+      "layer": "soft",
+      "sourceNumber": "123",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:123",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-124": {
+      "layer": "soft",
+      "sourceNumber": "124",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:method-tuning",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "method-tuning"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-125": {
+      "layer": "soft",
+      "sourceNumber": "125",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:method-behavior",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "method-behavior"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-126": {
+      "layer": "soft",
+      "sourceNumber": "126",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:performance-verb",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "performance-verb"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-127": {
+      "layer": "soft",
+      "sourceNumber": "127",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:model-shows",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "model-shows"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-128": {
+      "layer": "soft",
+      "sourceNumber": "128",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:128",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-129": {
+      "layer": "soft",
+      "sourceNumber": "129",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:129",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-130": {
+      "layer": "soft",
+      "sourceNumber": "130",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:tasks-solved",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "tasks-solved"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-131": {
+      "layer": "soft",
+      "sourceNumber": "131",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:131",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-132": {
+      "layer": "soft",
+      "sourceNumber": "132",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:analogovye",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "analogovye"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-133": {
+      "layer": "soft",
+      "sourceNumber": "133",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:133",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-134": {
+      "layer": "soft",
+      "sourceNumber": "134",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:roman-ending",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "roman-ending"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-135": {
+      "layer": "soft",
+      "sourceNumber": "135",
+      "scope": "chapter",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:135",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "scientific_core"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-136": {
+      "layer": "soft",
+      "sourceNumber": "136",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:136",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-137": {
+      "layer": "soft",
+      "sourceNumber": "137",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:implemented-in-company",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "implemented-in-company"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-138": {
+      "layer": "soft",
+      "sourceNumber": "138",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:yo-letter",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "yo-letter"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-139": {
+      "layer": "soft",
+      "sourceNumber": "139",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:139",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-140": {
+      "layer": "soft",
+      "sourceNumber": "140",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:140",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "bibliography"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-141": {
+      "layer": "soft",
+      "sourceNumber": "141",
+      "scope": "figure_table",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:141",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-142": {
+      "layer": "soft",
+      "sourceNumber": "142",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "soft:142",
+      "engine": {
+        "kind": "unavailable"
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "reason": "Для этого требования текущий текстовый слой или надёжный алгоритм недостаточны; автоматический вердикт отключён."
+      }
+    },
+    "SOFT-143": {
+      "layer": "soft",
+      "sourceNumber": "143",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:143",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "appendices"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-144": {
+      "layer": "soft",
+      "sourceNumber": "144",
+      "scope": "formula",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:formula-wording",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "formula-wording"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-145": {
+      "layer": "soft",
+      "sourceNumber": "145",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:next-respectively",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "next-respectively"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-146": {
+      "layer": "soft",
+      "sourceNumber": "146",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:receiver-successor",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "receiver-successor"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-147": {
+      "layer": "soft",
+      "sourceNumber": "147",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:colloquial-errors",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "colloquial-errors"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-148": {
+      "layer": "soft",
+      "sourceNumber": "148",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:148",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-149": {
+      "layer": "soft",
+      "sourceNumber": "149",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:present-work",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "present-work"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-150": {
+      "layer": "soft",
+      "sourceNumber": "150",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:150",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-151": {
+      "layer": "soft",
+      "sourceNumber": "151",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:151",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-152": {
+      "layer": "soft",
+      "sourceNumber": "152",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:format-parent-word",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "format-parent-word"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-153": {
+      "layer": "soft",
+      "sourceNumber": "153",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:153",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    },
+    "SOFT-154": {
+      "layer": "soft",
+      "sourceNumber": "154",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:154",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "bibliography"
+        ],
+        "exhaustive": true
+      }
+    },
+    "SOFT-155": {
+      "layer": "soft",
+      "sourceNumber": "155",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:document-garbage",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "document-garbage"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-156": {
+      "layer": "soft",
+      "sourceNumber": "156",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:156",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-157": {
+      "layer": "soft",
+      "sourceNumber": "157",
+      "scope": "presentation",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:157",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-158": {
+      "layer": "soft",
+      "sourceNumber": "158",
+      "scope": "defense",
+      "severity": "info",
+      "weight": 0.25,
+      "mode": "manual",
+      "dedupKey": "soft:158",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-159": {
+      "layer": "soft",
+      "sourceNumber": "159",
+      "scope": "defense",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "detector:transition-to-conclusions",
+      "engine": {
+        "kind": "manual"
+      },
+      "routing": {
+        "strategy": "manual",
+        "reason": "Требуется презентация, запись защиты, исходный редактор или ручное наблюдение."
+      }
+    },
+    "SOFT-160": {
+      "layer": "soft",
+      "sourceNumber": "160",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "structural",
+      "dedupKey": "soft:160",
+      "engine": {
+        "kind": "structural"
+      },
+      "routing": {
+        "strategy": "structural"
+      }
+    },
+    "SOFT-161": {
+      "layer": "soft",
+      "sourceNumber": "161",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "detector:results-word",
+      "engine": {
+        "kind": "deterministic",
+        "detectorId": "results-word"
+      },
+      "routing": {
+        "strategy": "deterministic"
+      }
+    },
+    "SOFT-162": {
+      "layer": "soft",
+      "sourceNumber": "162",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "soft:162",
+      "engine": {
+        "kind": "semantic"
+      },
+      "routing": {
+        "strategy": "llm",
+        "selectors": [
+          "major_sections"
+        ],
+        "exhaustive": true,
+        "allowPass": false,
+        "reason": "Смысловая оценка не доказывает отсутствие формулировки во всех служебных частях документа."
+      }
+    }
+  }
+}

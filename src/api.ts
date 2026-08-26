@@ -23,6 +23,7 @@ export const api = {
   retryFailed: (id: string) => request<Job>(`/api/jobs/${id}/retry-failed`, { method: "POST" }),
   delete: (id: string) => request<void>(`/api/jobs/${id}`, { method: "DELETE" }),
   reportPdfUrl: (id: string) => `${API}/api/jobs/${id}/report.pdf`,
+  developerReportPdfUrl: (id: string) => `${API}/api/jobs/${id}/developer-report.pdf`,
   reportMarkdownUrl: (id: string) => `${API}/api/jobs/${id}/report.md`,
   reportJsonUrl: (id: string) => `${API}/api/jobs/${id}/report.json`
 };

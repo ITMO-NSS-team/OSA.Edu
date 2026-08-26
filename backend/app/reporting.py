@@ -151,15 +151,25 @@ def make_report(
     checked_candidates = sum(int(x.get("checkedCandidateCount", 0) or 0) for x in candidate_rows)
     candidate_coverage = min(1.0, checked_candidates / total_candidates) if total_candidates else 1.0
 
-    abbreviation_coverage = 1.0
-    abbreviation_row = next((
+    # Two distinct abbreviation metrics: the shared fact-map row coverage and
+    # the most conservative per-rule terminal coverage. A complete entity map
+    # does not imply that every rule fact is decisive.
+    ab_candidate_count = int(routing.get("abbreviationCandidateCount", 0) or 0)
+    ab_resolved_count = int(routing.get("abbreviationResolvedCandidates", 0) or 0)
+    abbreviation_coverage = (
+        min(1.0, ab_resolved_count / ab_candidate_count) if ab_candidate_count else 1.0
+    )
+    abbreviation_rule_rows = [
         x.get("coverage") for x in prepared
-        if str(x.get("ruleId")) == "CORE-12" and isinstance(x.get("coverage"), dict)
-    ), None)
-    if abbreviation_row:
-        ab_total = int(abbreviation_row.get("candidateCount", 0) or 0)
-        ab_checked = int(abbreviation_row.get("checkedCandidateCount", 0) or 0)
-        abbreviation_coverage = min(1.0, ab_checked / ab_total) if ab_total else 1.0
+        if str(x.get("ruleId")) in {"CORE-4-1", "CORE-4-2", "CORE-4-3", "CORE-12"}
+        and isinstance(x.get("coverage"), dict)
+    ]
+    abbreviation_rule_ratios = []
+    for row in abbreviation_rule_rows:
+        total = int(row.get("candidateCount", 0) or 0)
+        checked_row = int(row.get("checkedCandidateCount", 0) or 0)
+        abbreviation_rule_ratios.append(min(1.0, checked_row / total) if total else 1.0)
+    abbreviation_rule_coverage = min(abbreviation_rule_ratios) if abbreviation_rule_ratios else 1.0
 
     health = _report_health(prepared, document_map, warnings)
 
@@ -227,6 +237,7 @@ def make_report(
         "candidateCoverage": candidate_coverage,
         "automaticCandidateCoverage": candidate_coverage,
         "abbreviationCoverage": abbreviation_coverage,
+        "abbreviationRuleCoverage": abbreviation_rule_coverage,
         "counts": counts,
         "checkedRules": len(checked),
         "totalRules": len(rules),
@@ -284,7 +295,8 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
         f"**Оценка по проверенным правилам:** {score}",
         f"**Покрытие правил:** {round(float(report.get('coverage',0))*100)} % ({report.get('checkedRules',0)} проверенных из {report.get('totalRules',0)} правил профиля)",
         f"**Покрытие автоматических кандидатов:** {round(float(report.get('automaticCandidateCoverage', report.get('candidateCoverage',0)))*100)} %",
-        f"**Классификация сокращений:** {round(float(report.get('abbreviationCoverage',1))*100)} %", "",
+        f"**Классификация найденных обозначений:** {round(float(report.get('abbreviationCoverage',1))*100)} %",
+        f"**Полнота применения правил к обозначениям:** {round(float(report.get('abbreviationRuleCoverage',1))*100)} %", "",
         f"Нарушено: {report['counts']['violation']}; выполнено: {report['counts']['pass']}; неопределённо: {report['counts']['uncertain']}; не обработано: {report['counts']['notChecked']}; неприменимо: {report['counts']['notApplicable']}.", "",
         "> Оценка не является решением о допуске к защите. Смысловые замечания и исправления необходимо проверить вручную.", "",
         "## Краткий итог", str(report.get("summary", "")), "",

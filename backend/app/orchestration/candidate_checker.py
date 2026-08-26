@@ -1,14 +1,33 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from functools import lru_cache
 from typing import Any, Awaitable, Callable
 
 from ..checking.candidates import collect_candidates, validate_candidate
 from ..config import CONFIG_DIR, env_int
-from ..llm.client import ask_structured_json, is_fatal_provider_error
+from ..llm.client import ask_structured_json, is_fatal_provider_error, salvage_json_objects
 from ..llm.rate_limiter import configured_rate_limits
 from ..util import merge_usage, unique
 
+
+
+@lru_cache(maxsize=1)
+def _family_contracts() -> dict[str, dict]:
+    path = CONFIG_DIR / "candidate-families.json"
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def _family_guidance(family: str) -> str:
+    value = (_family_contracts().get(str(family)) or {}).get("guidance")
+    return str(value or "").strip()
 
 def _system_prompt() -> str:
     path = CONFIG_DIR / 'candidate-prompt.txt'
@@ -28,7 +47,7 @@ def build_candidate_plan(document: dict, routed_rules: list[dict]) -> dict[str, 
 
     family_candidates: dict[str, list[dict]] = {}
     requests: list[dict] = []
-    batch_size = max(1, env_int('CANDIDATE_BATCH_SIZE', 24))
+    batch_size = max(1, env_int('CANDIDATE_BATCH_SIZE', 10))
     for family, rules in by_family.items():
         candidates = [x for x in collect_candidates(document, family) if validate_candidate(x, document)]
         family_candidates[family] = candidates
@@ -101,8 +120,10 @@ def _message(family: str, candidates: list[dict], rules: list[dict], pairs: list
     )
     requested_pairs = request_pairs_for(candidates, rules, pairs)
     pair_text = '\n'.join(f"- {candidate_id} + {rule_id}" for candidate_id, rule_id in requested_pairs)
+    guidance = _family_guidance(family)
+    family_guidance = f"\nСЕМАНТИЧЕСКИЙ КОНТРАКТ СЕМЕЙСТВА: {guidance}\n" if guidance else ""
     return (
-        f"FAMILY: {family}\n\nRULES:\n{rule_text}\n\nCANDIDATES:\n{candidate_text}\n\n"
+        f"FAMILY: {family}{family_guidance}\n\nRULES:\n{rule_text}\n\nCANDIDATES:\n{candidate_text}\n\n"
         f"ОБЯЗАТЕЛЬНЫЕ ПАРЫ (верни ровно по одному verdict для каждой пары; другие пары не добавляй):\n{pair_text}\n\n"
         'Верни JSON вида {"verdicts":[{"candidateId":"...","ruleId":"...",'
         '"violation":true|false|null,"reason":"...","fix":"..."}]}.'
@@ -303,6 +324,12 @@ async def execute_candidate_plan(
                     raise
                 except BaseException as exc:
                     merge_usage(usage, getattr(exc, 'llm_usage', None))
+                    raw = str(getattr(exc, 'raw_response', '') or '')
+                    if raw:
+                        salvaged_rows = salvage_json_objects(raw, required_key='candidateId')
+                        if salvaged_rows:
+                            verdicts.update(_parse_verdicts({'verdicts': salvaged_rows}, request))
+                            usage['candidateSalvagedRows'] = int(usage.get('candidateSalvagedRows', 0)) + len(salvaged_rows)
                     if is_fatal_provider_error(exc):
                         fatal = exc
                         return
@@ -330,7 +357,7 @@ async def execute_candidate_plan(
     # 26/48 or 69/91. Retry only the exact missing pairs, preserving all successful
     # verdicts from the first pass.
     retry_rounds = max(1, env_int('CANDIDATE_MISSING_RETRY_ROUNDS', 2))
-    recovery_pair_batch = max(4, env_int('CANDIDATE_RECOVERY_PAIR_BATCH_SIZE', 16))
+    recovery_pair_batch = max(4, env_int('CANDIDATE_RECOVERY_PAIR_BATCH_SIZE', 8))
     for retry_round in range(1, retry_rounds + 1):
         # If a large JSON packet was malformed, retrying the same 48+ verdicts
         # tends to reproduce the failure.  Split missing exact pairs; on the next

@@ -24,6 +24,7 @@ from .common import (
     is_code_or_prompt,
 )
 from ..scope import main_work_ids
+from .abbreviation_audit import collect_abbreviation_tokens
 
 
 # kind, requires CORE-4-1 Russian full-term form, requires CORE-4-3 Russian meaning
@@ -579,58 +580,31 @@ def run_abbreviation_check(rule: dict, document: dict) -> dict:
 
 
 def build_llm_abbreviation_inventory(document: dict) -> list[dict]:
-    """Build the complete compact candidate inventory for the LLM experiment.
+    """Build a high-recall compact inventory for the LLM abbreviation judge.
 
-    Python owns candidate discovery and scope only.  It deliberately does *not*
-    expose the deterministic kind/status from ``analyze_terms`` to the model, so
-    the experiment measures the LLM's rule judgement rather than echoing Python's
-    previous verdict.  Every surviving token is represented once and carries a
-    small exact context for first meaningful use plus up to three heading/TOC
-    occurrences when present.
+    3.9.3-rc2 deliberately does not call ``analyze_terms`` here: that function is
+    a conservative deterministic classifier and therefore can suppress unknown
+    domain-specific candidates before the LLM sees them.  The rc2 inventory is
+    instead produced by ``collect_abbreviation_tokens`` which scans the canonical
+    main work with broad lexical rules and keeps role-labelled contexts.
     """
-    by_term: dict[str, dict] = {}
-
-    for item in analyze_terms(document):
-        term = str(item.get("term") or "").strip()
+    raw_items = collect_abbreviation_tokens(document)
+    result: list[dict] = []
+    for index, raw in enumerate(raw_items, start=1):
+        term = str(raw.get("token") or "").strip()
         if not term:
             continue
-        key = _normalize(term)
-        first = dict(item.get("firstUse") or {})
-        by_term[key] = {
+        result.append({
+            "candidateId": f"abbr-{index:04d}",
             "term": term,
-            "firstUse": first or None,
-            "headingUses": [],
-        }
-
-    for item in _heading_terms(document):
-        term = str(item.get("term") or "").strip()
-        if not term:
-            continue
-        key = _normalize(term)
-        target = by_term.setdefault(key, {"term": term, "firstUse": None, "headingUses": []})
-        ev = dict(item.get("evidence") or {})
-        if ev:
-            heading_key = (str(ev.get("blockId") or ""), str(ev.get("quote") or ""))
-            existing = {
-                (str(row.get("blockId") or ""), str(row.get("quote") or ""))
-                for row in target["headingUses"]
-            }
-            if heading_key not in existing and len(target["headingUses"]) < 3:
-                target["headingUses"].append(ev)
-
-    def order_key(item: dict) -> tuple[int, int, str]:
-        evidence_item = item.get("firstUse") or (item.get("headingUses") or [{}])[0]
-        page = evidence_item.get("page")
-        start = evidence_item.get("start")
-        return (
-            int(page) if isinstance(page, int) else 10**9,
-            int(start) if isinstance(start, int) else 10**9,
-            _normalize(str(item.get("term") or "")),
-        )
-
-    result = sorted(by_term.values(), key=order_key)
-    for index, item in enumerate(result, start=1):
-        item["candidateId"] = f"abbr-{index:04d}"
+            "firstUse": dict(raw.get("firstUse") or {}) or None,
+            "headingUses": [dict(ev) for ev in raw.get("headingUses") or []][:2],
+            "contextUses": [dict(ev) for ev in raw.get("contextUses") or []][:2],
+            "contentRoles": list(raw.get("roles") or []),
+            "occurrenceCount": int(raw.get("occurrenceCount") or 0),
+            "contextLanguage": str(raw.get("contextLanguage") or "unknown"),
+            "listedDefinitions": [dict(ev) for ev in raw.get("listedDefinitions") or []][:3],
+        })
     return result
 
 def combined_abbreviation_rules(rule: dict, document: dict) -> dict:

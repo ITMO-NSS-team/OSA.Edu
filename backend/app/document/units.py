@@ -5,13 +5,9 @@ from typing import Any
 import regex as re
 
 from .numbered_items import collect_unique_defense_items, collect_unique_numbered_items
+from .section_signals import find_defense_heading_span, is_defense_heading
 
 _CANONICAL_TYPES = {"goal", "tasks", "defense_statements"}
-_DEFENSE_ANCHOR = re.compile(
-    r"(?:положени\p{L}*\s*(?:,\s*)?(?:выносим\p{L}*\s+на\s+защит\p{L}*|на\s+защит\p{L}*)|"
-    r"(?:statements?|provisions?)\s+(?:submitted\s+)?(?:for|to)\s+(?:the\s+)?defen[cs]e)",
-    re.I,
-)
 _GOAL_ANCHOR = re.compile(
     r"^(?:\d+(?:\.\d+)*\.?\s*)?(?:цель(?:ю)?\s+(?:диссертационной\s+)?(?:работы|исследования)|research\s+goal)\b",
     re.I,
@@ -27,11 +23,16 @@ _TASKS_SENTENCE = re.compile(
 )
 _STOP_SECTION = re.compile(
     r"^(?:научн\p{L}*\s+новизн\p{L}*|теоретическ\p{L}*\s+значим\p{L}*|практическ\p{L}*\s+значим\p{L}*|"
-    r"положени\p{L}*\s*(?:,\s*)?(?:выносим\p{L}*\s+на\s+защит\p{L}*|на\s+защит\p{L}*)|"
+    r"личн\p{L}*\s+вклад\p{L}*|апробац\p{L}*|достоверност\p{L}*|публикац\p{L}*|"
     r"соответств\p{L}*\s+паспорт\p{L}*|структур\p{L}*\s+и\s+объ[её]м|"
     r"scientific\s+novelty|theoretical\s+significance|practical\s+significance|chapter\s+\d+|глава\s+\d+)\b",
     re.I,
 )
+
+
+def _is_stop_section(value: str) -> bool:
+    return bool(_STOP_SECTION.search(value) or is_defense_heading(value))
+
 _NOVELTY = re.compile(r"(?:научн\p{L}*\s+новизн\p{L}*|scientific\s+novelty)", re.I)
 
 
@@ -73,7 +74,7 @@ def _main_bounds(elements: list[dict[str, Any]], index: dict[str, int], block_co
 
 
 def _range_has_defense_anchor(blocks: list[dict[str, Any]]) -> bool:
-    return any(_DEFENSE_ANCHOR.search(_text(block)) for block in blocks[:6])
+    return any(find_defense_heading_span(_text(block)) for block in blocks[:6])
 
 
 def _element_range(element: dict[str, Any], blocks: list[dict[str, Any]], index: dict[str, int]) -> list[dict[str, Any]]:
@@ -128,7 +129,7 @@ def _find_goal(blocks: list[dict[str, Any]], start: int, end: int) -> tuple[int,
         # next paragraph.  Do not consume the following «Задачи работы» heading.
         if (blocks[pos].get("type") == "heading" or len(text) < 80) and pos + 1 <= end:
             nxt = _text(blocks[pos + 1])
-            if nxt and not _TASKS_ANCHOR.search(nxt) and not _STOP_SECTION.search(nxt):
+            if nxt and not _TASKS_ANCHOR.search(nxt) and not _is_stop_section(nxt):
                 target_end = pos + 1
         return pos, target_end
     return None
@@ -142,9 +143,7 @@ def _list_end(blocks: list[dict[str, Any]], anchor: int, end: int, *, defense: b
         text = _text(block)
         if not text:
             continue
-        if block.get("type") == "heading" and _STOP_SECTION.search(text):
-            break
-        if not defense and _STOP_SECTION.search(text):
+        if _is_stop_section(text):
             break
         if defense and current > anchor + 1 and block.get("type") == "heading":
             break
@@ -153,8 +152,8 @@ def _list_end(blocks: list[dict[str, Any]], anchor: int, end: int, *, defense: b
             pos = current
             continue
         # A wrapped continuation paragraph immediately after a list item belongs
-        # to the same semantic item.  Bashkova has exactly this form for P1.
-        if saw_item and block.get("type") == "paragraph" and current == pos + 1 and not _STOP_SECTION.search(text):
+        # to the same semantic item.
+        if saw_item and block.get("type") == "paragraph" and current == pos + 1 and not _is_stop_section(text):
             pos = current
             continue
         if saw_item:
@@ -184,7 +183,7 @@ def _find_tasks(blocks: list[dict[str, Any]], start: int, end: int) -> tuple[int
 def _find_defense(blocks: list[dict[str, Any]], start: int, end: int) -> tuple[int, int] | None:
     for pos in range(start, end + 1):
         text = _text(blocks[pos])
-        if not _DEFENSE_ANCHOR.search(text):
+        if not find_defense_heading_span(text):
             continue
         target_end = _list_end(blocks, pos, end, defense=True)
         if target_end <= pos:
@@ -240,9 +239,8 @@ def canonicalize_document_units(
             support = _range_has_defense_anchor(range_blocks)
             label_blob = f"{item.get('label','')} {item.get('quote','')} {item.get('note','')}"
             if not support:
-                # This specifically prevents the Filin regression where Scientific
-                # Novelty was invented as defence statements.  Production mode
-                # prefers a truthful missing section over a semantically similar one.
+                # A semantically similar novelty section must not be promoted to
+                # defense statements without an explicit defense marker.
                 issues.append({
                     "code": "unsupported_defense_statements",
                     "severity": "warning",

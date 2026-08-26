@@ -247,13 +247,57 @@ def _citation_numbers(value:str)->set[int]:
     return out
 
 
+def _contiguous_bibliography_numbers(values: list[int]) -> set[int]:
+    unique = sorted(set(value for value in values if 0 < value <= 999))
+    if not unique or unique[0] != 1:
+        return set()
+    expected = 1
+    result: set[int] = set()
+    for value in unique:
+        if value < expected:
+            continue
+        if value != expected:
+            break
+        result.add(value)
+        expected += 1
+    return result
+
+
+def _bibliography_entry_numbers(entries: list[dict]) -> tuple[set[int], str]:
+    """Recover bibliography entry ids without treating page numbers as ids.
+
+    PDF text often contains page numbers, years and identifiers inside entries.
+    Prefer explicit bracket numbering and otherwise accept only numbers at the start of
+    a block/line, then require a contiguous sequence beginning with 1.
+    """
+    bracket_values: list[int] = []
+    line_values: list[int] = []
+    for block in entries:
+        text = str(block.get('text') or '')
+        bracket_values.extend(
+            int(match.group(1))
+            for match in re.finditer(r'(?:^|\n|\s)\[(\d{1,3})\]\s+(?=[А-ЯЁA-Z])', text, re.M)
+        )
+        line_values.extend(
+            int(match.group(1))
+            for match in re.finditer(r'(?:^|\n)\s*(\d{1,3})[.)]\s+(?=[А-ЯЁA-Z])', text, re.M)
+        )
+    bracket_run = _contiguous_bibliography_numbers(bracket_values)
+    if len(bracket_run) >= 2:
+        return bracket_run, 'bracket'
+    line_run = _contiguous_bibliography_numbers(line_values)
+    if line_run:
+        return line_run, 'line'
+    if bracket_run:
+        return bracket_run, 'bracket'
+    return set(), 'unknown'
+
+
 def _bibliography_refs(rule,document):
     entries=document.get('fields',{}).get('bibliographyBlocks',[])
     if not entries: return _uncertain(rule,'Список литературы не удалось распознать.')
-    nums=set()
-    for b in entries:
-        for m in re.finditer(r'(?:^|\n|\s)(\d{1,3})[.)]\s+(?=[А-ЯЁA-Z])',b.get('text',''),re.M): nums.add(int(m.group(1)))
-    if not nums: return _uncertain(rule,'Нумерацию библиографии не удалось распознать.')
+    nums, numbering_style = _bibliography_entry_numbers(entries)
+    if not nums: return _uncertain(rule,'Нумерацию библиографии не удалось надёжно распознать.')
     bibids={b['id'] for b in entries}; cited=set()
     excluded=mapped_excluded_ids(document)
     for b in document.get('blocks',[]):
@@ -263,7 +307,12 @@ def _bibliography_refs(rule,document):
     if not missing: return _pass(rule,'Для всех распознанных источников найдены ссылки в основном тексте, включая номера внутри диапазонов.')
     ev=[]
     for b in entries:
-        if any(re.search(rf'(?:^|\s){n}[.)]\s+',b.get('text',''),re.M) for n in missing): ev.append(evidence(b,b.get('text','')[:450]))
+        text=b.get('text','')
+        if numbering_style == 'bracket':
+            hit=any(re.search(rf'(?:^|\n|\s)\[{n}\]\s+', text, re.M) for n in missing)
+        else:
+            hit=any(re.search(rf'(?:^|\n)\s*{n}[.)]\s+', text, re.M) for n in missing)
+        if hit: ev.append(evidence(b,text[:450]))
     return _violation(rule,'Не найдены ссылки на источники: '+', '.join(map(str,missing[:25]))+'.',ev[:15],'Добавить ссылки либо удалить неиспользованные записи.')
 
 

@@ -132,6 +132,7 @@ def _cover(
     coverage = round(float(report.get("coverage", 0) or 0) * 100)
     candidate_coverage = round(float(report.get("automaticCandidateCoverage", report.get("candidateCoverage", 0)) or 0) * 100)
     abbreviation_coverage = round(float(report.get("abbreviationCoverage", 1) or 0) * 100)
+    abbreviation_rule_coverage = round(float(report.get("abbreviationRuleCoverage", 1) or 0) * 100)
     counts = report.get("counts", {}) or {}
 
     health = report.get("reportHealth") or {}
@@ -141,7 +142,8 @@ def _cover(
         [_p("Оценка", styles["metric_label"]), _p(score_text, styles["metric_value"])],
         [_p("Покрытие правил", styles["metric_label"]), _p(f"{coverage}% ({report.get('checkedRules', 0)} из {report.get('totalRules', 0)})", styles["metric_value"])],
         [_p("Покрытие автоматических кандидатов", styles["metric_label"]), _p(f"{candidate_coverage}%", styles["metric_value"])],
-        [_p("Классификация сокращений", styles["metric_label"]), _p(f"{abbreviation_coverage}%", styles["metric_value"])],
+        [_p("Классификация найденных обозначений", styles["metric_label"]), _p(f"{abbreviation_coverage}%", styles["metric_value"])],
+        [_p("Полнота правил по обозначениям", styles["metric_label"]), _p(f"{abbreviation_rule_coverage}%", styles["metric_value"])],
         [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "-", styles["metric_value"])],
     ]
     metric_table = Table(rows, colWidths=[62 * mm, 112 * mm], hAlign="LEFT")
