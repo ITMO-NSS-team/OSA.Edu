@@ -59,10 +59,16 @@ def _coverage_matrix(value:Any,fragment:dict,block_map:dict,required:list[str]|N
         verified_evidence=_parse_evidence(raw.get('evidence'),block_map)
         candidates=parse_candidates(raw.get('candidates'),block_map)
         reason=' '.join(str(raw.get('reason') or '').split())[:500]
-        if status == 'found' and not verified_evidence and not any(candidate.get('evidence') for candidate in candidates):
+        evidence_recovery_required = status == 'found' and not verified_evidence and not any(candidate.get('evidence') for candidate in candidates)
+        if evidence_recovery_required:
             status='ambiguous'
             reason=(reason+' found→ambiguous: факт не имеет проверяемого evidence из BLOCK.').strip()
-        by[name]={'name':name,'status':status,'reason':reason,'evidence':verified_evidence,'candidates':candidates}
+        by[name]={
+            'name':name,'status':status,'reason':reason,'evidence':verified_evidence,'candidates':candidates,
+            # A complete matrix with this flag is semantically incomplete: the
+            # model asserted a positive fact but did not ground it in BLOCK.
+            'evidenceRecoveryRequired': evidence_recovery_required,
+        }
     items=[by.get(name,{'name':name,'status':'ambiguous','reason':'','evidence':[],'candidates':[]}) for name in required]
     total=len(fragment.get('blocks',[])); complete=fragment.get('complete') is True and checked>=total and all(n in by for n in required)
     return {'fragmentId':fragment['id'],'label':fragment['label'],'complete':complete,'checkedBlocks':max(0,min(checked,total)),'totalBlocks':total,'items':items}
@@ -72,7 +78,15 @@ def _fact_item_needs_recovery(item: dict | None) -> bool:
     if not item or item.get('status') == 'not_checked' or item.get('technicalIncomplete'):
         return True
     matrices = item.get('coverageMatrix') or []
-    return not matrices or not all(bool(matrix.get('complete')) for matrix in matrices)
+    return (
+        not matrices
+        or not all(bool(matrix.get('complete')) for matrix in matrices)
+        or any(
+            bool(cell.get('evidenceRecoveryRequired'))
+            for matrix in matrices
+            for cell in matrix.get('items') or []
+        )
+    )
 
 
 def _derive_shared_fact_item(source_item: dict, target_rule_id: str) -> dict:

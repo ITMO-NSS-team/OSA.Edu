@@ -6,7 +6,7 @@ import type { DocumentElementType, DocumentMap, DocumentMapElement, Job, Rule, R
 type StatusFilter = RuleStatus | "all";
 interface Props {
   jobs: Job[];
-  onAction: (id: string, action: "cancel" | "retry" | "retryFailed" | "delete") => Promise<void>;
+  onAction: (id: string, action: "cancel" | "retry" | "retryFailed" | "restart" | "delete") => Promise<void>;
   onChanged: () => Promise<void>;
 }
 const STATUS_ORDER: RuleStatus[] = ["violation", "pass", "uncertain", "not_checked", "not_applicable"];
@@ -27,7 +27,7 @@ export function ReportsPage({ jobs, onAction, onChanged }: Props) {
       <div className="row between"><h2>Задачи</h2><span>{jobs.length}</span></div>
       <div className="jobs-list">
         {jobs.map((job) => <button key={job.id} className={`job-row ${selectedId === job.id ? "selected" : ""}`} onClick={() => setSelectedId(job.id)}>
-          <strong>{job.originalName}</strong><span>{jobStatusLabel[job.status]}{ACTIVE.includes(job.status) ? ` · ${job.progress} %` : ""}</span>
+          <strong>{job.originalName}</strong><span>{jobProgressSummary(job)}</span>
         </button>)}
         {!jobs.length && <div className="empty small">Задач пока нет.</div>}
       </div>
@@ -44,14 +44,15 @@ export function ReportsPage({ jobs, onAction, onChanged }: Props) {
 function JobState({ job, onAction }: { job: Job; onAction: Props["onAction"] }) {
   const active = ACTIVE.includes(job.status);
   return <div className="panel job-state">
-    <h1>{job.originalName}</h1><p>{jobStatusLabel[job.status]}{active ? ` · ${job.progress} %` : ""}</p>
+    <h1>{job.originalName}</h1><p><b>{jobStatusLabel[job.status]}</b>{active && !["queued", "queued_check"].includes(job.status) ? ` · ${job.progress} %` : ""}</p>{job.progressMessage && <p className="progress-message">{job.progressMessage}</p>}
     {active && <progress max="100" value={job.progress} />}
-    {job.status === "mapping" && <p className="hint">Вся работа передана выбранной модели OpenRouter одним запросом. После построения диапазонов проверка остановится для вашего подтверждения.</p>}
+    {job.status === "mapping" && <p className="hint">Система выделяет смысловые диапазоны документа и проверяет их границы.{job.developerMode ? " В режиме разработчика корректная карта будет принята автоматически." : " После этого структура будет показана для подтверждения."}</p>}
     {job.error && <div className="inline-error">{job.error}</div>}
     {job.diagnostics?.length ? <ApiDiagnostics title="Диагностика LLM" items={job.diagnostics} /> : null}
     <div className="actions">
       {active && <button className="button secondary" onClick={() => void onAction(job.id, "cancel")}>Отменить</button>}
-      {job.status === "failed" && <button className="button primary" onClick={() => void onAction(job.id, "retry")}>Повторить</button>}
+      {job.status === "failed" && <button className="button secondary" onClick={() => void onAction(job.id, "retry")}>Повторить по текущей структуре</button>}
+      {!active && <button className="button primary" onClick={() => void onAction(job.id, "restart")}>Начать заново</button>}
       {!active && <button className="button danger" onClick={() => void onAction(job.id, "delete")}>Удалить</button>}
     </div>
   </div>;
@@ -105,7 +106,7 @@ function StructureReview({ job, onChanged, onAction }: { job: Job; onChanged: Pr
     <div className="review-sections">
       {map.elements.map((element) => <StructureCard key={element.id} jobId={job.id} element={element} blocks={details.blocks} disabled={saving} onMutate={mutate} />)}
     </div>
-    <div className="actions between review-footer"><button className="button danger" onClick={() => void onAction(job.id, "delete")}>Удалить задачу</button><button className="button primary" disabled={saving || !map.elements.length} onClick={() => void mutate(() => api.confirmStructure(job.id))}>Подтвердить структуру и начать</button></div>
+    <div className="actions between review-footer"><div className="actions"><button className="button secondary" onClick={() => void onAction(job.id, "restart")}>Начать заново</button><button className="button danger" onClick={() => void onAction(job.id, "delete")}>Удалить задачу</button></div><button className="button primary" disabled={saving || !map.elements.length} onClick={() => void mutate(() => api.confirmStructure(job.id))}>Подтвердить структуру и начать</button></div>
   </div>;
 }
 
@@ -171,7 +172,7 @@ function Report({ job, status, query, onStatus, onQuery, onAction }: { job: Job;
       <label><span>Промпт проверки правил</span><textarea readOnly value={job.prompt} rows={12} /></label><label><span>Промпт структуры</span><textarea readOnly value={job.mapPrompt} rows={12} /></label>
       {report.warnings.length > 0 && <div><b>Предупреждения:</b><ul>{report.warnings.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}
     </div></details>
-    <div className="actions end report-actions"><a className="button primary" href={api.reportPdfUrl(job.id)}>Отчёт для пользователя</a><a className="button secondary" href={api.developerReportPdfUrl(job.id)}>Отчёт для разработчика</a><a className="button secondary" href={api.reportJsonUrl(job.id)}>JSON</a><a className="button secondary" href={api.reportMarkdownUrl(job.id)}>Markdown</a>{retryableCount > 0 && <button className="button secondary" onClick={() => void onAction(job.id, "retryFailed")}>Повторить неудачные LLM-проверки ({retryableCount})</button>}<button className="button secondary" onClick={() => void onAction(job.id, "retry")}>Повторить всю проверку</button><button className="button danger" onClick={() => void onAction(job.id, "delete")}>Удалить</button></div>
+    <div className="actions end report-actions"><a className="button primary" href={api.reportPdfUrl(job.id)}>Отчёт для пользователя</a><a className="button secondary" href={api.developerReportPdfUrl(job.id)}>Отчёт для разработчика</a><a className="button secondary" href={api.reportJsonUrl(job.id)}>JSON</a><a className="button secondary" href={api.reportMarkdownUrl(job.id)}>Markdown</a>{retryableCount > 0 && <button className="button secondary" onClick={() => void onAction(job.id, "retryFailed")}>Повторить неудачные LLM-проверки ({retryableCount})</button>}<button className="button secondary" onClick={() => void onAction(job.id, "retry")}>Повторить по текущей структуре</button><button className="button primary" onClick={() => void onAction(job.id, "restart")}>Начать заново</button><button className="button danger" onClick={() => void onAction(job.id, "delete")}>Удалить</button></div>
   </div>;
 }
 
@@ -184,16 +185,27 @@ function ApiDiagnostics({ title, items }: { title: string; items: ProviderDiagno
 }
 
 function RuleResultCard({ result, rule }: { result: RuleResult; rule?: Rule }) {
-  return <details className={`result-card ${result.status}`} open={result.status === "violation" && (result.severity === "critical" || result.severity === "major")}><summary><span className={`status-badge ${result.status}`}>{statusLabel[result.status]}</span><span className="rule-id">{result.ruleId}</span><span className="rule-title">{rule?.title || result.explanation}</span></summary><div className="result-body">
-    {rule && <><p className="requirement">{rule.requirement}</p><div className="meta-grid"><span><b>Категория:</b> {rule.category}</span><span><b>Тип исходного правила:</b> {modeLabel[rule.mode]}</span><span><b>Источник:</b> {rule.sourceLabel}, строка {rule.sourceLine}</span><span><b>Метод:</b> {result.checkedBy === "detector" ? "код / структура" : result.checkedBy.includes("llm-candidate") ? "кандидаты + LLM" : result.checkedBy.startsWith("llm") ? "LLM + проверка evidence" : "система"}</span></div></>}
-    <div className="explanation"><b>Результат проверки</b><p>{result.explanation}</p></div>
+  const [showAdvice, setShowAdvice] = useState(false);
+  const title = rule?.userTitle || rule?.title || result.explanation;
+  const advice = rule?.relatedAdvice;
+  return <details className={`result-card ${result.status}`} open={result.status === "violation" && (result.severity === "critical" || result.severity === "major")}><summary><span className={`status-badge ${result.status}`}>{statusLabel[result.status]}</span><span className="rule-title">{title}</span><span className="rule-id">{result.ruleId}</span></summary><div className="result-body">
+    {rule && <><p className="requirement"><b>Правило.</b> {rule.requirement}</p><div className="meta-grid"><span><b>Категория:</b> {rule.category}</span><span><b>Тип исходного правила:</b> {modeLabel[rule.mode]}</span><span><b>Источник:</b> {rule.sourceLabel}, строка {rule.sourceLine}</span><span><b>Метод:</b> {result.checkedBy === "detector" ? "код / структура" : result.checkedBy.includes("llm-candidate") ? "кандидаты + LLM" : result.checkedBy.startsWith("llm") ? "LLM + проверка доказательств" : "система"}</span></div></>}
+    <div className="explanation"><b>{result.status === "violation" ? "Нарушение" : "Результат проверки"}</b><p>{result.explanation}</p></div>
     {result.coverage && <p className="coverage-line">{result.coverage.domain === "abbreviation_candidates" ? `Классифицировано обозначений: ${result.coverage.checkedCandidateCount} из ${result.coverage.candidateCount}; полное покрытие: ${result.coverage.exhaustive ? "да" : "нет"}.` : `Проверено назначенных фрагментов: ${result.coverage.checkedCandidateCount} из ${result.coverage.candidateCount}; полная область: ${result.coverage.exhaustive ? "да" : "нет"}.`}</p>}
-    {result.checkedFragments?.length ? <p className="hint">Фрагменты: {result.checkedFragments.join(", ")}</p> : null}{result.relatedRuleIds?.length ? <p className="hint">То же замечание связано с правилами: {result.relatedRuleIds.join(", ")}</p> : null}{result.consistencyNotes?.length ? <p className="hint">Проверка согласованности: {result.consistencyNotes.join(" ")}</p> : null}{result.evidenceStatus === "rejected" ? <p className="inline-error">Заявленное нарушение не подтверждено допустимой цитатой или полной матрицей.</p> : null}{result.evidenceStatus === "coverage_verified" ? <p className="hint">Отсутствие проверено по полной назначенной области.</p> : null}
+    {result.checkedFragments?.length ? <p className="hint">Фрагменты: {result.checkedFragments.join(", ")}</p> : null}{result.relatedRuleIds?.length ? <p className="hint">То же замечание связано с правилами: {result.relatedRuleIds.join(", ")}</p> : null}{result.consistencyNotes?.length ? <p className="hint">Проверка согласованности: {result.consistencyNotes.join(" ")}</p> : null}{result.evidenceStatus === "rejected" ? <p className="inline-error">Заявленное нарушение не подтверждено допустимой цитатой или полной проверкой назначенной области.</p> : null}{result.evidenceStatus === "coverage_verified" ? <p className="hint">Отсутствие проверено по полной назначенной области.</p> : null}
     {result.termFindings?.length ? <div className="evidence"><b>Разбор обозначений</b><div className="matrix-table"><table><thead><tr><th>Термин</th><th>Тип</th><th>Статус</th></tr></thead><tbody>{result.termFindings.map((item) => <tr key={`${result.ruleId}-${item.term}`}><td>{item.term}</td><td>{item.kind}</td><td>{item.status}</td></tr>)}</tbody></table></div></div> : null}
-    {result.coverageMatrix?.length ? <div className="evidence"><b>Матрица полного покрытия</b><div className="matrix-table"><table><thead><tr><th>Фрагмент</th><th>Блоки</th><th>Полнота</th><th>Элементы</th></tr></thead><tbody>{result.coverageMatrix.map((row) => <tr key={`${result.ruleId}-${row.fragmentId}`}><td>{row.label}</td><td>{row.checkedBlocks}/{row.totalBlocks}</td><td>{row.complete ? "полная" : "неполная"}</td><td>{row.items.map((item) => `${item.name}: ${item.status === "found" ? "найдено" : item.status === "not_found" ? "не найдено" : "неоднозначно"}`).join("; ")}</td></tr>)}</tbody></table></div></div> : null}
-    {result.evidence.length > 0 && <div className="evidence"><b>Подтверждённые доказательства</b>{result.evidence.map((item, index) => <blockquote key={`${item.blockId}-${index}`}><span>{item.token ? `Обозначение: ${item.token}${item.entityKind ? ` · тип: ${item.entityKind}` : ""} · ` : ""}{item.location}{item.page ? ` · стр. ${item.page}` : ""}{typeof item.start === "number" && typeof item.end === "number" ? ` · символы ${item.start}–${item.end}` : ""} · цитата найдена в исходном блоке</span>{item.quote}{item.context && item.context !== item.quote ? <small className="candidate-context">Контекст: {item.context}</small> : null}</blockquote>)}</div>}
-    {result.fix && <div className="fix"><b>Исправление</b><p>{result.fix}</p></div>}
+    {result.coverageMatrix?.length ? <div className="evidence"><b>Полная проверка назначенных фрагментов</b><div className="matrix-table"><table><thead><tr><th>Фрагмент</th><th>Блоки</th><th>Полнота</th><th>Элементы</th></tr></thead><tbody>{result.coverageMatrix.map((row) => <tr key={`${result.ruleId}-${row.fragmentId}`}><td>{row.label}</td><td>{row.checkedBlocks}/{row.totalBlocks}</td><td>{row.complete ? "полная" : "неполная"}</td><td>{row.items.map((item) => `${item.name}: ${item.status === "found" ? "найдено" : item.status === "not_found" ? "не найдено" : "неоднозначно"}`).join("; ")}</td></tr>)}</tbody></table></div></div> : null}
+    {result.evidence.length > 0 && <div className="evidence"><b>Подтверждённые доказательства</b>{result.evidence.map((item, index) => <blockquote key={`${item.blockId}-${index}`}><span>{item.token ? `Обозначение: ${item.token}${item.entityKind ? ` · тип: ${item.entityKind}` : ""} · ` : ""}{item.location}{item.page ? ` · стр. ${item.page}` : ""}{typeof item.start === "number" && typeof item.end === "number" ? ` · символы ${item.start}–${item.end}` : ""} · цитата найдена в исходном блоке</span><div className="evidence-quote">{item.quote}</div>{item.context && item.context !== item.quote ? <small className="candidate-context">Контекст: {item.context}</small> : null}</blockquote>)}</div>}
+    {result.fix && <div className="fix"><b>Как исправить</b><p>{result.fix}</p></div>}
+    {advice && ["violation", "uncertain"].includes(result.status) && <div className="advice-actions"><button type="button" className="button secondary" onClick={() => setShowAdvice((value) => !value)}>{showAdvice ? "Скрыть связанные советы" : "Связанные советы Шалыто"}</button>{showAdvice && <div className="related-advice"><strong>{advice.title}</strong><p>{advice.summary}</p><a href={advice.url} target="_blank" rel="noreferrer">Открыть источник · стр. {advice.page}</a></div>}</div>}
   </div></details>;
+}
+
+function jobProgressSummary(job: Job) {
+  const label = jobStatusLabel[job.status];
+  if (["queued", "queued_check"].includes(job.status)) return job.progressMessage || label;
+  if (ACTIVE.includes(job.status)) return `${label} · ${job.progress} %${job.progressMessage ? ` · ${job.progressMessage}` : ""}`;
+  return label;
 }
 
 function blockOption(block: StructureBlock) { const text = block.text.replace(/\s+/g, " ").slice(0, 90); return `${block.id}${block.page ? ` · стр. ${block.page}` : ""} · ${text}`; }

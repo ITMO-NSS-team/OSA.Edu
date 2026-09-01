@@ -5,22 +5,9 @@ from typing import Any
 import regex as re
 
 from .numbered_items import collect_unique_defense_items, collect_unique_numbered_items
-from .section_signals import find_defense_heading_span, is_defense_heading
+from .section_signals import find_section_heading_span, is_defense_heading
 
 _CANONICAL_TYPES = {"goal", "tasks", "defense_statements"}
-_GOAL_ANCHOR = re.compile(
-    r"^(?:\d+(?:\.\d+)*\.?\s*)?(?:цель(?:ю)?\s+(?:диссертационной\s+)?(?:работы|исследования)|research\s+goal)\b",
-    re.I,
-)
-_TASKS_ANCHOR = re.compile(
-    r"^(?:\d+(?:\.\d+)*\.?\s*)?(?:задач(?:и|и\s+работы|и\s+исследования)|research\s+tasks?)\b",
-    re.I,
-)
-_TASKS_SENTENCE = re.compile(
-    r"(?:для\s+достижения\s+(?:поставленной\s+)?цели.{0,120}(?:задач|необходимо\s+(?:решить|выполнить))|"
-    r"(?:следующ\p{L}*|поставлен\p{L}*)\s+задач\p{L}*)",
-    re.I,
-)
 _STOP_SECTION = re.compile(
     r"^(?:научн\p{L}*\s+новизн\p{L}*|теоретическ\p{L}*\s+значим\p{L}*|практическ\p{L}*\s+значим\p{L}*|"
     r"личн\p{L}*\s+вклад\p{L}*|апробац\p{L}*|достоверност\p{L}*|публикац\p{L}*|"
@@ -74,7 +61,7 @@ def _main_bounds(elements: list[dict[str, Any]], index: dict[str, int], block_co
 
 
 def _range_has_defense_anchor(blocks: list[dict[str, Any]]) -> bool:
-    return any(find_defense_heading_span(_text(block)) for block in blocks[:6])
+    return any(find_section_heading_span("defense_statements", _text(block)) for block in blocks[:6])
 
 
 def _element_range(element: dict[str, Any], blocks: list[dict[str, Any]], index: dict[str, int]) -> list[dict[str, Any]]:
@@ -122,14 +109,14 @@ def _make_element(
 def _find_goal(blocks: list[dict[str, Any]], start: int, end: int) -> tuple[int, int] | None:
     for pos in range(start, end + 1):
         text = _text(blocks[pos])
-        if not _GOAL_ANCHOR.search(text):
+        if not find_section_heading_span("goal", text):
             continue
         target_end = pos
         # A short heading such as «Цель работы» normally has the content in the
         # next paragraph.  Do not consume the following «Задачи работы» heading.
         if (blocks[pos].get("type") == "heading" or len(text) < 80) and pos + 1 <= end:
             nxt = _text(blocks[pos + 1])
-            if nxt and not _TASKS_ANCHOR.search(nxt) and not _is_stop_section(nxt):
+            if nxt and not find_section_heading_span("tasks", nxt) and not _is_stop_section(nxt):
                 target_end = pos + 1
         return pos, target_end
     return None
@@ -169,7 +156,7 @@ def _list_end(blocks: list[dict[str, Any]], anchor: int, end: int, *, defense: b
 def _find_tasks(blocks: list[dict[str, Any]], start: int, end: int) -> tuple[int, int] | None:
     for pos in range(start, end + 1):
         text = _text(blocks[pos])
-        if not (_TASKS_ANCHOR.search(text) or _TASKS_SENTENCE.search(text)):
+        if not find_section_heading_span("tasks", text):
             continue
         target_end = _list_end(blocks, pos, end, defense=False)
         if target_end <= pos:
@@ -183,7 +170,7 @@ def _find_tasks(blocks: list[dict[str, Any]], start: int, end: int) -> tuple[int
 def _find_defense(blocks: list[dict[str, Any]], start: int, end: int) -> tuple[int, int] | None:
     for pos in range(start, end + 1):
         text = _text(blocks[pos])
-        if not find_defense_heading_span(text):
+        if not find_section_heading_span("defense_statements", text):
             continue
         target_end = _list_end(blocks, pos, end, defense=True)
         if target_end <= pos:

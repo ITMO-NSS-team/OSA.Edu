@@ -36,4 +36,4 @@ PORT = env_int('PORT', 8787)
 WEB_ORIGIN = os.getenv('WEB_ORIGIN', 'http://127.0.0.1:5173').strip()
 MAX_FILE_SIZE_MB = env_int('MAX_FILE_SIZE_MB', 35)
 AUTO_DELETE_SOURCE = env_bool('AUTO_DELETE_SOURCE', True)
-APP_VERSION = '3.10.0-rc2-py-p0-stability'
+APP_VERSION = '4.0.0'

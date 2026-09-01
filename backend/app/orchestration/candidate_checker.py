@@ -168,6 +168,18 @@ def _evidence(candidate: dict) -> dict:
         'end': candidate['end'],
         'verified': True,
     }
+    # Preserve the actual candidate marker for author-facing evidence.  The
+    # exact checker quote may begin on a neighbouring sentence boundary (for
+    # example sentence-start candidates whose regex includes the preceding
+    # full stop), while the wider context still contains the violating token.
+    # This metadata does not affect adjudication; it only lets report renderers
+    # keep the proved span visible when shortening a quote.
+    meta = candidate.get('meta') or {}
+    marker = str(meta.get('marker') or meta.get('digit') or '').strip()
+    if marker:
+        marker = marker.strip(' .!?…,:;–—-()[]{}\t\n\r')
+        if marker:
+            result['token'] = marker
     if candidate.get('page') is not None:
         result['page'] = candidate['page']
     return result

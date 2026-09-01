@@ -51,6 +51,10 @@ def runtime_metadata(rule_id: str) -> dict:
         result['factNameMap'] = dict(engine.factNameMap)
     if engine.globalFactKeys:
         result['globalFactKeys'] = list(engine.globalFactKeys)
+    if engine.conditionalEvidence:
+        result['conditionalEvidence'] = dict(engine.conditionalEvidence)
+    if engine.literalRequirement:
+        result['literalRequirement'] = dict(engine.literalRequirement)
     if entry.applicability:
         result['applicability'] = dict(entry.applicability)
     return result

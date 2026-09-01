@@ -252,6 +252,39 @@ def abbreviation_list_block_ids(document: dict[str, Any]) -> set[str]:
     return set(_abbreviation_list_block_ids(document))
 
 
+def _is_table_header_context(blocks: list[dict[str, Any]], index: int) -> bool:
+    """Return whether an extractor-labelled heading is a table column header.
+
+    PDF extractors frequently label bold table headers as ``heading``. For
+    CORE-4-2 that would incorrectly turn abbreviations in table columns into
+    abbreviations in a work heading. Require both structural neighbours: a
+    preceding table caption and following table-shaped content on the same page.
+    This keeps actual section headings after a table in scope.
+    """
+    block = blocks[index]
+    page = block.get("page")
+    before = blocks[max(0, index - 3):index]
+    has_table_caption = any(
+        candidate.get("page") == page
+        and (
+            str(candidate.get("type") or "").lower() == "caption"
+            or re.match(r"^\s*(?:таблица|table)\b", str(candidate.get("text") or ""), re.I)
+        )
+        for candidate in before
+    )
+    if not has_table_caption:
+        return False
+
+    for candidate in blocks[index + 1:index + 4]:
+        if candidate.get("page") != page:
+            break
+        candidate_type = str(candidate.get("type") or "").lower()
+        text = str(candidate.get("text") or "")
+        if candidate_type in {"table", "formula"} or is_likely_table_context(text):
+            return True
+    return False
+
+
 def _canonical_heading_scope(document: dict[str, Any], definitions: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
     """Deterministic CORE-4-2 scope derived from document structure.
 
@@ -284,13 +317,19 @@ def _canonical_heading_scope(document: dict[str, Any], definitions: dict[str, li
         if bid and bid in by_id and bid not in definition_ids:
             scope.setdefault(bid, "heading")
 
-    for block in blocks:
+    for index, block in enumerate(blocks):
         bid = str(block.get("id") or "")
         if not bid or bid in definition_ids:
             continue
         kind = str(block.get("type") or "").lower()
         if kind == "toc":
-            scope.setdefault(bid, "toc")
+            # Extractors also assign ``toc`` to lists of figures/tables far from
+            # the actual contents. CORE-4-2 names the work title and contents,
+            # not every navigation-like appendix. When the contents span is
+            # structurally known, it is authoritative; retain the old cautious
+            # fallback only when extraction cannot establish that span at all.
+            if not toc_pages or block.get("page") in toc_pages:
+                scope.setdefault(bid, "toc")
             continue
         if block.get("page") in toc_pages:
             text = str(block.get("text") or "")
@@ -300,6 +339,8 @@ def _canonical_heading_scope(document: dict[str, Any], definitions: dict[str, li
             if re.search(r"(?:\.\s*){3,}\s*\d+\s*$", text) or re.search(r"(?:^|\n)\s*(?:\d+(?:\.\d+)*\.?\s+)?[^\n]{2,180}\s+\d+\s*$", text):
                 scope.setdefault(bid, "toc")
         if kind == "heading" and (main_ids is None or bid in main_ids):
+            if _is_table_header_context(blocks, index):
+                continue
             if not is_likely_table_context(str(block.get("text") or "")):
                 scope.setdefault(bid, "heading")
     return scope

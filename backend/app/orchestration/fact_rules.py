@@ -32,6 +32,14 @@ _LIMITATION_CUE = re.compile(
     re.I,
 )
 
+_EXPLICIT_SELECTION_CUE = re.compile(
+    r"(?:\b(?:выбран|выбрана|выбрано|выделен|выделена|определен|определена)\p{L}*\b|"
+    r"\bв\s+качестве\s+(?:прототипа|базов\p{L}*|основ\p{L}*)\b|"
+    r"\b(?:единственн\p{L}*|основн\p{L}*|ближайш\p{L}*)\s+"
+    r"(?:прототип\p{L}*|решени\p{L}*|подход\p{L}*|точк\p{L}*)\b)",
+    re.I,
+)
+
 # A confident ``analogs=not_found`` is unsafe when the assigned chapter itself
 # names an existing benchmark/method/system in a comparison, audit, baseline or
 # prior-work context.  This guard never upgrades a fact to ``found``; it only
@@ -121,6 +129,20 @@ def enrich_matrix(rule_id: str, matrix: dict | None, fragment: dict) -> dict | N
 
         prototype_names = {"prototype", "prototype_inside_chapter"}
         disadvantage_names = {"prototype_disadvantages", "prototype_disadvantages_inside_chapter"}
+        if status == "found" and name in prototype_names and len(candidates) > 1:
+            # A positive fact with several candidates is not a selected
+            # prototype unless the document itself contains an explicit choice.
+            # Preserve the candidates and ask for semantic resolution instead of
+            # silently treating a candidate set as one prototype.
+            searchable = " ".join(
+                [
+                    str(item.get("reason") or ""),
+                    *[str(row.get("quote") or "") for row in item.get("evidence") or []],
+                ]
+            )
+            if not _EXPLICIT_SELECTION_CUE.search(searchable):
+                status = "ambiguous"
+                changes.append("found→ambiguous: несколько кандидатов без документально подтверждённого выбора одного прототипа")
         if status == "not_found" and name in prototype_names and _STRONG_PROTOTYPE_CUE.search(text):
             status = "ambiguous"
             changes.append("not_found→ambiguous: в назначенной области найден сильный маркер baseline/основы")
@@ -135,6 +157,30 @@ def enrich_matrix(rule_id: str, matrix: dict | None, fragment: dict) -> dict | N
         if changes:
             item["pythonAdjustments"] = changes
         rows.append(item)
+
+    # A disadvantage cell must describe the same selected prototype.  When the
+    # extractor supplies explicit candidate labels for both facts and the sets
+    # are disjoint, accepting both as ``found`` would create a false PASS.  Keep
+    # the evidence but defer the relationship to semantic review.
+    if rule_id == "CORE-2-3":
+        prototype = next((item for item in rows if item.get("name") in {"prototype", "prototype_inside_chapter"}), None)
+        disadvantages = next((item for item in rows if item.get("name") in {"prototype_disadvantages", "prototype_disadvantages_inside_chapter"}), None)
+        if prototype and disadvantages and prototype.get("status") == "found" and disadvantages.get("status") == "found":
+            prototype_labels = {
+                normalized_quote(str(candidate.get("label") or "")).lower()
+                for candidate in prototype.get("candidates") or []
+                if str(candidate.get("label") or "").strip()
+            }
+            disadvantage_labels = {
+                normalized_quote(str(candidate.get("label") or "")).lower()
+                for candidate in disadvantages.get("candidates") or []
+                if str(candidate.get("label") or "").strip()
+            }
+            if prototype_labels and disadvantage_labels and not prototype_labels.intersection(disadvantage_labels):
+                disadvantages["status"] = "ambiguous"
+                disadvantages.setdefault("pythonAdjustments", []).append(
+                    "found→ambiguous: недостатки привязаны к другому кандидату, чем выбранный прототип"
+                )
     adjusted["items"] = rows
     adjusted["factEngine"] = "3.9.2-repo-stable"
     return adjusted
@@ -149,6 +195,11 @@ def _row_status(matrix: dict, name: str) -> str:
     return str((row or {}).get("status") or "ambiguous")
 
 
+def _row_has_precision_adjustment(matrix: dict, name: str) -> bool:
+    row = next((item for item in matrix.get("items") or [] if item.get("name") == name), None)
+    return bool(row and any("→ambiguous" in str(note) for note in row.get("pythonAdjustments") or []))
+
+
 def _fact_engine_config(rule_id: str) -> dict:
     entry = manifest_entry(rule_id)
     if entry is None:
@@ -161,6 +212,10 @@ def _fragment_decision(rule_id: str, matrix: dict | None) -> tuple[str, list[str
     if not matrix or not matrix.get("complete"):
         return "uncertain", ["не подтверждено полное покрытие назначенной области"]
     statuses = {name: _row_status(matrix, name) for name in required}
+    precision_ambiguous = {
+        name for name in required
+        if statuses.get(name) == "ambiguous" and _row_has_precision_adjustment(matrix, name)
+    }
     policy = _fact_engine_config(rule_id).get("decisionPolicy") or {}
 
     if policy.get("type") == "ordered_facts":
@@ -170,6 +225,8 @@ def _fragment_decision(rule_id: str, matrix: dict | None) -> tuple[str, list[str
             fact = str(step.get("fact") or "")
             if fact not in statuses or statuses.get(fact) != str(step.get("value") or ""):
                 continue
+            if fact in precision_ambiguous and str(step.get("value") or "") == "ambiguous":
+                return "uncertain", [fact]
             details = [fact]
             for dependent in step.get("includeIfNotFoundOrAmbiguous") or []:
                 dep = str(dependent)

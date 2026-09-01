@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import APP_VERSION, AUTO_DELETE_SOURCE
-from .defaults import DEFAULT_MAP_PROMPT
+from .defaults import DEFAULT_MAP_PROMPT, DEFAULT_MAP_VERIFIER_PROMPT
 from .document.map_builder import build_document_map, map_can_be_reused
+from .document.map_verifier import verify_document_map
 from .extraction import extract_document, read_extracted, save_extracted
 from .orchestration.checker import check_document
 from .reporting import make_report
@@ -50,7 +51,7 @@ async def _is_cancelled(job_id: str) -> bool:
 async def _prepare_structure(job: dict[str, Any]) -> None:
     try:
         await update_job(job["id"], {
-            "status": "extracting", "progress": 3, "startedAt": now_iso(), "error": None,
+            "status": "extracting", "progress": 3, "progressMessage": "Извлекаем текст и структуру страниц из файла.", "startedAt": now_iso(), "error": None,
             "diagnostics": [], "attempts": 0, "report": None,
         })
         phase_started = time.perf_counter()
@@ -59,11 +60,11 @@ async def _prepare_structure(job: dict[str, Any]) -> None:
         performance.setdefault("extractionMs", round((time.perf_counter() - phase_started) * 1000))
         if len(document.get("text", "")) < 100:
             raise RuntimeError("Из файла удалось извлечь слишком мало текста. Попробуйте DOCX или PDF с текстовым слоем.")
-        await update_job(job["id"], {"extractedPath": extracted_path, "progress": 10})
+        await update_job(job["id"], {"extractedPath": extracted_path, "progress": 10, "progressMessage": "Текст извлечён. Готовим карту основных разделов."})
 
         map_prompt = job.get("mapPrompt") or DEFAULT_MAP_PROMPT
         if not map_can_be_reused(document.get("map"), job.get("provider", "openrouter"), job["model"], map_prompt):
-            await update_job(job["id"], {"status": "mapping", "progress": 12})
+            await update_job(job["id"], {"status": "mapping", "progress": 12, "progressMessage": "Определяем введение, цель, задачи, положения и главы."})
             if await _is_cancelled(job["id"]):
                 return
             map_started = time.perf_counter()
@@ -71,8 +72,18 @@ async def _prepare_structure(job: dict[str, Any]) -> None:
                 document,
                 provider=job.get("provider", "openrouter"), model=job["model"], prompt=map_prompt,
             )
+            await update_job(job["id"], {"status": "mapping", "progress": 22, "progressMessage": "Проверяем границы найденных разделов вторым проходом."})
+            verifier_started = time.perf_counter()
+            document["map"] = await verify_document_map(
+                document,
+                document["map"],
+                provider=job.get("provider", "openrouter"),
+                model=job["model"],
+                prompt=DEFAULT_MAP_VERIFIER_PROMPT,
+            )
+            performance["structureVerifierMs"] = round((time.perf_counter() - verifier_started) * 1000)
             performance["structureMs"] = round((time.perf_counter() - map_started) * 1000)
-            await update_job(job["id"], {"status": "mapping", "progress": 30})
+            await update_job(job["id"], {"status": "mapping", "progress": 30, "progressMessage": "Структура документа построена."})
             save_extracted(job["id"], document)
 
         if AUTO_DELETE_SOURCE:
@@ -88,7 +99,7 @@ async def _prepare_structure(job: dict[str, Any]) -> None:
             invalid = [item for item in document_map.get("issues", []) if item.get("code") in invalid_codes]
             if invalid or not document_map.get("elements"):
                 await update_job(job["id"], {
-                    "status": "awaiting_review", "progress": 30, "documentMap": document_map,
+                    "status": "awaiting_review", "progress": 30, "progressMessage": "Нужно вручную проверить границы структуры перед запуском правил.", "documentMap": document_map,
                     "diagnostics": (document_map.get("usage") or {}).get("diagnostics", []),
                     "error": "Режим разработчика не смог безопасно принять карту: обнаружены недействительные границы. Проверьте структуру вручную.",
                     "finishedAt": None,
@@ -104,14 +115,14 @@ async def _prepare_structure(job: dict[str, Any]) -> None:
             review["confirmedAt"] = now_iso()
             save_extracted(job["id"], document)
             await update_job(job["id"], {
-                "status": "queued_check", "progress": 32, "documentMap": document_map,
+                "status": "queued_check", "progress": 32, "progressMessage": "Структура подтверждена. Проверка правил начнётся следующим шагом.", "documentMap": document_map,
                 "diagnostics": (document_map.get("usage") or {}).get("diagnostics", []),
                 "error": None, "finishedAt": None,
             })
             return
 
         await update_job(job["id"], {
-            "status": "awaiting_review", "progress": 30, "documentMap": document_map,
+            "status": "awaiting_review", "progress": 30, "progressMessage": "Проверьте структуру документа и подтвердите её для запуска правил.", "documentMap": document_map,
             "diagnostics": (document_map.get("usage") or {}).get("diagnostics", []),
             "error": None, "finishedAt": None,
         })
@@ -121,7 +132,7 @@ async def _prepare_structure(job: dict[str, Any]) -> None:
         diagnostics = _diagnostics_from_error(exc)
         suffix = " Подробности сохранены в диагностике LLM ниже." if diagnostics else ""
         await update_job(job["id"], {
-            "status": "failed", "progress": 100, "finishedAt": now_iso(),
+            "status": "failed", "progress": 100, "progressMessage": "Проверка остановлена из-за технической ошибки.", "finishedAt": now_iso(),
             "diagnostics": diagnostics, "error": f"{exc}{suffix}",
         })
 
@@ -138,7 +149,7 @@ async def _perform_check(job: dict[str, Any]) -> None:
         check_wall_started = time.perf_counter()
 
         await update_job(job["id"], {
-            "status": "checking", "progress": 35, "error": None,
+            "status": "checking", "progress": 35, "progressMessage": "Запускаем проверки по подтверждённой структуре документа.", "error": None,
             "diagnostics": ((document.get("map") or {}).get("usage") or {}).get("diagnostics", []),
             "attempts": 0,
         })
@@ -151,6 +162,7 @@ async def _perform_check(job: dict[str, Any]) -> None:
             await update_job(job["id"], {
                 "status": "checking",
                 "progress": 35 + round(done / max(1, total) * 63),
+                "progressMessage": _message or f"Проверено пакетов: {done} из {total}.",
                 "attempts": done,
             })
 
@@ -203,7 +215,7 @@ async def _perform_check(job: dict[str, Any]) -> None:
                 pass
         report.setdefault("technical", {})["performance"] = performance
         await update_job(job["id"], {
-            "status": "completed", "progress": 100, "finishedAt": now_iso(),
+            "status": "completed", "progress": 100, "progressMessage": "Проверка завершена. Отчёты готовы.", "finishedAt": now_iso(),
             "documentMap": document.get("map"), "report": report, "retryRuleIds": [],
             "diagnostics": [
                 *(((document.get("map") or {}).get("usage") or {}).get("diagnostics", [])),
@@ -215,7 +227,7 @@ async def _perform_check(job: dict[str, Any]) -> None:
         if await _is_cancelled(job["id"]):
             return
         await update_job(job["id"], {
-            "status": "failed", "progress": 100, "finishedAt": now_iso(),
+            "status": "failed", "progress": 100, "progressMessage": "Проверка остановлена из-за технической ошибки.", "finishedAt": now_iso(),
             "diagnostics": _diagnostics_from_error(exc), "error": str(exc),
         })
 

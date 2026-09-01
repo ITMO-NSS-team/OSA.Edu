@@ -215,7 +215,17 @@ def _extract_fields(blocks: list[dict]) -> dict[str, Any]:
     ]
     conclusion_headings = [b for b in blocks if b.get("type") == "heading" and re.match(r"^(?:выводы|заключение|итоги)", b.get("text", ""), re.I)]
     bibliography_start = next((i for i, b in enumerate(blocks) if b.get("type") == "heading" and re.search(r"список.*(?:литератур|источник)", b.get("text", ""), re.I)), -1)
-    source = blocks[bibliography_start + 1:] if bibliography_start >= 0 else blocks
+    bibliography_end = len(blocks)
+    if bibliography_start >= 0:
+        for i in range(bibliography_start + 1, len(blocks)):
+            text = re.sub(r"\s+", " ", str(blocks[i].get("text") or "")).strip()
+            if re.match(r"^\s*(?:\d+(?:\.\d+)*\.?\s*)?(?:приложение|appendix)\b", text, re.I) and (
+                blocks[i].get("type") == "heading"
+                or (text == text.upper() and bool(re.search(r"\p{L}", text)))
+            ):
+                bibliography_end = i
+                break
+    source = blocks[bibliography_start + 1:bibliography_end] if bibliography_start >= 0 else blocks
     bibliography_blocks = [b for b in source if b.get("type") == "bibliography" or re.match(r"^\s*\d+[.)]\s+", b.get("text", ""))]
     return {
         "title": title,

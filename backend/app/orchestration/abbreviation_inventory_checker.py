@@ -132,11 +132,12 @@ Python выполнил HIGH-RECALL поиск и передал abbreviation-li
    - identifier_or_symbol: формульный/кодовый идентификатор, единица, технический символ;
    - ordinary_text: обычное слово/фрагмент текста;
    - uncertain: контекста недостаточно.
-   Не делай token abbreviation только из-за верхнего регистра или латиницы. entityKind и normativeClass независимы: например метрика может по контексту быть как настоящей аббревиатурой, так и самостоятельным обозначением.
-3. isForeignAbbreviation — yes/no только если normativeClass=abbreviation; иначе not_applicable. Под foreign понимается иностранная аббревиатура в локальном авторском контексте.
-4. firstUseHasRussianFullTermBefore — есть ли в firstUse перед token полный русский термин, после которого token дан как сокращение (обычно в скобках). Оценивай только grounded firstUse. Если candidate не abbreviation или нет авторского содержательного firstUse — not_applicable. Если контекст не позволяет решить — uncertain.
-5. hasExplanationAnywhere — есть ли среди firstUse/contextUses/listedDefinitions явная document-grounded расшифровка/определение token хотя бы на одном языке. Не засчитывай внешнее общеизвестное значение token.
-6. hasRussianExplanationAnywhere — есть ли среди тех же переданных grounded контекстов явный русский полный термин/перевод. Английская расшифровка без русского смысла = no. Для не-abbreviation — not_applicable.
+   Не делай token abbreviation только из-за верхнего регистра или латиницы. entityKind и normativeClass независимы.
+3. isAbbreviation — отдельный нормативный факт yes/no/uncertain: является ли token именно сокращённой формой термина в ЭТОМ документе. Он НЕ выводится автоматически из entityKind. Название модели, датасета, ресурса, метода, метрики или формата само по себе не является доказательством сокращения. Если entityKind не abbreviation, ставь yes только когда переданный контекст действительно показывает сокращённую форму (явная расшифровка/определение или запись в списке сокращений); иначе uncertain/no по фактам.
+4. isForeignAbbreviation — yes/no только если isAbbreviation=yes; иначе not_applicable/uncertain. Под foreign понимается иностранная аббревиатура в локальном авторском контексте.
+5. firstUseHasRussianFullTermBefore — есть ли в firstUse перед token полный русский термин, после которого token дан как сокращение (обычно в скобках). Оценивай только grounded firstUse. Если token не подтверждён как abbreviation или нет авторского содержательного firstUse — not_applicable. Если контекст не позволяет решить — uncertain.
+6. hasExplanationAnywhere — есть ли среди firstUse/contextUses/listedDefinitions явная document-grounded расшифровка/определение token хотя бы на одном языке. Не засчитывай внешнее общеизвестное значение token.
+7. hasRussianExplanationAnywhere — есть ли среди тех же переданных grounded контекстов явный русский полный термин/перевод. Английская расшифровка без русского смысла = no. Для не-abbreviation — not_applicable.
 
 Контекстные правила:
 - listedDefinitions — найденные Python записи из собственного списка сокращений/определений документа и являются сильным grounded evidence, но не меняют факт первого употребления.
@@ -149,7 +150,7 @@ CANDIDATES:
 {json.dumps(_prompt_inventory(inventory), ensure_ascii=False, separators=(',', ':'))}
 
 Верни ТОЛЬКО JSON:
-{{"entities":[{{"id":"<candidate-id>","entityKind":"abbreviation|method_or_algorithm|model_name|dataset_name|named_resource|metric_or_measure|format_or_protocol|identifier_or_code|unit_or_symbol|quoted_or_code_token|ordinary_text|uncertain","normativeClass":"abbreviation|proper_name|identifier_or_symbol|ordinary_text|uncertain","isForeignAbbreviation":"yes|no|uncertain|not_applicable","firstUseHasRussianFullTermBefore":"yes|no|uncertain|not_applicable","hasExplanationAnywhere":"yes|no|uncertain|not_applicable","hasRussianExplanationAnywhere":"yes|no|uncertain|not_applicable","reason":"очень кратко, только по переданным фактам"}}]}}
+{{"entities":[{{"id":"<candidate-id>","entityKind":"abbreviation|method_or_algorithm|model_name|dataset_name|named_resource|metric_or_measure|format_or_protocol|identifier_or_code|unit_or_symbol|quoted_or_code_token|ordinary_text|uncertain","normativeClass":"abbreviation|proper_name|identifier_or_symbol|ordinary_text|uncertain","isAbbreviation":"yes|no|uncertain","isForeignAbbreviation":"yes|no|uncertain|not_applicable","firstUseHasRussianFullTermBefore":"yes|no|uncertain|not_applicable","hasExplanationAnywhere":"yes|no|uncertain|not_applicable","hasRussianExplanationAnywhere":"yes|no|uncertain|not_applicable","reason":"очень кратко, только по переданным фактам"}}]}}
 '''
 
 
@@ -179,6 +180,24 @@ def _parse_fact_rows(value: Any, allowed_ids: set[str]) -> dict[str, dict]:
             "entityKind": entity_kind,
             "normativeClass": normative_class,
         }
+        direct_is_abbreviation = str(raw.get("isAbbreviation") or "").strip().lower()
+        # Backward compatibility for cached/test rows produced before this field
+        # existed. New runtime prompts always request the explicit property.
+        if direct_is_abbreviation not in {"yes", "no", "uncertain"}:
+            if normative_class == "abbreviation":
+                direct_is_abbreviation = "yes"
+            elif normative_class in {"proper_name", "identifier_or_symbol", "ordinary_text"}:
+                direct_is_abbreviation = "no"
+            else:
+                direct_is_abbreviation = "uncertain"
+        # Conflicting independent classifications are not silently resolved in
+        # favor of a strong verdict. They become uncertain.
+        if (normative_class == "abbreviation" and direct_is_abbreviation == "no") or (
+            normative_class in {"proper_name", "identifier_or_symbol", "ordinary_text"}
+            and direct_is_abbreviation == "yes"
+        ):
+            direct_is_abbreviation = "uncertain"
+        parsed["isAbbreviation"] = direct_is_abbreviation
         complete = True
         for field in _FACT_FIELDS:
             fact = str(raw.get(field) or "").strip().lower()
@@ -189,13 +208,13 @@ def _parse_fact_rows(value: Any, allowed_ids: set[str]) -> dict[str, dict]:
         if not complete:
             continue
 
-        # Cross-field normalization is factual, not normative: once the LLM has
-        # said this is not an abbreviation, abbreviation-only attributes cannot
-        # remain affirmative by accident.
-        if normative_class in {"proper_name", "identifier_or_symbol", "ordinary_text"}:
+        # Cross-field normalization uses the explicit abbreviation property, not
+        # the semantic entity type. A model/dataset/resource may be an acronym,
+        # while an uppercase identifier may not be one.
+        if direct_is_abbreviation == "no":
             for field in _FACT_FIELDS:
                 parsed[field] = "not_applicable"
-        elif normative_class == "uncertain":
+        elif direct_is_abbreviation == "uncertain":
             for field in _FACT_FIELDS:
                 if parsed[field] == "not_applicable":
                     parsed[field] = "uncertain"
@@ -212,13 +231,21 @@ def _parse_rows(value: Any, allowed_ids: set[str]) -> dict[str, dict]:
 
 def _candidate_facts(candidate: dict, mapped: dict | None, fact_store: dict | None = None) -> dict[str, str]:
     row = mapped or {}
+    direct = str(row.get("isAbbreviation") or "").strip().lower()
     normative_class = str(row.get("normativeClass") or "uncertain")
-    if normative_class == "abbreviation":
-        is_abbreviation = "yes"
-    elif normative_class in {"proper_name", "identifier_or_symbol", "ordinary_text"}:
-        is_abbreviation = "no"
-    else:
-        is_abbreviation = "uncertain"
+    if direct not in {"yes", "no", "uncertain"}:
+        if normative_class == "abbreviation":
+            direct = "yes"
+        elif normative_class in {"proper_name", "identifier_or_symbol", "ordinary_text"}:
+            direct = "no"
+        else:
+            direct = "uncertain"
+    if (normative_class == "abbreviation" and direct == "no") or (
+        normative_class in {"proper_name", "identifier_or_symbol", "ordinary_text"} and direct == "yes"
+    ):
+        direct = "uncertain"
+    is_abbreviation = direct
+
     return {
         "isAbbreviation": is_abbreviation,
         "isForeignAbbreviation": str(row.get("isForeignAbbreviation") or "uncertain"),

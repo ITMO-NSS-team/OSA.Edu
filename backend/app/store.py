@@ -77,10 +77,10 @@ async def recover_interrupted_jobs() -> None:
         for job in jobs:
             status = job.get('status')
             if status in {'extracting', 'mapping'}:
-                job.update(status='queued', progress=0, error='Сервер был перезапущен; построение структуры возвращено в очередь.', updatedAt=now_iso())
+                job.update(status='queued', progress=0, progressMessage='Сервер перезапущен. Построение структуры будет запущено заново.', error='Сервер был перезапущен; построение структуры возвращено в очередь.', updatedAt=now_iso())
                 changed = True
             elif status in {'checking', 'queued_check'}:
-                job.update(status='queued_check', progress=32, error='Сервер был перезапущен; проверка возвращена в очередь.', updatedAt=now_iso())
+                job.update(status='queued_check', progress=32, progressMessage='Сервер перезапущен. Проверка правил продолжится по подтверждённой структуре.', error='Сервер был перезапущен; проверка возвращена в очередь.', updatedAt=now_iso())
                 changed = True
         if changed:
             _write_sync(jobs)

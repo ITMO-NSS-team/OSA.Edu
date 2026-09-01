@@ -495,7 +495,14 @@ def _shorten(value: str, limit: int) -> tuple[str, bool]:
     normalized = value.strip()
     if len(normalized) <= limit:
         return normalized, False
-    return normalized[:limit].rstrip() + "...", True
+    candidate = normalized[:limit].rstrip()
+    # Do not cut a proof fragment in the middle of a word. If the last visible
+    # token is long, keep the character limit as a fallback rather than losing
+    # the entire useful fragment.
+    boundary = candidate.rfind(" ")
+    if boundary >= max(1, int(limit * 0.75)):
+        candidate = candidate[:boundary].rstrip(" ,;:-")
+    return candidate + "…", True
 
 
 def _register_fonts() -> tuple[str, str]:

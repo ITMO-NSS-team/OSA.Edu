@@ -3,7 +3,7 @@ import regex as re
 from .common import evidence, contextual, dedupe_evidence, result, is_actual_caption, looks_like_contents, is_code_or_prompt, mapped_excluded_ids
 from .bibliography import run_bibliography_rule
 from .abbreviations import run_abbreviation_check, combined_abbreviation_rules
-from ..document.numbered_items import collect_unique_defense_items
+from ..document.numbered_items import collect_unique_defense_items, collect_unique_numbered_items
 from ..scope import main_work_ids
 
 DEFERRED_ABBREVIATIONS={'CORE-4-1','CORE-4-2','CORE-4-3','CORE-12'}
@@ -220,6 +220,63 @@ def _formula_explanation(rule,document):
 
 
 def _chapter_conclusions(rule,document):
+    """Check CORE-8-1 strictly inside confirmed ``chapter_conclusions`` ranges.
+
+    Searching arbitrary chapter prose for the word ``выводы`` is unsafe: an
+    ordinary sentence can be mistaken for a conclusions section and, conversely,
+    a perfectly mapped conclusions block can be skipped.  The confirmed
+    Document Map is the canonical structural source, so production checks use its
+    chapter/conclusion ranges directly.  Legacy documents without a usable map
+    retain the old conservative fallback.
+    """
+    all_blocks=list(document.get('blocks',[]))
+    idx={str(b.get('id')):i for i,b in enumerate(all_blocks) if b.get('id')}
+    elements=list((document.get('map') or {}).get('elements') or [])
+    mapped_chapters=[
+        el for el in elements
+        if el.get('type')=='chapter'
+        and idx.get(str(el.get('startBlockId') or '')) is not None
+        and idx.get(str(el.get('endBlockId') or '')) is not None
+    ]
+    mapped_conclusions=[
+        el for el in elements
+        if el.get('type')=='chapter_conclusions'
+        and el.get('state')!='ambiguous'
+        and idx.get(str(el.get('startBlockId') or '')) is not None
+        and idx.get(str(el.get('endBlockId') or '')) is not None
+    ]
+
+    if mapped_chapters:
+        mapped_chapters.sort(key=lambda el: idx[str(el.get('startBlockId'))])
+        ev=[]
+        missing_ranges=[]
+        for chapter in mapped_chapters:
+            cs=idx[str(chapter.get('startBlockId'))]
+            ce=idx[str(chapter.get('endBlockId'))]
+            candidates=[
+                el for el in mapped_conclusions
+                if cs <= idx[str(el.get('startBlockId'))] <= ce
+            ]
+            if not candidates:
+                missing_ranges.append(str(chapter.get('label') or all_blocks[cs].get('text') or 'глава'))
+                continue
+            conclusion=min(candidates,key=lambda el: idx[str(el.get('startBlockId'))])
+            s=idx[str(conclusion.get('startBlockId'))]
+            e=idx[str(conclusion.get('endBlockId'))]
+            scoped=all_blocks[s:e+1]
+            items=collect_unique_numbered_items(scoped)
+            numbers=[int(item.get('number') or 0) for item in items]
+            if not numbers or numbers[0] != 1:
+                source=scoped[0]
+                quote=' '.join(str(b.get('text') or '') for b in scoped[:5])[:700]
+                ev.append(evidence(source,quote))
+        if ev:
+            return _violation(rule,'В подтверждённом разделе выводов по главе не найден нумерованный список.',ev[:15],'Представить выводы по каждой главе нумерованным списком.')
+        if missing_ranges:
+            return _uncertain(rule,'Для части глав карта документа не содержит подтверждённого диапазона выводов; формат выводов нельзя надёжно оценить автоматически.')
+        return _pass(rule,'Во всех подтверждённых разделах выводов по главам найдены нумерованные пункты.')
+
+    # Compatibility path for old extracted documents that predate Document Map.
     chapters=document.get('fields',{}).get('chapterHeadings',[]); blocks=_main_work_blocks(document)
     if not chapters: return _uncertain(rule,'Заголовки глав не распознаны.')
     ev=[]
@@ -317,11 +374,47 @@ def _bibliography_refs(rule,document):
 
 
 def _is_code(value:str)->bool:
-    if '```' in value:return True
+    """Return True only for a dedicated code payload, not prose mentioning code.
+
+    PDF extraction can flatten a paragraph such as "ответ должен быть в блоке
+    ```python```" into one block.  Treating the mere fence marker as executable
+    code made CORE-13 accuse ordinary explanatory prose.  Use code-density
+    signals instead; this remains language-agnostic and does not depend on a
+    particular thesis or programming language.
+    """
+    value=str(value or '')
     lines=[x.strip() for x in value.splitlines() if x.strip()]
-    statements=sum(bool(re.match(r'^(?:def\s+\w+\s*\(|class\s+\w+|import\s+\w+|from\s+\w+\s+import|function\s+\w+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\b)',x)) for x in lines)
-    xml=sum(bool(re.match(r'^</?[A-Za-z][^>]*>',x)) for x in lines); syntax=len(re.findall(r'[{};]|=>|:=|==|\b(?:const|let|var)\s+\w+',value))
-    return statements>=2 or xml>=3 or (statements>=1 and syntax>=3)
+    statements=len(re.findall(
+        r'(?<!\w)(?:def\s+\w+\s*\(|class\s+\w+|import\s+\w+|from\s+\w+\s+import|'
+        r'function\s+\w+\s*\(|(?:SELECT|INSERT|UPDATE|DELETE)\b)',
+        value,
+        re.I,
+    ))
+    xml=sum(bool(re.match(r'^</?[A-Za-z][^>]*>',x)) for x in lines)
+    syntax=len(re.findall(r'[{};]|=>|:=|==|\b(?:const|let|var)\s+\w+',value))
+    assignments=len(re.findall(r'(?<![=!<>])\b[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?![=])',value))
+    cyr_words=len(re.findall(r'[А-ЯЁа-яё]{3,}',value))
+    fenced='```' in value
+
+    # Long Russian prose with a few parameter assignments or a literal fence
+    # is documentation, not a standalone code fragment.
+    if cyr_words >= 25 and statements < 2 and (syntax + assignments) < 12:
+        return False
+    # Short bullets with formulas/configuration values (``x = y``, ``seed=42``)
+    # are also prose unless they contain an explicit fence or a programming
+    # statement.  This prevents equations and experiment settings from being
+    # mistaken for source listings.
+    if cyr_words >= 4 and not fenced and statements == 0:
+        return False
+    if statements >= 2 or xml >= 3:
+        return True
+    if statements >= 1 and (syntax >= 2 or assignments >= 1):
+        return True
+    if cyr_words <= 8 and assignments >= 2 and (syntax >= 1 or fenced):
+        return True
+    if cyr_words <= 8 and fenced and (syntax >= 2 or assignments >= 1):
+        return True
+    return False
 
 
 def _code_explanation(rule,document):
@@ -329,8 +422,21 @@ def _code_explanation(rule,document):
     if not code:return _na(rule,'Фрагменты программного кода не обнаружены.')
     ev=[]
     for b in code:
-        i=next((j for j,x in enumerate(blocks) if x['id']==b['id']),0); prior=' '.join(x.get('text','') for x in blocks[max(0,i-3):i])
-        if not re.search(r'(?:фрагмент|код|листинг|реализ|выполня|алгоритм)',prior,re.I): ev.append(evidence(b,b.get('text','')[:400]))
+        i=next((j for j,x in enumerate(blocks) if x['id']==b['id']),0)
+        # Explanation can be immediately before the listing, in the same
+        # flattened PDF block, or directly after it.  The check is intentionally
+        # semantic-light: require Russian explanatory vocabulary, not a specific
+        # heading or page layout.
+        context=' '.join(x.get('text','') for x in blocks[max(0,i-4):min(len(blocks),i+2)])
+        explanation_markers=re.search(
+            r'(?:фрагмент|код|листинг|реализ|выполня|алгоритм|функц\p{L}*|парсер\p{L}*|'
+            r'вычисл\p{L}*|извлека\p{L}*|проверя\p{L}*|преобраз\p{L}*|назначени\p{L}*)',
+            context,
+            re.I,
+        )
+        enough_prose=len(re.findall(r'[А-ЯЁа-яё]{3,}',context)) >= 8
+        if not (explanation_markers and enough_prose):
+            ev.append(evidence(b,b.get('text','')[:400]))
     return _violation(rule,'Для фрагмента кода не найдено предшествующее описание.',ev,'Перед кодом объяснить его назначение.') if ev else _pass(rule,'Для распознанных фрагментов кода найдено описание.')
 
 

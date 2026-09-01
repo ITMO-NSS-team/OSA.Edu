@@ -9,6 +9,7 @@ def _read(name: str) -> str:
 
 DEFAULT_PROMPT = _read('semantic-prompt.txt')
 DEFAULT_MAP_PROMPT = _read('document-map-prompt.txt')
+DEFAULT_MAP_VERIFIER_PROMPT = _read('document-map-verifier-prompt.txt')
 DEFAULT_ADDITIONAL_CRITERIA = ''
 DEFAULT_PROFILE = 'core'
 

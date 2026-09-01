@@ -6,6 +6,7 @@ from typing import Any
 
 from .config import APP_VERSION
 from .util import normalized_quote
+from .user_facing import enrich_rule_for_user
 
 SCORE_FAMILIES = [
     ["CORE-5-4", "CORE-7-2", "CORE-19"],
@@ -227,7 +228,7 @@ def make_report(
     return {
         "ruleResults": prepared,
         "documentMap": document_map,
-        "ruleCatalog": [{k: rule.get(k) for k in catalog_keys if rule.get(k) is not None} for rule in rules],
+        "ruleCatalog": [enrich_rule_for_user({k: rule.get(k) for k in catalog_keys if rule.get(k) is not None}) for rule in rules],
         "issueGroups": list(issue_groups.values()),
         "summary": summary,
         "score": score,

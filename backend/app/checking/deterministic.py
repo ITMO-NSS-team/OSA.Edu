@@ -17,7 +17,7 @@ SPECS={
 'bibliography-junk':[(r'\bISBN\b',None),(r'\bed\.\s+by\b',None),(r'\b[A-ZА-ЯЁ][\p{L}-]+,\s+[A-ZА-ЯЁ]\.', 'Убрать запятую между фамилией и инициалами и унифицировать формат.'),(r'\s&\s','Убрать символ & и оформить авторов единообразно.')],
 'bibliography-pages':[(r'\bp\.\s*\d+\s*[-–—]\s*\d+\b','Для диапазона страниц англоязычной статьи использовать «pp. 12-25».')],
 'forbidden-sentence-start':[(r'(?:^|[.!?]\s+)(?:А|Но|Так\s+как|То\s+есть|Т\.?\s*к\.|Т\.?\s*е\.)\s+','Перестроить начало предложения.')],
-'forbidden-abbreviations':[(r'\b(?:т\.?\s*е\.|т\.?\s*к\.|т\.?\s*ч\.)','Раскрыть сокращение.'),(r'\bт\.[дп]\.(?!\s)','Добавить пробел: «т. д.», «т. п.».')],
+'forbidden-abbreviations':[(r'\b(?:т\.\s*е\.|т\.\s*к\.|т\.\s*ч\.)','Раскрыть сокращение.'),(r'\bт\.[дп]\.','Добавить пробел: «т. д.», «т. п.».')],
 'colon-a-imenno':[(r':\s*а\s+именно\b','Убрать «а именно».')],
 'to-est':[(r'\bто\s+есть\b','Перестроить пояснение.')],
 'colon-and-to-est':[(r':\s*а\s+именно\b','Убрать избыточную конструкцию.'),(r'\bто\s+есть\b','Перестроить пояснение.')],
@@ -196,11 +196,46 @@ def _list_cap(rule,document):
     for b in narrative_blocks(document):
         text=b.get('text','')
         if re.search(r'\bАлгоритм\s*:',text,re.I) or formula_like_block(text): continue
-        for m in re.finditer(r'(?:^|\n)\s*\d{1,3}\.\s+([а-яё])',text,re.M):
-            q=contextual(text,m.start(),len(m.group())+80)
+        # PDF/DOCX lists occur as ``1.``, ``1)`` and ``(1)``.  The previous
+        # detector only handled the first form, which systematically missed
+        # lower-case list items in otherwise correctly extracted list blocks.
+        # Reuse the canonical numbered-item parser instead of maintaining a
+        # second, narrower marker grammar here.
+        for item in extract_numbered_items(text):
+            body=str(item.get('body') or '').lstrip(' «"“(').lstrip()
+            if not body or not re.match(r'^[а-яё]',body):
+                continue
+            q=str(item.get('full') or item.get('body') or '')
             if is_likely_table_context(q): continue
             ev.append(evidence(b,q))
     return result(rule,'violation','Нумерованный пункт начинается со строчной буквы.',dedupe_evidence(ev)[:12],1,'detector','Начать пункт с прописной буквы.') if ev else result(rule,'pass','Высокоуверенные случаи начала нумерованного пункта со строчной буквы не обнаружены.',confidence=1)
+
+
+def _forbidden_abbreviations(rule,document):
+    """Check CORE-11-3 without confusing ordinary word endings with ``т. е.``.
+
+    The old pattern made the dot after ``т`` optional, so a PDF word such as
+    ``спли-те.`` could expose the substring ``те.`` and become a false positive.
+    The normative forms always contain the first full stop, therefore requiring
+    it is both stricter and more faithful to the rule.
+    """
+    forbidden=re.compile(r'(?<![\p{L}\p{N}_])т\.\s*(?:е|к|ч)\.(?!\p{L})',re.I)
+    bad_spacing=re.compile(r'(?<![\p{L}\p{N}_])т\.[дп]\.(?!\p{L})',re.I)
+    ev=[]
+    for b in narrative_blocks(document):
+        text=b.get('text','')
+        for pattern in (forbidden,bad_spacing):
+            for m in pattern.finditer(text):
+                # ``Т. Е. Иванов`` is a sequence of initials, not the
+                # abbreviation ``т. е.``.  Preserve it when a surname follows.
+                right=text[m.end():m.end()+48]
+                if re.match(r'\s*[А-ЯЁ][а-яё-]{2,}',right):
+                    continue
+                ev.append(evidence(b,contextual(text,m.start(),len(m.group()))))
+    ev=dedupe_evidence(ev)[:12]
+    if ev:
+        return result(rule,'violation',rule.get('requirement','Обнаружено запрещённое сокращение.'),ev,1,'detector','Раскрыть «т. е.», «т. к.», «т. ч.» словами; «т. д.» и «т. п.» писать с пробелами.')
+    return result(rule,'pass','Запрещённые сокращения «т. е.», «т. к.», «т. ч.» и слитные «т.д.», «т.п.» не обнаружены.',confidence=1)
 
 
 def _list_ending(rule,document,numbered=True):
@@ -316,6 +351,7 @@ def run_deterministic(rule:dict,document:dict)->dict:
     if detector=='numbered-list-ending': return _list_ending(rule,document,True)
     if detector=='bullet-list-ending': return _list_ending(rule,document,False)
     if detector=='numbered-list-capitalization': return _list_cap(rule,document)
+    if detector=='forbidden-abbreviations': return _forbidden_abbreviations(rule,document)
     if detector=='small-numerals': return _small_numerals(rule,document)
     if detector=='defense-punctuation': return _defense(rule,document,True)
     if detector=='defense-symbols': return _defense(rule,document,False)

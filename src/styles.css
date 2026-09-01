@@ -280,3 +280,16 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
 .report-health.ready { background: #eef8f0; border-color: #b9d8c0; }
 .report-health.review_required { background: #fff8e8; border-color: #e2c980; }
 .report-health.technical_incomplete { background: #fff0f0; border-color: #e1b4b4; }
+
+/* quality-4: report readability and user-facing polish */
+.result-card summary { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; }
+.result-card summary .rule-title { white-space: normal; overflow-wrap: anywhere; word-break: normal; line-height: 1.35; }
+.result-card summary .rule-id { align-self: center; }
+.evidence blockquote { overflow: visible; max-height: none; }
+.evidence-quote, .candidate-context { white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
+.progress-message { margin: -3px 0 10px; color: #5f666d; line-height: 1.45; }
+.advice-actions { margin-top: 14px; }
+.related-advice { margin-top: 9px; padding: 12px 14px; border-left: 3px solid #7c6b3d; background: #faf7ee; border-radius: 8px; }
+.related-advice strong { display: block; margin-bottom: 5px; }
+.related-advice p { margin: 0 0 7px; line-height: 1.5; }
+.related-advice a { color: #4b5967; font-size: 13px; }

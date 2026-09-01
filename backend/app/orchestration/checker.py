@@ -25,6 +25,7 @@ from .result_processing import (
     _prune_resolved_warnings,
 )
 from .semantic_packets import ABSENCE_RULES, RULE_GUIDANCE, _fact_recovery_message, _message
+from .verdict_contract import enforce_verdict_contracts, technical_rule_result
 
 # Compatibility alias. Canonical direction is Document Map → legacy fields.
 hydrate_fields_from_confirmed_map = hydrate_legacy_fields
@@ -56,9 +57,17 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             abbreviation_routed.append(routed)
         elif st=='deterministic':
             detector_rule = {**rule, **({'detectorId': routed.get('detectorId')} if routed.get('detectorId') else {})}
-            local[rule['id']]=_normalize_local(routed,run_deterministic(detector_rule,document))
+            try:
+                local[rule['id']]=_normalize_local(routed,run_deterministic(detector_rule,document))
+            except Exception as exc:
+                warnings.append(f"{rule['id']}: deterministic checker завершился ошибкой: {exc}")
+                local[rule['id']]=technical_rule_result(rule,'deterministic',exc)
         elif st=='structural':
-            local[rule['id']]=_normalize_local(routed,run_structural(rule,document,routing.get('fragments',[])))
+            try:
+                local[rule['id']]=_normalize_local(routed,run_structural(rule,document,routing.get('fragments',[])))
+            except Exception as exc:
+                warnings.append(f"{rule['id']}: structural checker завершился ошибкой: {exc}")
+                local[rule['id']]=technical_rule_result(rule,'structural',exc)
         elif st=='manual':
             local[rule['id']]=_manual(rule,routed.get('reason'))
         elif st=='unavailable':
@@ -90,7 +99,14 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
         for i in range(0,len(frules),max_rules):
             requests.append((fid,frules[i:i+max_rules]))
 
-    candidate_plan=build_candidate_plan(document,candidate_routed)
+    try:
+        candidate_plan=build_candidate_plan(document,candidate_routed)
+    except Exception as exc:
+        warnings.append(f"Candidate plan не построен: {exc}")
+        candidate_plan={'requests': [], 'rulesByFamily': {}}
+        for item in candidate_routed:
+            rule=item['rule']
+            local[rule['id']]=technical_rule_result(rule,'candidate_plan',exc)
     abbreviation_rules=[item['rule'] for item in abbreviation_routed]
     total_requests=max(1,len(requests)+len(candidate_plan['requests'])+(1 if abbreviation_rules else 0))
     completed_total=0
@@ -114,7 +130,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
         provider=provider,
         model=model,
         usage=usage,
-        on_request_done=lambda: progress_step(f'Кандидаты {completed_total + 1}/{total_requests}'),
+        on_request_done=lambda: progress_step(f'Проверяем потенциальные нарушения: {completed_total + 1}/{total_requests}'),
         is_cancelled=is_cancelled,
     ))
 
@@ -129,7 +145,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             system_prompt=prompt,
             fact_store=fact_store,
         )
-        await progress_step(f'Аббревиатуры {completed_total + 1}/{total_requests}')
+        await progress_step(f'Проверяем сокращения и обозначения: {completed_total + 1}/{total_requests}')
         return local_results, local_usage, local_warnings
 
     abbreviation_task=asyncio.create_task(abbreviation_runner())
@@ -155,7 +171,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             fid,frules=current
             fragment=fragment_by.get(fid)
             if not fragment:
-                await progress_step(f'Фрагменты {completed_total + 1}/{total_requests}')
+                await progress_step(f'Проверяем правила по разделам: {completed_total + 1}/{total_requests}')
                 continue
             error=None
             for attempt in range(1,packet_attempts+1):
@@ -220,7 +236,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
                 warnings.append(f"Фрагмент «{fragment['label']}» не проверен: {error}")
                 for rule in frules:
                     raw.append({**_not_checked(rule,str(error)),'fragmentId':fid,'checkedBy':'llm','checkedFragments':[fid],'technicalIncomplete':True})
-            await progress_step(f'Фрагменты {completed_total + 1}/{total_requests}')
+            await progress_step(f'Проверяем правила по разделам: {completed_total + 1}/{total_requests}')
 
     workers=min(configured_rate_limits(provider)['maxConcurrent'],max(1,len(requests)))
     if requests:
@@ -303,21 +319,47 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
                     fact_cache_hits+=1
 
     if fatal is not None:
-        if not candidate_task.done():
-            candidate_task.cancel()
-        if not abbreviation_task.done():
-            abbreviation_task.cancel()
-        raise fatal
-    candidate_results,candidate_warnings=await candidate_task
-    warnings.extend(candidate_warnings)
-    for item in candidate_results:
-        local[item['ruleId']]=item
+        # Preserve deterministic/candidate work even when one semantic request hits
+        # a fatal provider error. Only still-unprocessed semantic fragments become
+        # technical not_checked results.
+        warnings.append(f"Семантическая проверка частично остановлена провайдером: {fatal}")
+        for routed in llm_routed:
+            rule=routed['rule']
+            for fid in routed.get('fragmentIds',[]):
+                if any(x.get('ruleId')==rule['id'] and x.get('fragmentId')==fid for x in raw):
+                    continue
+                raw.append({
+                    **_not_checked(rule,str(fatal)),
+                    'fragmentId':fid,
+                    'checkedBy':'llm',
+                    'checkedFragments':[fid],
+                    'technicalIncomplete':True,
+                })
 
-    abbreviation_results, abbreviation_usage, abbreviation_warnings = await abbreviation_task
-    merge_usage(usage, abbreviation_usage)
-    warnings.extend(abbreviation_warnings)
-    for item in abbreviation_results:
-        local[item['ruleId']] = item
+    try:
+        candidate_results,candidate_warnings=await candidate_task
+        warnings.extend(candidate_warnings)
+        for item in candidate_results:
+            local[item['ruleId']]=item
+    except Exception as exc:
+        warnings.append(f"Candidate stage завершился ошибкой: {exc}")
+        for routed in candidate_routed:
+            rule=routed['rule']
+            local.setdefault(rule['id'],technical_rule_result(rule,'candidate',exc))
+
+    abbreviation_usage=empty_usage()
+    try:
+        abbreviation_results, abbreviation_usage, abbreviation_warnings = await abbreviation_task
+        merge_usage(usage, abbreviation_usage)
+        warnings.extend(abbreviation_warnings)
+        for item in abbreviation_results:
+            local[item['ruleId']] = item
+    except Exception as exc:
+        warnings.append(f"Abbreviation fact-map завершился ошибкой: {exc}")
+        merge_usage(usage,getattr(exc,'llm_usage',None))
+        for routed in abbreviation_routed:
+            rule=routed['rule']
+            local.setdefault(rule['id'],technical_rule_result(rule,'abbreviation_fact_map',exc))
 
     routed_by={x['rule']['id']:x for x in routing['routed']}
     initial=[]
@@ -330,13 +372,38 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             initial.append(_not_checked(rule,(routed or {}).get('reason') or 'Для правила не найден обязательный смысловой фрагмент.'))
             continue
         initial.append(_aggregate(rule,routed,[x for x in raw if x.get('ruleId')==rule['id']]))
-    verified, verifier_usage, verifier_warnings = await verify_semantic_evidence(
-        document=document, rules=rules, results=initial, provider=provider, model=model, system_prompt=prompt,
-    )
-    merge_usage(usage, verifier_usage)
-    warnings.extend(verifier_warnings)
-    results=apply_consistency_checks(verified)
-    results=[RuleResultModel.model_validate(item).model_dump(exclude_none=True) for item in results]
+    verifier_usage=empty_usage()
+    try:
+        verified, verifier_usage, verifier_warnings = await verify_semantic_evidence(
+            document=document, rules=rules, results=initial, provider=provider, model=model, system_prompt=prompt,
+        )
+        merge_usage(usage, verifier_usage)
+        warnings.extend(verifier_warnings)
+    except Exception as exc:
+        warnings.append(f"Evidence verifier завершился ошибкой; сохранены предварительные результаты: {exc}")
+        merge_usage(usage,getattr(exc,'llm_usage',None))
+        verified=initial
+
+    try:
+        results=apply_consistency_checks(verified, document=document)
+    except Exception as exc:
+        warnings.append(f"Consistency post-processing завершился ошибкой; сохранены проверенные результаты: {exc}")
+        results=verified
+
+    results=enforce_verdict_contracts(results)
+    rule_by_id={str(rule.get('id')):rule for rule in rules}
+    validated=[]
+    for item in results:
+        try:
+            validated.append(RuleResultModel.model_validate(item).model_dump(exclude_none=True))
+        except Exception as exc:
+            rid=str((item or {}).get('ruleId') or '') if isinstance(item,dict) else ''
+            rule=rule_by_id.get(rid) or {'id':rid or 'UNKNOWN','severity':'major'}
+            warnings.append(f"{rid or 'UNKNOWN'}: финальная валидация результата завершилась ошибкой: {exc}")
+            validated.append(RuleResultModel.model_validate(
+                technical_rule_result(rule,'result_validation',exc)
+            ).model_dump(exclude_none=True))
+    results=validated
     warnings=_prune_resolved_warnings(warnings,results)
     return {
         'rules':all_rules,

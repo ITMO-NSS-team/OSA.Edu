@@ -27,7 +27,7 @@ def tokenize(value: str) -> list[str]:
 def _title(requirement: str) -> str:
     compact = re.sub(r'\s+', ' ', requirement).strip()
     sentence = re.split(r'[.!?](?:\s|$)', compact)[0] or compact
-    return sentence if len(sentence) <= 92 else sentence[:89].rstrip() + '…'
+    return sentence
 
 
 def _empty(value: str | None):

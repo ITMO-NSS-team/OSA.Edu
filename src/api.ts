@@ -20,6 +20,7 @@ export const api = {
   confirmStructure: (id: string) => request<Job>(`/api/jobs/${id}/confirm-structure`, { method: "POST" }),
   cancel: (id: string) => request<Job>(`/api/jobs/${id}/cancel`, { method: "POST" }),
   retry: (id: string) => request<Job>(`/api/jobs/${id}/retry`, { method: "POST" }),
+  restart: (id: string) => request<Job>(`/api/jobs/${id}/restart`, { method: "POST" }),
   retryFailed: (id: string) => request<Job>(`/api/jobs/${id}/retry-failed`, { method: "POST" }),
   delete: (id: string) => request<void>(`/api/jobs/${id}`, { method: "DELETE" }),
   reportPdfUrl: (id: string) => `${API}/api/jobs/${id}/report.pdf`,

@@ -46,11 +46,12 @@ export default function App() {
     catch (error) { setError((error as Error).message); }
     finally { setRulesLoading(false); }
   }
-  async function jobAction(id: string, action: "cancel" | "retry" | "retryFailed" | "delete") {
+  async function jobAction(id: string, action: "cancel" | "retry" | "retryFailed" | "restart" | "delete") {
     try {
       if (action === "cancel") await api.cancel(id);
       if (action === "retry") await api.retry(id);
       if (action === "retryFailed") await api.retryFailed(id);
+      if (action === "restart") await api.restart(id);
       if (action === "delete") await api.delete(id);
       await loadJobs();
     } catch (error) { setError((error as Error).message); }
@@ -58,6 +59,8 @@ export default function App() {
 
   if (!health) return <main className="loading-screen">{error || "Загрузка…"}</main>;
   const activeJobs = jobs.filter((job) => ["queued", "extracting", "mapping", "queued_check", "checking"].includes(job.status)).length;
+  const runningJobs = jobs.filter((job) => ["extracting", "mapping", "checking"].includes(job.status)).length;
+  const queuedJobs = jobs.filter((job) => ["queued", "queued_check"].includes(job.status)).length;
 
   return <main className="app-shell">
     <header className="app-header">
@@ -68,7 +71,7 @@ export default function App() {
         <NavButton active={page === "rules"} onClick={() => setPage("rules")}>Правила</NavButton>
         <NavButton active={page === "reports"} onClick={() => setPage("reports")}>Отчёты{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
       </nav>
-      <div className="queue-state">{activeJobs ? `В работе: ${activeJobs}` : "Очередь свободна"}</div>
+      <div className="queue-state">{activeJobs ? `${runningJobs ? `Проверяется: ${runningJobs}` : ""}${runningJobs && queuedJobs ? " · " : ""}${queuedJobs ? `ожидает: ${queuedJobs}` : ""}` : "Очередь свободна"}</div>
     </header>
 
     {error && <div className="global-error"><span>{error}</span><button onClick={() => setError("")}>×</button></div>}

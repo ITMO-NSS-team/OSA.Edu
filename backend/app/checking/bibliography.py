@@ -3,8 +3,62 @@ import regex as re
 from .common import evidence, result, dedupe_evidence, contextual
 
 
+_SPACED_DASH = re.compile(r'\s[–—]\s')
+
+
+_APPENDIX_BOUNDARY = re.compile(
+    r'^\s*(?:\d+(?:\.\d+)*\.?\s*)?(?:ПРИЛОЖЕНИЕ|APPENDIX)\b',
+    re.I,
+)
+
+
+def _without_appendix_tail(blocks: list[dict]) -> list[dict]:
+    """Clip accidental appendix spillover from a bibliography range.
+
+    Structure extraction can occasionally end the bibliography on the first
+    appendix heading.  A top-level appendix heading is never a bibliography
+    entry, even when it starts with a number such as ``5. ПРИЛОЖЕНИЕ А``.
+    Treat the first heading-like appendix marker as a hard boundary so all
+    bibliography rules share the same safe scope.
+    """
+    out: list[dict] = []
+    for block in blocks:
+        text = re.sub(r'\s+', ' ', str(block.get('text') or '')).strip()
+        is_boundary = bool(_APPENDIX_BOUNDARY.match(text)) and (
+            str(block.get('type') or '').lower() == 'heading'
+            or (text == text.upper() and bool(re.search(r'\p{L}', text)))
+        )
+        if is_boundary:
+            break
+        out.append(block)
+    return out
+
+
+def _bibliography_dash_separators(text: str):
+    """Yield spaced dashes that behave like bibliography field separators.
+
+    A plain ``\\s—\\s`` search is too broad: a dash can legitimately occur inside
+    an article title (for example between a short model name and its subtitle).
+    Bibliographic separators are much more constrained: they usually follow a
+    completed field (full stop/bracket) or introduce a structured publication
+    field such as year, volume, pages, URL or DOI.
+    """
+    for match in _SPACED_DASH.finditer(text):
+        left=text[:match.start()].rstrip()
+        right=text[match.end():].lstrip()
+        follows_completed_field=bool(left and left[-1] in '.;])')
+        starts_structured_field=bool(re.match(
+            r'(?:19|20)\d{2}\b|(?:vol\.|том\b|т\.\s*\d|no\.|№|p{1,2}\.|с\.\s*\d|'
+            r'URL\s*:|DOI\s*:|дата\s+обращения\b|издательство\b|[Мм]\.\s*:|СПб\.?\s*:)',
+            right,
+            re.I,
+        ))
+        if follows_completed_field or starts_structured_field:
+            yield match
+
+
 def run_bibliography_rule(rule:dict,document:dict)->dict:
-    blocks=document.get('fields',{}).get('bibliographyBlocks',[])
+    blocks=_without_appendix_tail(document.get('fields',{}).get('bibliographyBlocks',[]))
     if not blocks: return result(rule,'uncertain','Список литературы не удалось надёжно распознать.')
     rid=rule['id']
     if rid=='CORE-9-1':
@@ -61,6 +115,10 @@ def run_bibliography_rule(rule:dict,document:dict)->dict:
     if rid=='CORE-9-2': patterns=[r'\bISBN\b',r'\bed\.\s+by\b',r'\s&\s',r'\b[A-ZА-ЯЁ][\p{L}-]+,\s+[A-ZА-ЯЁ]\.']
     elif rid=='CORE-9-3': patterns=[r'\bp\.\s*\d+\s*[-–—]\s*\d+\b']
     for b in blocks:
+        if rid=='CORE-9-2':
+            text=b.get('text','')
+            for m in _bibliography_dash_separators(text):
+                ev.append(evidence(b,contextual(text,m.start(),len(m.group(0)))))
         for p in patterns:
             for m in re.finditer(p,b.get('text',''),re.I): ev.append(evidence(b,contextual(b['text'],m.start(),len(m.group(0)))))
     if ev: return result(rule,'violation',rule.get('requirement','Обнаружено нарушение оформления библиографии.'),dedupe_evidence(ev)[:15],1,'detector','Унифицировать оформление библиографической записи.')

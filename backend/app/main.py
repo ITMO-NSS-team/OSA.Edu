@@ -160,6 +160,7 @@ async def create_job_endpoint(
                 "developerMode": bool(developerMode),
                 "attempts": 0,
                 "progress": 0,
+                "progressMessage": "Файл принят. Ожидаем запуск обработки.",
             })
     except Exception as exc:
         for path in written:
@@ -286,14 +287,14 @@ async def confirm_structure(job_id: str):
     document["map"]["review"]["confirmationMode"] = "user"
     document["map"]["review"]["confirmedAt"] = now_iso()
     save_extracted(job_id, document)
-    updated = await update_job(job_id, {"status": "queued_check", "progress": 32, "documentMap": document["map"], "error": None})
+    updated = await update_job(job_id, {"status": "queued_check", "progress": 32, "progressMessage": "Структура подтверждена. Проверка правил начнётся следующим шагом.", "documentMap": document["map"], "error": None})
     start_queue()
     return updated
 
 
 @app.post("/api/jobs/{job_id}/cancel")
 async def cancel(job_id: str):
-    job = await update_job(job_id, {"status": "cancelled", "finishedAt": now_iso()})
+    job = await update_job(job_id, {"status": "cancelled", "progressMessage": "Проверка отменена пользователем.", "finishedAt": now_iso()})
     return job if job else _error(404, "Задача не найдена.")
 
 
@@ -310,10 +311,49 @@ async def retry(job_id: str):
     job = await update_job(job_id, {
         "status": next_status,
         "progress": 32 if next_status == "queued_check" else 0,
+        "progressMessage": "Повторяем проверку по подтверждённой структуре." if next_status == "queued_check" else "Проверка поставлена в очередь заново.",
         "error": None,
         "diagnostics": [],
         "finishedAt": None,
         "report": None,
+        "retryRuleIds": [],
+        "attempts": 0,
+    })
+    start_queue()
+    return job
+
+
+@app.post("/api/jobs/{job_id}/restart")
+async def restart(job_id: str):
+    """Start the job from the structure-building stage, keeping the same file/settings."""
+    current = await get_job(job_id)
+    if not current:
+        return _error(404, "Задача не найдена.")
+    cache_exists = bool(current.get("extractedPath") and Path(current["extractedPath"]).exists())
+    source_exists = bool(current.get("filePath") and Path(current["filePath"]).exists())
+    if not source_exists and not cache_exists:
+        return _error(409, "Нет исходного файла или кэша. Загрузите ВКР заново.")
+    if cache_exists:
+        try:
+            document = read_extracted(current["extractedPath"])
+            document.pop("map", None)
+            document.pop("factStore", None)
+            # Runtime-derived semantic state is rebuilt from the next confirmed map.
+            document.pop("semanticModel", None)
+            save_extracted(job_id, document)
+        except Exception:
+            if not source_exists:
+                return _error(409, "Не удалось подготовить кэш для нового запуска. Загрузите ВКР заново.")
+    job = await update_job(job_id, {
+        "status": "queued",
+        "progress": 0,
+        "progressMessage": "Новый запуск поставлен в очередь. Структура будет построена заново.",
+        "startedAt": None,
+        "finishedAt": None,
+        "documentMap": None,
+        "report": None,
+        "error": None,
+        "diagnostics": [],
         "retryRuleIds": [],
         "attempts": 0,
     })
@@ -340,7 +380,7 @@ async def retry_failed(job_id: str):
     retry_ids = [x for x in retry_ids if x]
     if not retry_ids:
         return _error(409, "Правил с ошибкой запроса или неполным покрытием нет.")
-    job = await update_job(job_id, {"status": "queued_check", "progress": 32, "error": None, "diagnostics": [], "finishedAt": None, "retryRuleIds": retry_ids, "attempts": 0})
+    job = await update_job(job_id, {"status": "queued_check", "progress": 32, "progressMessage": f"Повторяем только незавершённые проверки: {len(retry_ids)}.", "error": None, "diagnostics": [], "finishedAt": None, "retryRuleIds": retry_ids, "attempts": 0})
     start_queue()
     return job
 

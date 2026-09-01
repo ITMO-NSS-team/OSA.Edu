@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import re
 from io import BytesIO
 from typing import Any
 
@@ -20,7 +21,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from .pdf_reporting import _register_fonts, _safe, _shorten
+from .pdf_reporting import _register_fonts, _safe
+from .user_facing import advice_for_rule, clean_user_text, user_rule_requirement, user_rule_title
 
 _USER_STATUS = {
     "violation": ("Нужно исправить", colors.HexColor("#9B2C2C")),
@@ -100,7 +102,7 @@ _CATEGORY_ORDER = [
 
 _SEVERITY_ORDER = {"critical": 0, "major": 1, "minor": 2, "info": 3, None: 4, "": 4}
 _MAX_USER_EVIDENCE = 3
-_MAX_USER_QUOTE = 520
+_MAX_USER_QUOTE = 900
 _MAX_USER_TERMS = 12
 
 
@@ -240,7 +242,7 @@ def _cover(
         result.extend([table, Spacer(1, 4 * mm)])
 
     result.append(Table([[_p(
-        "Отчёт помогает найти места, которые стоит исправить или проверить. Он не является решением о допуске к защите. Технические детали, полные evidence и диагностика доступны в отдельном отчёте для разработчика.",
+        "Отчёт фиксирует нарушения и спорные места по выбранным правилам. Сначала исправляйте подтверждённые нарушения, затем просматривайте пункты, требующие ручной проверки. Для краткости длинные цитаты могут быть сокращены; полный текст доказательств доступен в отчёте для разработчика. Техническая диагностика доступна только в отчёте для разработчика.",
         styles["notice"],
     )]], colWidths=[174 * mm], style=TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF7E6")),
@@ -340,7 +342,7 @@ def _passed_section(results: list[dict[str, Any]], catalog: dict[str, dict[str, 
     passed.sort(key=lambda pair: _rule_sort_key(pair[0], pair[1]))
     cells: list[Any] = []
     for result, rule in passed:
-        title = str(rule.get("title") or result.get("explanation") or result.get("ruleId") or "")
+        title = user_rule_title(rule, str(result.get("explanation") or result.get("ruleId") or ""))
         cells.append(Paragraph(f"✓ {_safe(title)} <font color='#777777'>({_safe(str(result.get('ruleId') or ''))})</font>", styles["passed_item"]))
     rows = []
     for idx in range(0, len(cells), 2):
@@ -375,7 +377,7 @@ def _not_checked_section(results: list[dict[str, Any]], catalog: dict[str, dict[
     ]))
     if not_checked:
         for result, rule in not_checked:
-            title = str(rule.get("title") or result.get("ruleId") or "")
+            title = user_rule_title(rule, str(result.get("ruleId") or ""))
             explanation = str(result.get("explanation") or "").strip()
             text = f"• <b>{_safe(title)}</b>"
             if explanation:
@@ -435,7 +437,7 @@ def _user_rule_card(result: dict[str, Any], rule: dict[str, Any], styles: dict[s
     status = str(result.get("status") or "not_checked")
     label, color = _USER_STATUS.get(status, (status, colors.HexColor("#626970")))
     rid = str(result.get("ruleId") or rule.get("id") or "")
-    title = str(rule.get("title") or result.get("explanation") or rid)
+    title = user_rule_title(rule, str(result.get("explanation") or rid))
 
     badge = Table([[Paragraph(_safe(label), styles["badge"])]], colWidths=[37 * mm], rowHeights=[9 * mm])
     badge.setStyle(TableStyle([
@@ -454,13 +456,13 @@ def _user_rule_card(result: dict[str, Any], rule: dict[str, Any], styles: dict[s
     ]))
 
     body: list[Any] = [heading, Spacer(1, 2 * mm)]
-    requirement = str(rule.get("requirement") or "").strip()
+    requirement = user_rule_requirement(rule)
     if requirement and requirement != title:
-        body.append(_label_value("Требование", requirement, styles))
+        body.append(_label_value("Правило", requirement, styles))
 
-    explanation = str(result.get("explanation") or "").strip()
+    explanation = clean_user_text(str(result.get("explanation") or "").strip())
     if explanation:
-        body.append(_label_value("Почему", explanation, styles))
+        body.append(_label_value("Нарушение" if status == "violation" else "Результат проверки", explanation, styles))
 
     where = _where_text(result)
     if where:
@@ -482,14 +484,19 @@ def _user_rule_card(result: dict[str, Any], rule: dict[str, Any], styles: dict[s
         if len(evidence) > _MAX_USER_EVIDENCE:
             body.append(Paragraph(f"Ещё примеров: {len(evidence) - _MAX_USER_EVIDENCE}. Полный список — в отчёте для разработчика.", styles["muted"]))
 
-    fix = str(result.get("fix") or "").strip()
+    fix = clean_user_text(str(result.get("fix") or "").strip())
     if fix:
-        body.append(_label_value("Что сделать", fix, styles))
+        body.append(_label_value("Как исправить", fix, styles))
     elif status == "uncertain":
-        body.append(_label_value("Что сделать", "Проверить указанный фрагмент вручную и при необходимости уточнить формулировку.", styles))
+        body.append(_label_value("Как проверить", "Просмотреть указанный фрагмент вручную и при необходимости уточнить формулировку.", styles))
 
-    correct_example = str(rule.get("correctExample") or "").strip()
-    incorrect_example = str(rule.get("incorrectExample") or "").strip()
+    advice = rule.get("relatedAdvice") or advice_for_rule(rid)
+    if advice and status in {"violation", "uncertain"}:
+        advice_text = f"{advice.get('summary', '')} Источник: {advice.get('source', 'А.А. Шалыто')}, стр. {advice.get('page', '—')}."
+        body.append(_label_value("Связанный совет Шалыто", clean_user_text(advice_text), styles))
+
+    correct_example = clean_user_text(str(rule.get("correctExample") or "").strip())
+    incorrect_example = clean_user_text(str(rule.get("incorrectExample") or "").strip())
     if correct_example:
         example = f"Неверно: {incorrect_example}\nВерно: {correct_example}" if incorrect_example else f"Верно: {correct_example}"
         body.append(_label_value("Пример по правилу", example, styles))
@@ -561,11 +568,134 @@ def _fact_matrix_text(result: dict[str, Any]) -> str:
     return "; ".join(details[:3])
 
 
+def _anchor_match(text: str, anchor: str) -> re.Match[str] | None:
+    anchor = re.sub(r"\s+", " ", str(anchor or "")).strip()
+    if not anchor:
+        return None
+    return re.search(re.escape(anchor), text, re.I)
+
+
+def _sentence_bounds_around(text: str, start: int, end: int) -> tuple[int, int]:
+    """Find a readable sentence-like window containing ``start:end``."""
+    left = 0
+    for match in re.finditer(r"[.!?…](?:[»\"')\]]*)\s+", text[:start]):
+        left = match.end()
+    # Keep list/bullet markers when the anchor is inside a list item.
+    newline = text.rfind("\n", 0, start)
+    if newline >= 0:
+        left = max(left, newline + 1)
+
+    right = len(text)
+    match = re.search(r"[.!?…](?:[»\"')\]]*)(?=\s|$)", text[end:])
+    if match:
+        right = end + match.end()
+    return left, right
+
+
+def _word_safe_window(text: str, start: int, end: int, limit: int) -> tuple[str, bool]:
+    """Return <= limit chars around an anchor while keeping the anchor visible."""
+    if len(text) <= limit:
+        return text, False
+    anchor_mid = (start + end) // 2
+    left = max(0, anchor_mid - limit // 2)
+    right = min(len(text), left + limit)
+    left = max(0, right - limit)
+
+    if left > 0:
+        # Move to the next complete word; never display a chopped leading token.
+        m = re.search(r"\s+", text[left:min(len(text), left + 90)])
+        if m:
+            left += m.end()
+    if right < len(text):
+        # Move back to the previous complete word.
+        m = re.search(r"\s+\S*$", text[max(left, right - 90):right])
+        if m:
+            right = max(left, right - 90) + m.start()
+
+    excerpt = text[left:right].strip(" ,;:-")
+    prefix = "… " if left > 0 else ""
+    suffix = " …" if right < len(text) else ""
+    return prefix + excerpt + suffix, True
+
+
+def _author_quote(value: str, *, anchor: str = "", context: str = "") -> tuple[str, bool]:
+    """Return a readable author-facing excerpt while preserving the proved span.
+
+    Developer evidence remains exact.  The author PDF may shorten it, but when
+    an evidence token/marker is known the displayed excerpt is guaranteed to
+    contain that marker.  This prevents a card from claiming, for example,
+    «предложение начинается с „Но“» while showing a neighbouring sentence that
+    does not contain «Но» at all.
+    """
+    raw = re.sub(r"\s+", " ", str(value or "")).strip()
+    wider = re.sub(r"\s+", " ", str(context or "")).strip()
+    anchor = re.sub(r"\s+", " ", str(anchor or "")).strip()
+    if not raw and not wider:
+        return "", False
+
+    text = raw or wider
+    display_adjusted = False
+    match = _anchor_match(text, anchor)
+
+    # Some candidate evidence quotes are sentence slices while the detector's
+    # marker sits just outside that slice. Prefer the verified wider context in
+    # that case, but only when it actually contains the marker.
+    if anchor and match is None and wider:
+        wider_match = _anchor_match(wider, anchor)
+        if wider_match is not None:
+            text = wider
+            match = wider_match
+            display_adjusted = True
+
+    if match is not None:
+        left, right = _sentence_bounds_around(text, match.start(), match.end())
+        sentence = text[left:right].strip()
+        sentence_match = _anchor_match(sentence, anchor)
+        if sentence and len(sentence) <= _MAX_USER_QUOTE and sentence_match is not None:
+            return sentence, display_adjusted or sentence != raw
+        # Keep the anchor inside the character-limited excerpt even for very
+        # long sentences / flattened table rows.
+        local_start = match.start() - left if sentence else match.start()
+        local_end = match.end() - left if sentence else match.end()
+        source = sentence or text
+        excerpt, shortened = _word_safe_window(source, local_start, local_end, _MAX_USER_QUOTE)
+        return excerpt, True if shortened or display_adjusted or source != raw else False
+
+    # No explicit anchor is available. Keep the quality-4.1 behaviour that
+    # avoids visibly starting/ending in the middle of a word.
+    protected_start = bool(re.match(r"^(?:[–—•▪◦]|\(?\d+[.)])\s*", text))
+    starts_midword = bool(re.match(r"^[а-яёa-z]", text)) and not protected_start
+    if starts_midword:
+        boundary = re.search(r"[.!?]\s+(?=[А-ЯЁA-Z0-9«„\"])", text[:500])
+        if boundary and len(text) - boundary.end() >= 45:
+            text = text[boundary.end():].lstrip()
+            display_adjusted = True
+        else:
+            text = "… " + text
+            display_adjusted = True
+
+    if len(text) > _MAX_USER_QUOTE:
+        text, _ = _word_safe_window(text, 0, min(len(text), 1), _MAX_USER_QUOTE)
+        display_adjusted = True
+
+    if text and text[-1].isalnum():
+        trimmed = re.sub(r"\s+\S+$", "", text).rstrip(" ,;:-")
+        if trimmed and len(trimmed) >= max(20, int(len(text) * 0.65)):
+            text = trimmed + " …"
+            display_adjusted = True
+        else:
+            text += " …"
+            display_adjusted = True
+    return text, display_adjusted
+
 def _compact_evidence(item: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
     page = item.get("page")
     token = str(item.get("token") or "").strip()
-    quote = str(item.get("quote") or "").strip()
-    quote, shortened = _shorten(quote, _MAX_USER_QUOTE)
+    quote, _shortened = _author_quote(
+        str(item.get("quote") or ""),
+        anchor=token,
+        context=str(item.get("context") or ""),
+    )
     meta_parts = []
     if page:
         meta_parts.append(f"стр. {page}")
@@ -573,8 +703,6 @@ def _compact_evidence(item: dict[str, Any], styles: dict[str, ParagraphStyle]) -
         meta_parts.append(f"«{token}»")
     meta = " · ".join(meta_parts)
     text = (f"<b>{_safe(meta)}</b><br/>" if meta else "") + f"«{_safe(quote)}»"
-    if shortened:
-        text += "<br/><font color='#777777'>Фрагмент сокращён.</font>"
     table = Table([[Paragraph(text, styles["quote"])]], colWidths=[170 * mm])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7F8F8")),

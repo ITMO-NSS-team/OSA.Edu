@@ -11,7 +11,7 @@ from ..llm.client import ask_structured_json, estimate_tokens
 from ..util import normalized_quote, now_iso
 from .title import extract_best_title
 from .numbered_items import collect_unique_defense_items, collect_unique_numbered_items
-from .section_signals import find_defense_heading_span, is_defense_heading
+from .section_signals import find_defense_heading_span, is_defense_heading, is_section_heading
 from .units import canonicalize_document_units
 
 ALLOWED_TYPES = {
@@ -71,7 +71,7 @@ async def build_document_map(document: dict[str, Any], *, provider: str, model: 
     )
     parsed = _parse_structure(response["value"], blocks)
     return {
-        "version": 3,
+        "version": 4,
         "createdAt": now_iso(),
         "provider": provider,
         "model": model,
@@ -89,8 +89,9 @@ async def build_document_map(document: dict[str, Any], *, provider: str, model: 
 
 def map_can_be_reused(map_value: dict | None, provider: str, model: str, prompt: str) -> bool:
     return bool(
-        map_value and map_value.get("version") == 3 and map_value.get("provider") == provider
+        map_value and map_value.get("version") == 4 and map_value.get("provider") == provider
         and map_value.get("model") == model and map_value.get("promptHash") == _prompt_hash(prompt)
+        and (map_value.get("verification") or {}).get("status") in {"confirmed", "corrected"}
     )
 
 
@@ -290,19 +291,7 @@ def _materialize_element(element: dict[str, Any], blocks: list[dict[str, Any]], 
 
 def _obvious_chapter_conclusions(label: str, blocks: list[dict[str, Any]]) -> bool:
     values = [label, *[str(block.get("text") or "") for block in blocks[:3]]]
-    # Real VKR headings often combine limitations and conclusions in one final
-    # section, e.g. «3.4 Ограничения методологии и выводы по главе».  Treat a
-    # heading ending in the explicit phrase as deterministic, not ambiguous.
-    pattern = re.compile(
-        # Accept both plain headings ("2.12 Выводы по главе") and common
-        # extended variants such as "2.12 Выводы по главе: карта индуктивных
-        # смещений". The outer helper still requires a heading-like block, so
-        # this does not turn narrative prose containing the phrase into map
-        # structure.
-        r"^(?:\d+(?:\.\d+)*\.?\s*)?.{0,120}?\bвыводы(?:\s+(?:к|по)\s+главе(?:\s+\d+)?)?(?:\s*[:—–-]\s*.{1,120})?\.?$",
-        re.I,
-    )
-    return any(pattern.match(re.sub(r"\s+", " ", value).strip()) for value in values if value)
+    return any(is_section_heading("chapter_conclusions", value) for value in values if value)
 
 
 def _range_has_explicit_conclusion_heading(blocks: list[dict[str, Any]]) -> bool:
@@ -329,6 +318,144 @@ def _explicit_conclusion_heading(block: dict[str, Any]) -> bool:
     if block.get("type") != "heading" and len(text) > 150:
         return False
     return _obvious_chapter_conclusions(text, [block])
+
+
+def _section_heading_block(block: dict[str, Any], section_type: str) -> bool:
+    text = re.sub(r"\s+", " ", str(block.get("text") or "")).strip()
+    if not text:
+        return False
+    # Explicit section recovery is deliberately heading-biased.  Some PDF
+    # extractors label short standalone headings as paragraphs, so short blocks
+    # are allowed; long narrative prose is not.
+    if block.get("type") != "heading" and len(text) > 140:
+        return False
+    return is_section_heading(section_type, text)
+
+
+def _make_recovered_section(
+    section_type: str,
+    start: int,
+    end: int,
+    blocks: list[dict[str, Any]],
+    index: dict[str, int],
+    *,
+    label: str | None = None,
+) -> dict[str, Any] | None:
+    if start < 0 or end < start or end >= len(blocks):
+        return None
+    first = blocks[start]
+    return _materialize_element({
+        "id": f"section-auto-{section_type}-{first.get('id')}",
+        "type": section_type,
+        "label": label or re.sub(r"\s+", " ", str(first.get("text") or TYPE_LABELS.get(section_type, section_type))).strip(),
+        "startBlockId": first.get("id"),
+        "endBlockId": blocks[end].get("id"),
+        "blockIds": [first.get("id")],
+        "pages": [],
+        "text": "",
+        "quote": str(first.get("text") or ""),
+        "confidence": 1.0,
+        "state": "confirmed",
+        "source": "deterministic",
+        "note": "Диапазон восстановлен по явному смысловому маркеру раздела и соседним границам документа.",
+    }, blocks, index)
+
+
+def _recover_major_sections(
+    elements: list[dict[str, Any]],
+    blocks: list[dict[str, Any]],
+    index: dict[str, int],
+) -> list[dict[str, Any]]:
+    """Recover missing explicit top-level sections using canonical semantic aliases.
+
+    This is a safety net around the LLM map, not an alternative parser. Recovery
+    requires an explicit heading-like source block and uses already mapped chapters
+    to select the main document when a PDF also contains a synopsis/summary.
+    """
+    result = list(elements)
+    chapters = [item for item in result if item.get("type") == "chapter" and index.get(item.get("startBlockId")) is not None]
+    chapter_starts = sorted(index[item.get("startBlockId")] for item in chapters)
+    first_chapter = chapter_starts[0] if chapter_starts else None
+    last_chapter = chapter_starts[-1] if chapter_starts else None
+
+    heading_positions: dict[str, list[int]] = {}
+    for section_type in ("introduction", "conclusion", "bibliography", "appendices"):
+        heading_positions[section_type] = [
+            pos for pos, block in enumerate(blocks) if _section_heading_block(block, section_type)
+        ]
+
+    # Main introduction: use the last explicit introduction before the first
+    # mapped chapter. This avoids selecting an early synopsis introduction.
+    if first_chapter is not None:
+        candidates = [pos for pos in heading_positions["introduction"] if pos < first_chapter]
+        if candidates:
+            start = max(candidates)
+            mapped_main_intro = any(
+                item.get("type") == "introduction"
+                and index.get(item.get("startBlockId")) is not None
+                and index.get(item.get("endBlockId")) is not None
+                and index[item.get("startBlockId")] <= start <= index[item.get("endBlockId")]
+                for item in result
+            )
+            if not mapped_main_intro:
+                auto = _make_recovered_section("introduction", start, max(start, first_chapter - 1), blocks, index)
+                if auto:
+                    result.append(auto)
+
+    # The remaining global sections should occur after the final main chapter.
+    tail_floor = last_chapter if last_chapter is not None else -1
+
+    has_main_conclusion = any(
+        item.get("type") == "conclusion"
+        and index.get(item.get("startBlockId"), -1) > tail_floor
+        for item in result
+    )
+    if not has_main_conclusion:
+        candidates = [pos for pos in heading_positions["conclusion"] if pos > tail_floor]
+        if candidates:
+            start = min(candidates)
+            boundaries = [
+                pos for kind in ("bibliography", "appendices")
+                for pos in heading_positions[kind] if pos > start
+            ]
+            end = (min(boundaries) - 1) if boundaries else len(blocks) - 1
+            auto = _make_recovered_section("conclusion", start, max(start, end), blocks, index)
+            if auto:
+                result.append(auto)
+
+    has_main_bibliography = any(
+        item.get("type") == "bibliography"
+        and index.get(item.get("startBlockId"), -1) > tail_floor
+        for item in result
+    )
+    if not has_main_bibliography:
+        candidates = [pos for pos in heading_positions["bibliography"] if pos > tail_floor]
+        if candidates:
+            start = min(candidates)
+            appendix_after = [pos for pos in heading_positions["appendices"] if pos > start]
+            end = (min(appendix_after) - 1) if appendix_after else len(blocks) - 1
+            auto = _make_recovered_section("bibliography", start, max(start, end), blocks, index)
+            if auto:
+                result.append(auto)
+
+    has_main_appendices = any(
+        item.get("type") == "appendices"
+        and index.get(item.get("startBlockId"), -1) > tail_floor
+        for item in result
+    )
+    if not has_main_appendices:
+        floor = tail_floor
+        bib_starts = [index.get(item.get("startBlockId")) for item in result if item.get("type") == "bibliography"]
+        con_starts = [index.get(item.get("startBlockId")) for item in result if item.get("type") == "conclusion"]
+        floor = max([floor, *[x for x in bib_starts + con_starts if x is not None]])
+        candidates = [pos for pos in heading_positions["appendices"] if pos > floor]
+        if candidates:
+            start = min(candidates)
+            auto = _make_recovered_section("appendices", start, len(blocks) - 1, blocks, index)
+            if auto:
+                result.append(auto)
+
+    return result
 
 
 def _stabilize_elements(
@@ -365,6 +492,7 @@ def _stabilize_elements(
             continue
         kept.append(element)
 
+    kept = _recover_major_sections(kept, blocks, index)
     kept = _normalize_chapter_boundaries(kept, blocks, index)
     chapters = [item for item in kept if item.get("type") == "chapter"]
     conclusions = [item for item in kept if item.get("type") == "chapter_conclusions"]
