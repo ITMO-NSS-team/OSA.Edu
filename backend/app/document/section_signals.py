@@ -3,12 +3,6 @@ from __future__ import annotations
 import regex as re
 
 
-# This module intentionally describes semantic section concepts instead of exact
-# document-specific headings.  The patterns are used only as conservative
-# recovery signals after/around the LLM Document Map; context is still required
-# before a range is materialized.
-
-
 def _compact(value: str) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip().lower().replace("ё", "е")
 
@@ -21,19 +15,11 @@ def _headingish(value: str) -> bool:
     text = _compact(value)
     if not text or len(text) > 280:
         return False
-    # A colon is common for embedded headings such as «Цель: ...».  Long prose
-    # without a colon/heading shape is deliberately rejected by the individual
-    # scorers below.
     return len(text) <= 160 or ":" in text
 
 
 def section_heading_score(section_type: str, value: str) -> int:
-    """Return a conservative score for a canonical section concept.
-
-    Scores are deliberately based on concept roots + structural wording rather
-    than a list of exact surface phrases.  A caller should still use document
-    position and neighbouring blocks before recovering a range.
-    """
+    """Return a conservative score for a canonical section concept."""
     text = _compact(value)
     if not text or len(text) > 320:
         return 0
@@ -82,11 +68,6 @@ def section_heading_score(section_type: str, value: str) -> int:
         return defense_heading_score(value)
 
     if section_type == "chapter_conclusions":
-        # Typical semantic variants include «Выводы по/к главе», «Итоги главы»,
-        # «Основные результаты главы» and extended headings such as
-        # «Ограничения методологии и выводы по главе».  An explicit
-        # conclusions+chapter relation may occur after a qualifier; generic
-        # «результаты главы ...» still must look like a heading.
         explicit_conclusions = bool(re.search(r"\bвывод\p{L}*\s+(?:к|по)\s+глав\p{L}*\b", plain, re.I))
         explicit_summary = bool(re.search(r"\bитог\p{L}*\s+глав\p{L}*\b|\b(?:chapter)\s+(?:summary|conclusions?)\b", plain, re.I))
         explicit_results = bool(re.search(r"\bосновн\p{L}*\s+результат\p{L}*\s+глав\p{L}*\b", plain, re.I))
@@ -160,9 +141,6 @@ def find_section_heading_span(section_type: str, value: str) -> tuple[int, int] 
         return None
 
     for anchor in re.finditer(pattern, raw, re.I):
-        # Prefer a line/short clause around the concept.  This covers extractors
-        # that merge a heading with preceding/following prose without scanning an
-        # arbitrary long paragraph as a heading.
         line_start = raw.rfind("\n", 0, anchor.start()) + 1
         line_end = raw.find("\n", anchor.end())
         if line_end < 0:

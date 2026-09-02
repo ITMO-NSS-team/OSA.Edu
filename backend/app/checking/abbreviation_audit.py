@@ -1,22 +1,5 @@
 from __future__ import annotations
 
-"""High-recall abbreviation-like candidate enumeration.
-
-3.9.3-rc2 intentionally keeps semantic judgement out of Python.  Python only
-builds a broad, grounded inventory and annotates where each token was seen.
-The LLM later decides whether the token is actually an abbreviation and whether
-it violates CORE-4-1 / CORE-4-2 / CORE-4-3 / CORE-12.
-
-The collector therefore prefers recall over precision:
-- all-caps Cyrillic/Latin tokens;
-- mixed-case technical tokens with multiple capitals (LoRA, IoU, eGFR, PyTorch);
-- acronym/version/metric-like tokens containing digits, hyphens, slashes or @;
-- obvious metric notation such as pass3 / pass@k / Recall@10.
-
-Only typographic noise that cannot reasonably be a normative abbreviation is
-removed here (section words, long all-caps Russian heading words, Roman numerals).
-"""
-
 from typing import Any
 import regex as re
 
@@ -30,22 +13,14 @@ from .common import (
 )
 from ..scope import content_role, main_work_ids
 
-# Broad tokenization first; `_looks_abbreviation_like` decides whether a lexical
-# token is worth sending to the LLM.  Keeping this generic makes the collector
-# domain-independent rather than a curated list of known abbreviations.
 RAW_TOKEN_RE = re.compile(
     r"(?<![\p{L}\p{N}_])(?:"
-    # Acronym + mixed-case named compound. Match it before the shorter
-    # acronym branch so the lexical unit is preserved as a whole.
     r"[A-ZА-ЯЁ]{2,12}[-–][A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9]{2,24}"
     r"|"
-    # Classic acronym, including acronym-acronym / acronym-version compounds.
     r"[A-ZА-ЯЁ]{2,20}(?:[-–/][A-ZА-ЯЁ0-9]{1,20})*(?:@[A-Za-z0-9]{1,10})?(?:\d{1,4})?"
     r"|[A-ZА-ЯЁ]{1,12}\d{1,4}[A-Za-z0-9.]*"
-    # Mixed-case technical token; predicate below requires >=2 capitals.
     r"|[A-Za-zА-ЯЁа-яё]{2,20}"
     r"|[A-Za-z][A-Za-z0-9]{2,20}"
-    # Metric/test notation that may be lower-case.
     r"|pass(?:@?[A-Za-z0-9]+)|Recall@[A-Za-z0-9]+"
     r")(?![\p{L}\p{N}_])"
 )
@@ -65,9 +40,6 @@ SPECIAL_LOWER_RE = re.compile(r"^(?:pass(?:@?[A-Za-z0-9]+)|recall@[A-Za-z0-9]+)$
 
 def _canonical(value: str) -> str:
     value = str(value or "").replace("–", "-").strip(".,;:()[]{}<>«»\"'")
-    # PDF extraction often glues a Latin acronym to the following Russian word
-    # (`APIинтерфейс`, `ASTпарсер`). Keep the acronym rather than inventing a
-    # mixed-script candidate. This is lexical cleanup, not semantic filtering.
     glued = re.fullmatch(r"([A-Z]{2,20})([а-яё][А-ЯЁа-яё-]{2,})", value)
     if glued:
         return glued.group(1)
@@ -75,8 +47,6 @@ def _canonical(value: str) -> str:
 
 
 def _long_uppercase_word(value: str) -> bool:
-    # PDF typography frequently turns ordinary Russian headings into ALL CAPS.
-    # Long vowel-rich words are overwhelmingly ordinary words, not abbreviations.
     return bool(
         re.fullmatch(r"[А-ЯЁ]{4,}", value)
         and len(re.findall(r"[АЕЁИОУЫЭЮЯ]", value)) >= 2
@@ -99,13 +69,8 @@ def _long_uppercase_heading_word(value: str) -> bool:
 def _occurrence_formula_like(text: str, start: int, end: int) -> bool:
     window = text[max(0, start - 70):min(len(text), end + 90)]
     marks = len(re.findall(r"[=≈≤≥∑∫√±∞∈∉⊂∪∩×·←→{}\[\]^_+*/]", window))
-    # A variable-space declaration such as ``w ∈ R^L×d`` is formula context
-    # even when the whole PDF block was classified as prose.
     if re.search(r"(?:∈|≈|≤|≥|=|×|\^)", window) and marks >= 2:
         return True
-    # PDF extraction can flatten a displayed equation into prose and lose the
-    # summation/fraction glyph while preserving Greek variables and an equation
-    # number, e.g. ``1 XK (ri + δi). (3.16)``. This is still formula context.
     if re.search(r"[Α-Ωα-ωϕφδλμστθρ]", window) and re.search(r"[+*/=]|\(\d+(?:\.\d+)+\)", window):
         return True
     return marks >= 5
@@ -147,8 +112,6 @@ def collect_abbreviation_definitions(document: dict[str, Any]) -> dict[str, list
         markers = list(_GLOSSARY_MARKER_RE.finditer(text))
         if not markers:
             continue
-        # One marker is acceptable only when the local phrase itself looks like
-        # an explicit definition; two or more markers strongly indicate a list.
         for idx, match in enumerate(markers):
             token = _canonical(match.group(1))
             if not _looks_abbreviation_like(token):
@@ -188,23 +151,17 @@ def _looks_abbreviation_like(value: str) -> bool:
     lowers = re.findall(r"[a-zа-яё]", value)
     digits = re.findall(r"\d", value)
 
-    # Classic all-caps acronym / Cyrillic abbreviation.
     if len(uppers) >= 2 and not lowers:
         return True
 
-    # Mixed-case technical names/abbreviations such as LoRA, IoU, eGFR, PyTorch.
-    # Requiring at least two capitals avoids ordinary TitleCase words.
     if len(uppers) >= 2 and lowers:
         return True
 
-    # One capital plus structured suffix is often a symbol/identifier.  We still
-    # send it to the LLM because it is cheap to classify as not applicable.
     if len(uppers) >= 1 and digits and re.search(r"[-/@._]", value):
         return True
     if len(uppers) >= 1 and digits and len(value) <= 12:
         return True
 
-    # Acronym-like compounds such as REST-API, AUC-IOU, USDL/OEWS.
     if len(uppers) >= 2 and re.search(r"[-/]", value):
         return True
 
@@ -306,8 +263,6 @@ def _canonical_heading_scope(document: dict[str, Any], definitions: dict[str, li
         if bid in by_id and bid not in definition_ids:
             scope[bid] = "title"
 
-    # Map starts are authoritative section anchors, including cases where the
-    # extractor lost the visual heading type.
     for element in (document.get("map") or {}).get("elements") or []:
         if element.get("canonicalRole") == "secondary_copy" or element.get("documentUnit") in {"secondary_front_matter", "synopsis"}:
             continue
@@ -323,19 +278,11 @@ def _canonical_heading_scope(document: dict[str, Any], definitions: dict[str, li
             continue
         kind = str(block.get("type") or "").lower()
         if kind == "toc":
-            # Extractors also assign ``toc`` to lists of figures/tables far from
-            # the actual contents. CORE-4-2 names the work title and contents,
-            # not every navigation-like appendix. When the contents span is
-            # structurally known, it is authoritative; retain the old cautious
-            # fallback only when extraction cannot establish that span at all.
             if not toc_pages or block.get("page") in toc_pages:
                 scope.setdefault(bid, "toc")
             continue
         if block.get("page") in toc_pages:
             text = str(block.get("text") or "")
-            # Contents pages can span across nearby front matter. Require a
-            # structural TOC signal instead of treating every block on those
-            # pages as a TOC entry.
             if re.search(r"(?:\.\s*){3,}\s*\d+\s*$", text) or re.search(r"(?:^|\n)\s*(?:\d+(?:\.\d+)*\.?\s+)?[^\n]{2,180}\s+\d+\s*$", text):
                 scope.setdefault(bid, "toc")
         if kind == "heading" and (main_ids is None or bid in main_ids):
@@ -440,8 +387,6 @@ def collect_abbreviation_tokens(document: dict[str, Any]) -> list[dict[str, Any]
         if not bid or bid in excluded or str(block.get("type") or "").lower() == "bibliography":
             continue
 
-        # With a usable map, inspect the canonical main work plus title/TOC.
-        # Without a map, preserve permissive legacy behaviour.
         in_scope = main_ids is None or bid in main_ids or bid in title_ids or block.get("page") in toc_pages
         if not in_scope:
             continue
@@ -469,8 +414,6 @@ def collect_abbreviation_tokens(document: dict[str, Any]) -> list[dict[str, Any]
             role = _role_for_occurrence(block_role, text, match.start(), match.end())
             if role in {"title", "toc", "heading"} and _long_uppercase_heading_word(raw):
                 continue
-            # Do not emit an acronym prefix when the matcher can preserve the
-            # following mixed-case named compound as one lexical token.
             if re.match(r"[-–][A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9]{2,24}", text[match.end():match.end()+30]):
                 continue
             key = raw.upper().replace("–", "-")
@@ -488,17 +431,11 @@ def collect_abbreviation_tokens(document: dict[str, Any]) -> list[dict[str, Any]
             item["occurrenceCount"] = int(item["occurrenceCount"]) + 1
             if role not in item["roles"]:
                 item["roles"].append(role)
-            # A few grounded contexts are enough for classification while keeping
-            # the first request compact. Prefer diversity of blocks/roles.
             occurrence = _small_occurrence(block, text, match.start(), raw, role)
             existing = {(x.get("blockId"), x.get("contentRole")) for x in item["occurrences"]}
             if (occurrence.get("blockId"), role) not in existing and len(item["occurrences"]) < 6:
                 item["occurrences"].append(occurrence)
 
-    # Select the first meaningful authored use independently from structural
-    # title/TOC/headings and from a dedicated abbreviation list. CORE-4-2 scope
-    # is rebuilt separately from the structural map so LLM/classification cannot
-    # accidentally turn glossary rows into heading violations.
     structural_headings = _structural_heading_uses(document, definitions, set(found.keys()))
     result: list[dict[str, Any]] = []
     structural_roles = {"title", "toc", "heading", "abbreviation_list"}
