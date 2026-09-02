@@ -36,7 +36,7 @@ OSA.Edu позволяет:
 ## 1. Клонирование репозитория
 
 ```bash
-git clone -b python_version https://github.com/ITMO-NSS-team/OSA.Edu.git
+git clone https://github.com/ITMO-NSS-team/OSA.Edu.git
 cd OSA.Edu
 ```
 
