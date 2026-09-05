@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
-from .config import APP_VERSION, MAX_FILE_SIZE_MB, PORT, UPLOADS_DIR, WEB_ORIGIN
+from .config import APP_VERSION, MAX_FILE_SIZE_MB, PORT, UPLOADS_DIR, WEB_ORIGINS
 from .defaults import DEFAULT_ADDITIONAL_CRITERIA, DEFAULT_MAP_PROMPT, DEFAULT_PROFILE, DEFAULT_PROMPT, MODELS, model_definition
 from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
@@ -37,7 +37,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="OSA.Edu API", version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[WEB_ORIGIN],
+    allow_origins=WEB_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
