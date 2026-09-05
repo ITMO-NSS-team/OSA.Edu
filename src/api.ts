@@ -1,6 +1,6 @@
 import type { CheckProfile, Health, Job, Rule, StructureDetails } from "./types";
 
-const API = "http://127.0.0.1:8787";
+const API = (import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8787").replace(/\/+$/, "");
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${url}`, options);
   const body = response.status === 204 ? null : await response.json().catch(() => ({}));

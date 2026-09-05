@@ -128,6 +128,23 @@ http://127.0.0.1:5173
 
 ---
 
+## 7. Запуск в Docker Compose dev mode
+
+Docker-режим запускает frontend и backend в отдельных контейнерах:
+
+- FastAPI backend — `http://127.0.0.1:8787`
+- React frontend — `http://127.0.0.1:5173`
+
+Сначала создайте `.env` и добавьте `OPENROUTER_API_KEY`, как описано выше. Затем запустите:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Runtime-данные backend сохраняются в именованном Docker volume `osa-edu-dev_backend_data`, поэтому загрузки и `jobs.json` переживают перезапуск контейнеров.
+
+---
+
 # Как пользоваться
 
 После запуска приложения:
@@ -466,6 +483,8 @@ Runtime-данные создаются локально в:
 ```text
 data/
 ```
+
+При запуске через `docker-compose.dev.yml` этот путь находится внутри именованного Docker volume.
 
 В частности используются:
 
