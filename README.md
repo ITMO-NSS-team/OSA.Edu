@@ -16,6 +16,7 @@ OSA.Edu позволяет:
 - показывать доказательства найденных нарушений с привязкой к тексту документа;
 - отмечать неоднозначные проверки для ручного просмотра;
 - формировать пользовательский и технический отчёты.
+- отправлять PDF на внешний MCP-сервер нормоконтроля и скачивать итоговый PDF-отчёт.
 
 ---
 
@@ -72,6 +73,7 @@ pip install -r requirements.txt
 - Uvicorn
 - PyMuPDF
 - httpx
+- fastmcp
 - python-docx
 - ReportLab
 
@@ -135,13 +137,15 @@ Docker-режим запускает frontend и backend в отдельных �
 - FastAPI backend — `http://127.0.0.1:8787`
 - React frontend — `http://127.0.0.1:5173`
 
-Сначала создайте `.env` и добавьте `OPENROUTER_API_KEY`, как описано выше. Затем запустите:
+Dev Compose использует host network mode, чтобы backend видел VPN-маршруты хоста и host-local ссылки внешнего нормоконтроля. Сначала создайте `.env` и добавьте `OPENROUTER_API_KEY`, как описано выше. Затем запустите:
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
 ```
 
 Runtime-данные backend сохраняются в именованном Docker volume `osa-edu-dev_backend_data`, поэтому загрузки и `jobs.json` переживают перезапуск контейнеров.
+
+Для вкладки «Нормоконтроль» backend должен иметь сетевой доступ к MCP endpoint из `.env`. Dev Compose уже работает в host network mode, чтобы контейнер backend использовал VPN-подключение хоста и мог скачать отчёт по host-local ссылке.
 
 ---
 
@@ -492,6 +496,9 @@ data/
 data/uploads/
 data/extracted/
 data/jobs.json
+data/normcontrol/uploads/
+data/normcontrol/reports/
+data/normcontrol/jobs.json
 ```
 
 ---
@@ -514,6 +521,7 @@ OPENROUTER_API_KEY=
 - размеров LLM batch;
 - восстановления кандидатов;
 - обработки сокращений.
+- MCP endpoint и DAG для вкладки «Нормоконтроль».
 
 Обычно значения по умолчанию менять не требуется.
 

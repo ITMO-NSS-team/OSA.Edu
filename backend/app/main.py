@@ -11,13 +11,32 @@ from urllib.parse import quote
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 
-from .config import APP_VERSION, MAX_FILE_SIZE_MB, PORT, UPLOADS_DIR, WEB_ORIGINS
+from .config import (
+    APP_VERSION,
+    MAX_FILE_SIZE_MB,
+    NORMCONTROL_DAG_ID,
+    NORMCONTROL_MCP_URL,
+    NORMCONTROL_UPLOADS_DIR,
+    PORT,
+    UPLOADS_DIR,
+    WEB_ORIGINS,
+)
 from .defaults import DEFAULT_ADDITIONAL_CRITERIA, DEFAULT_MAP_PROMPT, DEFAULT_PROFILE, DEFAULT_PROMPT, MODELS, model_definition
 from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
 from .llm.rate_limiter import configured_rate_limits
+from .normcontrol.client import inspect_server as inspect_normcontrol_server
+from .normcontrol.queue import start_normcontrol_queue
+from .normcontrol.store import (
+    ACTIVE_STATUSES as ACTIVE_NORMCONTROL_STATUSES,
+    create_normcontrol_job as persist_normcontrol_job,
+    delete_normcontrol_job,
+    get_normcontrol_job,
+    list_normcontrol_jobs,
+    recover_interrupted_normcontrol_jobs,
+)
 from .queue import start_queue
 from .pdf_reporting import report_to_pdf as developer_report_to_pdf
 from .user_pdf_reporting import report_to_user_pdf
@@ -29,8 +48,11 @@ from .util import map_is_confirmed, normalized_quote, now_iso
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    NORMCONTROL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     await recover_interrupted_jobs()
+    await recover_interrupted_normcontrol_jobs()
     start_queue()
+    start_normcontrol_queue()
     yield
 
 
@@ -75,6 +97,11 @@ async def health():
             "fullCount": len(registry["all"]),
             "retrieval": "После подтверждения карты точные правила проверяются кодом, языковые — через полный поиск коротких кандидатов и LLM-судью, содержательные — по назначенным разделам документа.",
         },
+        "normcontrol": {
+            "mcpUrl": NORMCONTROL_MCP_URL,
+            "dagId": NORMCONTROL_DAG_ID,
+            "enabled": bool(NORMCONTROL_MCP_URL and NORMCONTROL_DAG_ID),
+        },
     }
 
 
@@ -87,6 +114,105 @@ async def rules(profile: str = "core"):
 @app.get("/api/jobs")
 async def jobs():
     return await list_jobs()
+
+
+@app.get("/api/normcontrol/jobs")
+async def normcontrol_jobs():
+    return await list_normcontrol_jobs()
+
+
+@app.get("/api/normcontrol/status")
+async def normcontrol_status():
+    if not NORMCONTROL_MCP_URL:
+        return _error(400, "NORMCONTROL_MCP_URL не настроен.")
+    try:
+        return await inspect_normcontrol_server(url=NORMCONTROL_MCP_URL)
+    except Exception as exc:
+        return _error(502, str(exc))
+
+
+@app.get("/api/normcontrol/jobs/{job_id}")
+async def normcontrol_job(job_id: str):
+    job = await get_normcontrol_job(job_id)
+    return job if job else _error(404, "Задача нормоконтроля не найдена.")
+
+
+@app.post("/api/normcontrol/jobs")
+async def create_normcontrol_job_endpoint(file: UploadFile = File(...)):
+    original_name = _sanitize(file.filename or "document.pdf")
+    suffix = Path(original_name).suffix.lower()
+    if suffix != ".pdf":
+        await file.close()
+        return _error(400, "Для нормоконтроля поддерживаются только PDF.")
+    if not NORMCONTROL_MCP_URL or not NORMCONTROL_DAG_ID:
+        await file.close()
+        return _error(400, "Интеграция нормоконтроля не настроена.")
+
+    technical = NORMCONTROL_UPLOADS_DIR / f"{int(__import__('time').time()*1000)}-{uuid.uuid4()}.pdf"
+    try:
+        size = await _save_upload(file, technical)
+    except Exception as exc:
+        technical.unlink(missing_ok=True)
+        return _error(500, str(exc))
+    if size > MAX_FILE_SIZE_MB * 1024 * 1024:
+        technical.unlink(missing_ok=True)
+        return _error(413, f"Файл больше {MAX_FILE_SIZE_MB} МБ.")
+
+    now = now_iso()
+    job = {
+        "id": str(uuid.uuid4()),
+        "originalName": original_name,
+        "filePath": str(technical.resolve()),
+        "size": size,
+        "createdAt": now,
+        "updatedAt": now,
+        "status": "queued",
+        "progress": 0,
+        "progressMessage": "PDF принят. Ожидаем отправку на сервер нормоконтроля.",
+        "dagId": NORMCONTROL_DAG_ID,
+        "mcpUrl": NORMCONTROL_MCP_URL,
+        "message": "",
+        "errors": [],
+        "warnings": [],
+    }
+    await persist_normcontrol_job(job)
+    start_normcontrol_queue()
+    return JSONResponse(status_code=201, content=job)
+
+
+@app.delete("/api/normcontrol/jobs/{job_id}")
+async def remove_normcontrol_job(job_id: str):
+    current = await get_normcontrol_job(job_id)
+    if not current:
+        return _error(404, "Задача нормоконтроля не найдена.")
+    if current.get("status") in ACTIVE_NORMCONTROL_STATUSES:
+        return _error(409, "Дождитесь завершения нормоконтроля перед удалением задачи.")
+    job = await delete_normcontrol_job(job_id)
+    if not job:
+        return _error(404, "Задача нормоконтроля не найдена.")
+    for raw in [job.get("filePath"), job.get("reportPath")]:
+        if raw:
+            try:
+                Path(raw).unlink(missing_ok=True)
+            except OSError:
+                pass
+    return Response(status_code=204)
+
+
+@app.get("/api/normcontrol/jobs/{job_id}/report.pdf")
+async def normcontrol_report_pdf(job_id: str):
+    job = await get_normcontrol_job(job_id)
+    if not job or not job.get("reportPath"):
+        return _error(404, "Отчёт нормоконтроля ещё не готов.")
+    path = Path(job["reportPath"])
+    if not path.exists():
+        return _error(404, "Файл отчёта нормоконтроля не найден.")
+    filename = quote(f"{job['originalName']}-normcontrol-report.pdf")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
 
 
 @app.post("/api/jobs")

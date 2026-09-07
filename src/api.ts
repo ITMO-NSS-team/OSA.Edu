@@ -1,4 +1,4 @@
-import type { CheckProfile, Health, Job, Rule, StructureDetails } from "./types";
+import type { CheckProfile, Health, Job, NormControlJob, NormControlServerStatus, Rule, StructureDetails } from "./types";
 
 const API = (import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8787").replace(/\/+$/, "");
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -11,8 +11,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<Health>("/api/health"),
   jobs: () => request<Job[]>("/api/jobs"),
+  normControlJobs: () => request<NormControlJob[]>("/api/normcontrol/jobs"),
+  normControlStatus: () => request<NormControlServerStatus>("/api/normcontrol/status"),
   rules: (profile: CheckProfile) => request<Rule[]>(`/api/rules?profile=${profile}`),
   createJobs: (body: FormData) => request<Job[]>("/api/jobs", { method: "POST", body }),
+  createNormControlJob: (body: FormData) => request<NormControlJob>("/api/normcontrol/jobs", { method: "POST", body }),
   structure: (id: string) => request<StructureDetails>(`/api/jobs/${id}/structure`),
   updateMapElement: (jobId: string, elementId: string, patch: Record<string, unknown>) => request<Job>(`/api/jobs/${jobId}/map/elements/${elementId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }),
   addMapElement: (jobId: string, body: Record<string, unknown>) => request<Job>(`/api/jobs/${jobId}/map/elements`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
@@ -23,8 +26,10 @@ export const api = {
   restart: (id: string) => request<Job>(`/api/jobs/${id}/restart`, { method: "POST" }),
   retryFailed: (id: string) => request<Job>(`/api/jobs/${id}/retry-failed`, { method: "POST" }),
   delete: (id: string) => request<void>(`/api/jobs/${id}`, { method: "DELETE" }),
+  deleteNormControlJob: (id: string) => request<void>(`/api/normcontrol/jobs/${id}`, { method: "DELETE" }),
   reportPdfUrl: (id: string) => `${API}/api/jobs/${id}/report.pdf`,
   developerReportPdfUrl: (id: string) => `${API}/api/jobs/${id}/developer-report.pdf`,
   reportMarkdownUrl: (id: string) => `${API}/api/jobs/${id}/report.md`,
-  reportJsonUrl: (id: string) => `${API}/api/jobs/${id}/report.json`
+  reportJsonUrl: (id: string) => `${API}/api/jobs/${id}/report.json`,
+  normControlReportPdfUrl: (id: string) => `${API}/api/normcontrol/jobs/${id}/report.pdf`
 };

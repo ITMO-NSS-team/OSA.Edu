@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { CheckPage } from "./components/CheckPage";
+import { NormControlPage } from "./components/NormControlPage";
 import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
-import type { CheckProfile, Health, Job, Rule } from "./types";
+import type { CheckProfile, Health, Job, NormControlJob, Rule } from "./types";
 
-type Page = "check" | "prompt" | "rules" | "reports";
+type Page = "check" | "normcontrol" | "prompt" | "rules" | "reports";
+const ACTIVE_NORMCONTROL: NormControlJob["status"][] = ["queued", "queued_report", "submitting", "running", "reporting", "downloading"];
 
 export default function App() {
   const [page, setPage] = useState<Page>("check");
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [normControlJobs, setNormControlJobs] = useState<NormControlJob[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
   const [rulesProfile, setRulesProfile] = useState<CheckProfile>("core");
@@ -23,14 +26,15 @@ export default function App() {
   const [error, setError] = useState("");
 
   useEffect(() => { void bootstrap(); }, []);
-  useEffect(() => { const timer = window.setInterval(() => void loadJobs(), 1800); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { const timer = window.setInterval(() => { void loadJobs(); void loadNormControlJobs(); }, 1800); return () => window.clearInterval(timer); }, []);
   useEffect(() => { if (page === "rules") void loadRules(rulesProfile); }, [page, rulesProfile]);
 
   async function bootstrap() {
     try {
-      const [healthData, jobData] = await Promise.all([api.health(), api.jobs()]);
+      const [healthData, jobData, normControlData] = await Promise.all([api.health(), api.jobs(), api.normControlJobs()]);
       setHealth(healthData);
       setJobs(jobData);
+      setNormControlJobs(normControlData);
       setPrompt(healthData.defaults.prompt);
       setMapPrompt(healthData.defaults.mapPrompt);
       setCriteria(healthData.defaults.additionalCriteria);
@@ -40,6 +44,7 @@ export default function App() {
   }
 
   async function loadJobs() { try { setJobs(await api.jobs()); } catch (error) { setError((error as Error).message); } }
+  async function loadNormControlJobs() { try { setNormControlJobs(await api.normControlJobs()); } catch (error) { setError((error as Error).message); } }
   async function loadRules(value: CheckProfile) {
     setRulesLoading(true);
     try { setRules(await api.rules(value)); }
@@ -61,17 +66,20 @@ export default function App() {
   const activeJobs = jobs.filter((job) => ["queued", "extracting", "mapping", "queued_check", "checking"].includes(job.status)).length;
   const runningJobs = jobs.filter((job) => ["extracting", "mapping", "checking"].includes(job.status)).length;
   const queuedJobs = jobs.filter((job) => ["queued", "queued_check"].includes(job.status)).length;
+  const activeNormControl = normControlJobs.filter((job) => ACTIVE_NORMCONTROL.includes(job.status)).length;
+  const queueState = [activeJobs ? `${runningJobs ? `Проверяется: ${runningJobs}` : ""}${runningJobs && queuedJobs ? " · " : ""}${queuedJobs ? `ожидает: ${queuedJobs}` : ""}` : "", activeNormControl ? `нормоконтроль: ${activeNormControl}` : ""].filter(Boolean).join(" · ") || "Очередь свободна";
 
   return <main className="app-shell">
     <header className="app-header">
       <button className="brand" onClick={() => setPage("check")}><strong>OSA.Edu</strong><span>содержательная проверка ВКР</span></button>
       <nav>
         <NavButton active={page === "check"} onClick={() => setPage("check")}>Проверка</NavButton>
+        <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>Нормоконтроль{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
         <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>Промпты</NavButton>
         <NavButton active={page === "rules"} onClick={() => setPage("rules")}>Правила</NavButton>
         <NavButton active={page === "reports"} onClick={() => setPage("reports")}>Отчёты{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
       </nav>
-      <div className="queue-state">{activeJobs ? `${runningJobs ? `Проверяется: ${runningJobs}` : ""}${runningJobs && queuedJobs ? " · " : ""}${queuedJobs ? `ожидает: ${queuedJobs}` : ""}` : "Очередь свободна"}</div>
+      <div className="queue-state">{queueState}</div>
     </header>
 
     {error && <div className="global-error"><span>{error}</span><button onClick={() => setError("")}>×</button></div>}
@@ -82,6 +90,9 @@ export default function App() {
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}
+
+    {page === "normcontrol" && <NormControlPage health={health} jobs={normControlJobs}
+      onCreated={(created) => setNormControlJobs((current) => [created, ...current])} onChanged={loadNormControlJobs} onError={setError} />}
 
     {page === "rules" && <RulesPage profile={rulesProfile} rules={rules} loading={rulesLoading} onProfileChange={setRulesProfile} />}
     {page === "reports" && <ReportsPage jobs={jobs} onAction={jobAction} onChanged={loadJobs} />}
