@@ -33,3 +33,11 @@ export interface Job { id: string; originalName: string; size: number; createdAt
 export interface Health { ok: boolean; models: ModelInfo[]; configured: { gemini: boolean; openrouter: boolean }; defaults: { prompt: string; mapPrompt: string; additionalCriteria: string; profile: CheckProfile }; knowledge: { coreCount: number; softCount: number; fullCount: number; retrieval: string }; rateLimits: { gemini: Record<string, number>; openrouter: Record<string, number> }; }
 export interface StructureBlock { id: string; page?: number; location: string; type: string; text: string; }
 export interface StructureDetails { map: DocumentMap; blocks: StructureBlock[]; }
+
+export type LiteratureStatus = "OK" | "OK_MINOR_MISMATCH" | "METADATA_MISMATCH" | "SUSPICIOUS" | "LIKELY_HALLUCINATED" | "UNVERIFIED" | "ERROR" | "NOT_A_PAPER";
+export type LiteratureVerdict = "VERIFIED" | "SUSPICIOUS" | "UNVERIFIED" | "ERROR";
+export type LiteratureSourceType = "PAPER" | "PREPRINT" | "BOOK" | "STANDARD" | "REPORT" | "DATASET" | "DOCUMENTATION" | "REPOSITORY" | "WEB" | "OTHER" | "UNKNOWN";
+export type LiteratureJobStatus = "queued" | "running" | "cancelling" | "done" | "failed" | "cancelled";
+export interface LiteratureRow { number: string; status: LiteratureStatus; verdict?: LiteratureVerdict; source_type?: LiteratureSourceType; original_citation: string; checker_found_citation: string; evidence_url: string; google_scholar_url: string; notes: string; evidence_urls?: string[]; verification_stage?: string; }
+export interface LiteratureResult { filename: string; reference_count: number; rows: LiteratureRow[]; counts: Partial<Record<LiteratureStatus, number>>; verdict_counts?: Partial<Record<LiteratureVerdict, number>>; warnings?: string[]; web_stage?: { enabled: boolean; eligible: number; attempted: number; completed: number; failed: number; skipped_due_to_limit?: number; }; }
+export interface LiteratureJob { id: string; originalName: string; size: number; createdAt: string; updatedAt: string; startedAt?: string; finishedAt?: string; status: LiteratureJobStatus; model: string; progress: number; progressMessage?: string; result?: LiteratureResult | null; error?: string | null; }

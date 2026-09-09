@@ -1,6 +1,6 @@
-import type { CheckProfile, Health, Job, Rule, StructureDetails } from "./types";
+import type { CheckProfile, Health, Job, LiteratureJob, Rule, StructureDetails } from "./types";
 
-const API = (import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8787").replace(/\/+$/, "");
+const API = "http://127.0.0.1:8787";
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${url}`, options);
   const body = response.status === 204 ? null : await response.json().catch(() => ({}));
@@ -26,5 +26,10 @@ export const api = {
   reportPdfUrl: (id: string) => `${API}/api/jobs/${id}/report.pdf`,
   developerReportPdfUrl: (id: string) => `${API}/api/jobs/${id}/developer-report.pdf`,
   reportMarkdownUrl: (id: string) => `${API}/api/jobs/${id}/report.md`,
-  reportJsonUrl: (id: string) => `${API}/api/jobs/${id}/report.json`
+  reportJsonUrl: (id: string) => `${API}/api/jobs/${id}/report.json`,
+  literatureJobs: () => request<LiteratureJob[]>("/api/literature/jobs"),
+  createLiteratureJobs: (body: FormData) => request<LiteratureJob[]>("/api/literature/jobs", { method: "POST", body }),
+  cancelLiteratureJob: (id: string) => request<LiteratureJob>(`/api/literature/jobs/${id}/cancel`, { method: "POST" }),
+  retryLiteratureJob: (id: string) => request<LiteratureJob>(`/api/literature/jobs/${id}/retry`, { method: "POST" }),
+  deleteLiteratureJob: (id: string) => request<void>(`/api/literature/jobs/${id}`, { method: "DELETE" })
 };
