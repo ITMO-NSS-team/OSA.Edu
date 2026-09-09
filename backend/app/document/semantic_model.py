@@ -5,8 +5,6 @@ from typing import Any
 from ..domain.models import SemanticDocumentModel, SemanticRelationModel, SemanticSectionModel
 from .semantic_ranges import trim_blocks_for_element
 from .numbered_items import collect_unique_defense_items
-from .title import extract_best_title
-from .units import canonical_elements
 
 
 def build_semantic_document(document: dict[str, Any], map_value: dict[str, Any]) -> SemanticDocumentModel:
@@ -142,69 +140,24 @@ def hydrate_legacy_fields(document: dict[str, Any]) -> None:
     Keeping the adapter here makes the dependency direction explicit: map → fields,
     never fields → semantic map.
     """
-    map_value = document.get('map')
-    blocks = document.get('blocks', [])
-    if not map_value:
-        return
-    index = {block['id']: i for i, block in enumerate(blocks)}
+    from .fact_store import build_document_fact_store, fact_blocks
 
-    def elements(element_type: str):
-        if element_type in {'goal', 'tasks', 'defense_statements'}:
-            return canonical_elements(map_value.get('elements', []), element_type)
-        return [item for item in map_value.get('elements', []) if item.get('type') == element_type]
-
-    def element_blocks(element_type: str):
-        out: list[dict] = []
-        for element in elements(element_type):
-            start = index.get(element.get('startBlockId'))
-            end = index.get(element.get('endBlockId'))
-            if start is not None and end is not None and start <= end:
-                out += trim_blocks_for_element(element_type, blocks[start:end + 1])
-        return out
-
-    def precise(element_type: str):
-        candidates = elements(element_type)
-        if not candidates:
-            return None
-        element = candidates[0]
-        start = index.get(element.get('startBlockId'))
-        end = index.get(element.get('endBlockId'))
-        if start is None or end is None or start > end:
-            return None
-        source = blocks[start]
-        range_blocks = blocks[start:end + 1]
-        if element_type == 'title':
-            found = extract_best_title(range_blocks, blocks) or document.get('fields', {}).get('title')
-            if found:
-                return found
-            label = str(element.get('label') or '').strip()
-            generic = any(token in label.lower() for token in ('титульн', 'title page', 'название работы'))
-            return {**source, 'text': label} if label and not generic else None
-        quote = str(element.get('quote') or '').strip()
-        return {**source, 'text': quote} if quote else source
-
+    store = document.get('factStore')
+    if store is None:
+        store = build_document_fact_store(document)
+        document['factStore'] = store
     fields = document.setdefault('fields', {})
-    title = precise('title') or fields.get('title')
-    goal = precise('goal') or fields.get('goal')
-    tasks = element_blocks('tasks')
-    defense = element_blocks('defense_statements')
-    bibliography = element_blocks('bibliography')
-    chapters = []
-    for element in elements('chapter'):
-        position = index.get(element.get('startBlockId'))
-        if position is not None:
-            chapters.append(blocks[position])
-    conclusions = []
-    for element in [x for x in map_value.get('elements', []) if x.get('type') in {'chapter_conclusions', 'conclusion'}]:
-        position = index.get(element.get('startBlockId'))
-        if position is not None:
-            conclusions.append(blocks[position])
-    fields.update({
-        'title': title,
-        'goal': goal,
-        'tasks': tasks or fields.get('tasks', []),
-        'defenseStatements': defense or fields.get('defenseStatements', []),
-        'chapterHeadings': chapters,
-        'conclusionHeadings': [*conclusions, *fields.get('conclusionHeadings', [])],
-        'bibliographyBlocks': bibliography or fields.get('bibliographyBlocks', []),
-    })
+    for fact, field in {
+        'title': 'title', 'goal': 'goal', 'tasks': 'tasks',
+        'defense_statements': 'defenseStatements', 'bibliography': 'bibliographyBlocks',
+        'chapter': 'chapterHeadings', 'chapter_conclusions': 'conclusionHeadings',
+    }.items():
+        rows = fact_blocks(store, fact)
+        if fact in {'title', 'goal'}:
+            fields[field] = ({**rows[0], 'text': '\n'.join(b.get('text', '') for b in rows)}
+                             if rows else None)
+        elif fact in {'chapter', 'chapter_conclusions'}:
+            fields[field] = [candidate['blocks'][0] for candidate in store['facts'][fact]['candidates']
+                             if candidate.get('blocks')] if rows else []
+        else:
+            fields[field] = rows
