@@ -308,12 +308,21 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
 .normcontrol-card h3 { margin: 0 0 4px; font-size: 17px; overflow-wrap: anywhere; }
 .normcontrol-card p { margin: 0; }
 .normcontrol-card-head p { color: #697078; font-size: 13px; }
+.retry-warning { padding: 9px 11px; border-left: 3px solid #b37b2a; background: #fff7e8; color: #6f4c16; border-radius: 8px; font-size: 13px; line-height: 1.45; }
 .normcontrol-status { padding: 4px 8px; border-radius: 999px; background: #eceeef; color: #5d646b; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .normcontrol-status.running, .normcontrol-status.submitting, .normcontrol-status.reporting, .normcontrol-status.downloading, .normcontrol-status.queued_report { background: #eef4fb; color: #345d83; }
 .normcontrol-status.completed { background: #e5f3e8; color: #35613e; }
 .normcontrol-status.failed { background: #fde9e6; color: #943129; }
 .normcontrol-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #666d74; font-size: 13px; }
 .normcontrol-facts code { overflow-wrap: anywhere; }
+.normcontrol-attempts { border: 1px solid #e4e7ea; border-radius: 8px; overflow: hidden; }
+.normcontrol-attempts summary { cursor: pointer; padding: 10px 12px; font-weight: 700; }
+.attempt-row { display: grid; gap: 4px; padding: 10px 12px; border-top: 1px solid #edf0f2; font-size: 12px; }
+.attempt-row.failed, .attempt-row.timed_out, .attempt-row.remote_failed { background: #fffafa; }
+.attempt-row span, .attempt-row small { color: #697078; overflow-wrap: anywhere; }
+.attempt-row ul { margin: 4px 0 0; padding-left: 18px; color: #78302a; }
+.attempt-row li { margin: 3px 0; line-height: 1.4; }
+.attempt-row pre { margin: 4px 0 0; padding: 8px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 6px; background: #f6f7f8; color: #78302a; }
 .normcontrol-findings { border: 1px solid #e4e7ea; border-radius: 8px; overflow: hidden; }
 .normcontrol-findings summary { cursor: pointer; padding: 10px 12px; font-weight: 700; }
 .normcontrol-findings ul { margin: 0; padding: 0 14px 12px 30px; }

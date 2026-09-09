@@ -5,34 +5,106 @@ import base64
 import json
 import logging
 import socket
+import time
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, TypeVar
 from urllib.parse import urlparse
 
 import httpx
 
 ProgressHandler = Callable[[float, float | None, str | None], Awaitable[None]]
 logger = logging.getLogger(__name__)
+T = TypeVar('T')
 
 
-async def inspect_server(*, url: str) -> dict[str, Any]:
+async def inspect_server(*, url: str, attempts: int, timeout_seconds: int) -> dict[str, Any]:
+    diagnostics = await collect_endpoint_diagnostics(url)
+    last_exc: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        started = time.perf_counter()
+        try:
+            logger.info(
+                'MCP attempt tool=list_tools attempt=%s/%s timeout_seconds=%s elapsed_ms=0 endpoint=%s dag_id=- progress_seen=false',
+                attempt,
+                attempts,
+                timeout_seconds,
+                url,
+            )
+            result = await with_deadline(_inspect_server_once(url), timeout_seconds)
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            logger.info(
+                'MCP attempt succeeded tool=list_tools attempt=%s/%s timeout_seconds=%s elapsed_ms=%s endpoint=%s dag_id=- progress_seen=false',
+                attempt,
+                attempts,
+                timeout_seconds,
+                elapsed_ms,
+                url,
+            )
+            result['diagnostics'] = diagnostics
+            return result
+        except TimeoutError as exc:
+            last_exc = exc
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            error = f'MCP list_tools timed out after {timeout_seconds} seconds.'
+            logger.warning(
+                'MCP attempt timed out tool=list_tools attempt=%s/%s timeout_seconds=%s elapsed_ms=%s endpoint=%s dag_id=- progress_seen=false error=%s diagnostics=%s',
+                attempt,
+                attempts,
+                timeout_seconds,
+                elapsed_ms,
+                url,
+                error,
+                diagnostics,
+            )
+        except Exception as exc:
+            last_exc = exc
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            error = _exception_details(exc)
+            logger.exception(
+                'MCP attempt failed tool=list_tools attempt=%s/%s timeout_seconds=%s elapsed_ms=%s endpoint=%s dag_id=- progress_seen=false error=%s diagnostics=%s',
+                attempt,
+                attempts,
+                timeout_seconds,
+                elapsed_ms,
+                url,
+                error,
+                diagnostics,
+            )
+        if attempt < attempts:
+            await asyncio.sleep(_retry_delay_before_attempt(attempt + 1))
+
+    if isinstance(last_exc, TimeoutError):
+        raise RuntimeError(
+            f'MCP list_tools timed out after {attempts} attempts of {timeout_seconds} seconds at {url}.'
+            f'{_format_diagnostics(diagnostics)}'
+        ) from last_exc
+    if last_exc:
+        raise RuntimeError(_mcp_error_message(last_exc, url, 'list_tools', diagnostics)) from last_exc
+    raise RuntimeError(f'MCP list_tools failed at {url}.')
+
+
+async def _inspect_server_once(url: str) -> dict[str, Any]:
     Client = _fastmcp_client()
     client = Client(url)
-    diagnostics = await collect_endpoint_diagnostics(url)
-    try:
-        logger.info('Inspecting MCP server at %s diagnostics=%s', url, diagnostics)
-        async with client:
-            prompts = await client.list_prompts()
-            tools = await client.list_tools()
-    except Exception as exc:
-        logger.exception('MCP list_tools failed at %s diagnostics=%s', url, diagnostics)
-        raise RuntimeError(_mcp_error_message(exc, url, 'list_tools', diagnostics)) from exc
+    async with client:
+        prompts = await client.list_prompts()
+        tools = await client.list_tools()
     return {
         'ok': True,
-        'diagnostics': diagnostics,
         'prompts': [_describe_mcp_item(item) for item in prompts],
         'tools': [_describe_mcp_item(item) for item in tools],
     }
+
+
+async def with_deadline(awaitable: Awaitable[T], timeout_seconds: int) -> T:
+    task = asyncio.create_task(awaitable)
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), timeout_seconds)
+    except TimeoutError:
+        task.cancel()
+        task.add_done_callback(_consume_deadline_task_result)
+        raise
 
 
 async def submit_document(
@@ -80,7 +152,7 @@ async def generate_pdf_report(
 async def download_pdf(url: str, target: Path, *, timeout_seconds: int) -> int:
     target.parent.mkdir(parents=True, exist_ok=True)
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds)) as client:
-        logger.info('Downloading normcontrol PDF from %s to %s', url, target)
+        logger.info('Downloading normcontrol PDF host=%s target=%s', urlparse(url).netloc or '-', target)
         response = await client.get(url)
         response.raise_for_status()
     tmp = Path(f'{target}.tmp')
@@ -97,8 +169,18 @@ def _fastmcp_client() -> Any:
     return Client
 
 
+def _consume_deadline_task_result(task: asyncio.Task[Any]) -> None:
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logger.debug('MCP deadline-abandoned task finished with an error.', exc_info=True)
+
+
 async def collect_endpoint_diagnostics(url: str) -> dict[str, str]:
     diagnostics: dict[str, str] = {'url': url}
+    diagnostics.update(_package_versions())
     parsed = urlparse(url)
     host = parsed.hostname
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
@@ -136,6 +218,16 @@ async def collect_endpoint_diagnostics(url: str) -> dict[str, str]:
     return diagnostics
 
 
+def _package_versions() -> dict[str, str]:
+    result: dict[str, str] = {}
+    for key, package in {'fastmcpVersion': 'fastmcp', 'mcpVersion': 'mcp', 'httpxVersion': 'httpx'}.items():
+        try:
+            result[key] = version(package)
+        except PackageNotFoundError:
+            result[key] = 'not-installed'
+    return result
+
+
 def _mcp_error_message(exc: BaseException, url: str, tool: str, diagnostics: dict[str, str] | None = None) -> str:
     detail = _exception_details(exc)
     diagnostics_text = _format_diagnostics(diagnostics)
@@ -153,6 +245,9 @@ def _format_diagnostics(diagnostics: dict[str, str] | None) -> str:
     if not diagnostics:
         return ''
     ordered = [
+        'fastmcpVersion',
+        'mcpVersion',
+        'httpxVersion',
         'dns',
         'dnsError',
         'tcp',
@@ -164,6 +259,16 @@ def _format_diagnostics(diagnostics: dict[str, str] | None) -> str:
     ]
     values = [f'{key}={diagnostics[key]}' for key in ordered if diagnostics.get(key)]
     return f" Endpoint diagnostics: {'; '.join(values)}" if values else ''
+
+
+def _retry_delay_before_attempt(attempt: int) -> int:
+    if attempt <= 1:
+        return 0
+    if attempt == 2:
+        return 2
+    if attempt == 3:
+        return 5
+    return 5
 
 
 def _exception_details(exc: BaseException) -> str:

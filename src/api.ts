@@ -16,6 +16,7 @@ export const api = {
   rules: (profile: CheckProfile) => request<Rule[]>(`/api/rules?profile=${profile}`),
   createJobs: (body: FormData) => request<Job[]>("/api/jobs", { method: "POST", body }),
   createNormControlJob: (body: FormData) => request<NormControlJob>("/api/normcontrol/jobs", { method: "POST", body }),
+  retryNormControlJob: (id: string) => request<NormControlJob>(`/api/normcontrol/jobs/${id}/retry`, { method: "POST" }),
   structure: (id: string) => request<StructureDetails>(`/api/jobs/${id}/structure`),
   updateMapElement: (jobId: string, elementId: string, patch: Record<string, unknown>) => request<Job>(`/api/jobs/${jobId}/map/elements/${elementId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }),
   addMapElement: (jobId: string, body: Record<string, unknown>) => request<Job>(`/api/jobs/${jobId}/map/elements`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),

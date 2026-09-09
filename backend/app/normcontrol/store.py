@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..config import NORMCONTROL_JOBS_FILE
+from ..config import NORMCONTROL_JOBS_FILE, NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS, NORMCONTROL_MCP_ATTEMPTS
 from ..util import now_iso
 
 _lock = asyncio.Lock()
@@ -84,6 +84,9 @@ async def recover_interrupted_normcontrol_jobs() -> None:
                     status='queued_report',
                     progress=max(65, int(job.get('progress') or 0)),
                     progressMessage='Сервер перезапущен. Повторно запрашиваем готовый отчёт нормоконтроля.',
+                    attempts=0,
+                    maxAttempts=NORMCONTROL_MCP_ATTEMPTS,
+                    timeoutSeconds=NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
                     error='Сервер был перезапущен; загрузка итогового отчёта будет повторена без повторной отправки PDF.',
                     updatedAt=now_iso(),
                 )
@@ -92,7 +95,10 @@ async def recover_interrupted_normcontrol_jobs() -> None:
                     status='failed',
                     progress=100,
                     progressMessage='Нормоконтроль остановлен после перезапуска сервера.',
-                    error='Сервер был перезапущен до получения run_id от MCP. Состояние внешнего запуска неизвестно; загрузите PDF заново.',
+                    attempts=0,
+                    maxAttempts=NORMCONTROL_MCP_ATTEMPTS,
+                    timeoutSeconds=NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
+                    error='Сервер был перезапущен до получения run_id от MCP. Состояние внешнего запуска неизвестно; PDF сохранён локально, повтор через UI может создать новый внешний DAG-запуск.',
                     finishedAt=now_iso(),
                     updatedAt=now_iso(),
                 )

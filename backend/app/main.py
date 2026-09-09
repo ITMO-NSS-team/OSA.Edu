@@ -16,6 +16,8 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Res
 from .config import (
     APP_VERSION,
     MAX_FILE_SIZE_MB,
+    NORMCONTROL_MCP_ATTEMPTS,
+    NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
     NORMCONTROL_DAG_ID,
     NORMCONTROL_MCP_URL,
     NORMCONTROL_UPLOADS_DIR,
@@ -100,6 +102,8 @@ async def health():
         "normcontrol": {
             "mcpUrl": NORMCONTROL_MCP_URL,
             "dagId": NORMCONTROL_DAG_ID,
+            "mcpAttempts": NORMCONTROL_MCP_ATTEMPTS,
+            "mcpAttemptTimeoutSeconds": NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
             "enabled": bool(NORMCONTROL_MCP_URL and NORMCONTROL_DAG_ID),
         },
     }
@@ -126,7 +130,11 @@ async def normcontrol_status():
     if not NORMCONTROL_MCP_URL:
         return _error(400, "NORMCONTROL_MCP_URL не настроен.")
     try:
-        return await inspect_normcontrol_server(url=NORMCONTROL_MCP_URL)
+        return await inspect_normcontrol_server(
+            url=NORMCONTROL_MCP_URL,
+            attempts=NORMCONTROL_MCP_ATTEMPTS,
+            timeout_seconds=NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
+        )
     except Exception as exc:
         return _error(502, str(exc))
 
@@ -169,15 +177,55 @@ async def create_normcontrol_job_endpoint(file: UploadFile = File(...)):
         "status": "queued",
         "progress": 0,
         "progressMessage": "PDF принят. Ожидаем отправку на сервер нормоконтроля.",
+        "attempts": 0,
+        "maxAttempts": NORMCONTROL_MCP_ATTEMPTS,
+        "timeoutSeconds": NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
         "dagId": NORMCONTROL_DAG_ID,
         "mcpUrl": NORMCONTROL_MCP_URL,
         "message": "",
         "errors": [],
         "warnings": [],
+        "attemptLogs": [],
     }
     await persist_normcontrol_job(job)
     start_normcontrol_queue()
     return JSONResponse(status_code=201, content=job)
+
+
+@app.post("/api/normcontrol/jobs/{job_id}/retry")
+async def retry_normcontrol_job(job_id: str):
+    current = await get_normcontrol_job(job_id)
+    if not current:
+        return _error(404, "Задача нормоконтроля не найдена.")
+    if current.get("status") in ACTIVE_NORMCONTROL_STATUSES:
+        return _error(409, "Нормоконтроль уже выполняется.")
+    if current.get("status") != "failed":
+        return _error(409, "Повтор доступен только для задач с ошибкой.")
+
+    run_id = str(current.get("runId") or current.get("taskId") or "").strip()
+    source_exists = bool(current.get("filePath") and Path(current["filePath"]).exists())
+    if not run_id and not source_exists:
+        return _error(409, "Исходный PDF не найден. Загрузите документ заново.")
+
+    patch = {
+        "status": "queued_report" if run_id else "queued",
+        "progress": 65 if run_id else 0,
+        "progressMessage": "Повторно запрашиваем готовый отчёт без отправки PDF." if run_id else "Повторно отправляем PDF на сервер нормоконтроля.",
+        "attempts": 0,
+        "maxAttempts": NORMCONTROL_MCP_ATTEMPTS,
+        "timeoutSeconds": NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
+        "lastAttemptAt": None,
+        "mcpStatus": "",
+        "message": "",
+        "errors": [],
+        "warnings": [],
+        "attemptLogs": [],
+        "error": None,
+        "finishedAt": None,
+    }
+    job = await update_normcontrol_job(job_id, patch)
+    start_normcontrol_queue()
+    return job if job else _error(404, "Задача нормоконтроля не найдена.")
 
 
 @app.delete("/api/normcontrol/jobs/{job_id}")
