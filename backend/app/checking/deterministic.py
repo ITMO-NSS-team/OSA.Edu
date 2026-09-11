@@ -1,6 +1,6 @@
 from __future__ import annotations
 import regex as re
-from .common import (evidence, contextual, dedupe_evidence, narrative_blocks, result, is_actual_caption,
+from .common import (grounded_check, evidence, contextual, dedupe_evidence, narrative_blocks, result, is_actual_caption,
     is_code_or_prompt, formula_like_block, is_likely_table_context, looks_like_contents)
 from .bibliography import run_bibliography_rule
 from ..document.numbered_items import extract_numbered_items, collect_unique_defense_items
@@ -42,7 +42,7 @@ SPECS={
 'tasks-solved':[(r'\b(?:выполнени\p{L}*|выполнить)\s+(?:этой\s+|данной\s+)?задач\p{L}*\b','Задачу решают, а не выполняют.')],
 'analogovye':[(r'\bаналогов(?:ое|ые|ая|ого|ых)\s+решени\p{L}*\b','Использовать «аналогичные решения».')],
 'roman-ending':[(r'\b[IVXLCDM]+-(?:ую|ой|го|я|е|й)\b','Не присоединять русское окончание к римской цифре.')],
-'implemented-in-company':[(r'\bвнедр(?:ен|ена|ено|ены|ил|или)\p{L}*\s+в\s+компани(?:ю|и)\b','Проверить нормативный предлог.')],
+'implemented-in-company':[(r'\bвнедр(?:ен|ена|ено|ены|ил|или)\p{L}*\s+в\s+компанию\b','Проверить нормативный предлог.')],
 'formula-wording':[(r'\bв\s+соответствии\s+со\s+следующей\s+формулой\b','Сократить до «по формуле».')],
 'next-respectively':[(r'\bследующ\p{L}*\b(?:(?![.!?]).){0,55}\bследующ\p{L}*\b','Убрать повтор слова «следующий».')],
 'receiver-successor':[(r'\bприемник(?:а|ом|у)?\s+(?:президент|руководител|директор)','Использовать «преемник».')],
@@ -244,7 +244,7 @@ def _list_ending(rule,document,numbered=True):
         if re.search(r'\bАлгоритм\s*:',b.get('text',''),re.I) or formula_like_block(b.get('text','')): continue
         if numbered:
             for item in extract_numbered_items(b['text']):
-                if item['body'].rstrip().endswith(';'): ev.append(evidence(b,item['full']))
+                if not item['body'].rstrip().endswith('.') or (rule['id']=='SOFT-030' and not re.match(r'^\p{Lu}', item['body'].lstrip())): ev.append(evidence(b,item['full']))
         else:
             for line in b['text'].splitlines():
                 line=line.strip()
@@ -283,10 +283,18 @@ def _defense(rule,document,punctuation=True):
             if not re.match(r'^\p{Lu}',text) or not text.endswith('.') or text.endswith(';'):
                 ev.append(evidence(item['source'],f"{item['number']}. {text}"))
         return result(rule,'violation','Найдено положение с неверной прописной буквой или завершающим знаком.',dedupe_evidence(ev)[:12],1,'detector','Начать положение с прописной буквы и завершить точкой.') if ev else result(rule,'pass',f'Все {len(items)} распознанных положений начинаются с прописной буквы и заканчиваются точкой.',confidence=1)
-    pattern=re.compile(r'(?<![\p{L}\p{N}_])(?:[A-ZА-ЯЁ]{2,8}|Recall@\d+|NDCG@\d+|F1@?\d*|κ|τ|γ|≈|≤|≥|\d+[,.]\d+)(?![\p{L}\p{N}_])')
+    from ..document.fact_store import notation_classification
     for item in items:
-        if pattern.search(item['text']): ev.append(evidence(item['source'],f"{item['number']}. {item['text']}"))
-    return result(rule,'violation','В положениях обнаружены аббревиатуры, метрики или математические обозначения.',dedupe_evidence(ev)[:12],1,'detector','Раскрыть обозначения словами.') if ev else result(rule,'pass','В распознанных положениях аббревиатуры и математические обозначения не обнаружены.',confidence=1)
+        text = item['text']
+        symbols = bool(re.search(r'[=≈≤≥∑∫√±∞∈∉⊂]|\\(?:frac|sum|int)\b', text))
+        tokens = re.findall(r'(?<![\p{L}\p{N}_])[A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9@_-]+(?![\p{L}\p{N}_])', text)
+        listed = any(notation_classification(document.get('factStore'), token) == 'yes' for token in tokens)
+        if symbols or listed:
+            ev.append(evidence(item['source'], f"{item['number']}. {text}"))
+    if ev:
+        return result(rule, 'violation', 'В положениях найдены явные математические символы или сокращения из общей карты обозначений.',
+                      dedupe_evidence(ev)[:12], .98, 'detector', 'Раскрыть обозначения словами.')
+    return result(rule, 'uncertain', 'Классификация всех обозначений в положениях не подтверждена; регистр букв и десятичные числа сами по себе не доказывают нарушение.')
 
 
 def _spacing(rule,document):
@@ -299,7 +307,7 @@ def _spacing(rule,document):
     if initials: return result(rule,'violation','Обнаружено написание инициалов без пробела перед фамилией.',dedupe_evidence(initials)[:12],1,'detector','Добавить пробел.')
     if percents and document.get('sourceFormat')=='pdf': return result(rule,'uncertain','В PDF знак процента местами прилегает к числу; текстовый слой может терять пробелы.',dedupe_evidence(percents)[:8],0,'detector')
     if percents: return result(rule,'violation','Обнаружено число без пробела перед знаком процента.',dedupe_evidence(percents)[:12],1,'detector','Добавить неразрывный пробел.')
-    return result(rule,'pass','Высокоуверенные нарушения пробелов не обнаружены.',confidence=1)
+    return _dash(rule, document)
 
 
 def _dash(rule,document):
@@ -319,6 +327,10 @@ def _dash(rule,document):
 
 def _generic(rule,document,detector):
     specs=SPECS.get(detector)
+    if rule['id'] == 'SOFT-038':
+        specs = [*SPECS['lexical-replacements'][:2], (r'\bочевидно\b', 'Убрать слово «очевидно».')]
+    if rule['id'] == 'SOFT-045':
+        specs = [(r'\bвышеизложенн\p{L}*\b', 'Заменить на «изложенное выше».')]
     if not specs: return result(rule,'not_checked',f'Детектор {detector} ещё не реализован.')
     ev=[]; fix=None
     for b in _scope_blocks(document,detector,rule):
@@ -326,6 +338,8 @@ def _generic(rule,document,detector):
             for m in re.finditer(pattern,b.get('text',''),re.I|re.M):
                 # Conservative exclusions for common numeric false positives.
                 q=contextual(b['text'],m.start(),len(m.group()))
+                if detector == 'format-parent-word' and re.search(r'\bформат\p{L}*\s*$', b['text'][:m.start()], re.I):
+                    continue
                 if _noisy_match(rule.get('id',''),q): continue
                 if detector == 'obvious-claims':
                     left = b.get('text','')[max(0, m.start() - 36):m.start()]
@@ -338,6 +352,7 @@ def _generic(rule,document,detector):
     return result(rule,'violation',rule.get('requirement','Обнаружено нарушение.'),ev,.98,'detector',fix) if ev else result(rule,'pass','Высокоуверенные совпадения для данного правила не обнаружены.',confidence=.98)
 
 
+@grounded_check
 def run_deterministic(rule:dict,document:dict)->dict:
     detector=rule.get('detectorId') or RULE_FALLBACK.get(rule['id'])
     if rule['id'] in {'CORE-9-2','CORE-9-3'}: return run_bibliography_rule(rule,document)

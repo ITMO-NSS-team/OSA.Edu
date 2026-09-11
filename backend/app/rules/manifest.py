@@ -35,6 +35,7 @@ def runtime_metadata(rule_id: str) -> dict:
         'weight': entry.weight,
         'dedupKey': entry.dedupKey,
         'engineKind': engine.kind.value,
+        'requiredFacts': list(engine.requiredFacts),
         'routing': entry.routing.model_dump(exclude_none=True),
     }
     if engine.detectorId:

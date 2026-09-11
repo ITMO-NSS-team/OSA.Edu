@@ -127,7 +127,7 @@ def _text_language(value: str) -> str:
 
 
 _GLOSSARY_MARKER_RE = re.compile(
-    r"(?<![\p{L}\p{N}_])([A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9@+./-]{1,30})\s*(?:[—–-]|:|\t+)\s+"
+    r"(?<![\p{L}\p{N}_])([A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9@+./-]{1,30})\s*(?:[—–=-]|:|\t+)\s+"
 )
 
 
@@ -139,6 +139,8 @@ def collect_abbreviation_definitions(document: dict[str, Any]) -> dict[str, list
     ``TOKEN - expansion`` markers from every non-bibliography block and attach
     them as grounded context to matching inventory candidates.
     """
+    if document.get('factStore') is not None:
+        return document['factStore'].get('abbreviationDefinitions') or {}
     result: dict[str, list[dict[str, Any]]] = {}
     for block in document.get("blocks", []):
         if str(block.get("type") or "").lower() in {"bibliography", "formula", "code", "figure", "table"}:
@@ -227,7 +229,7 @@ def _abbreviation_list_block_ids(document: dict[str, Any]) -> set[str]:
         r"^(?:реферат|аннотация|введение|заключение|глава\s+\d+|abstract|introduction|conclusion|chapter\s+\d+)\b",
         re.I,
     )
-    entry_re = re.compile(r"^[A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9@+./-]{0,30}\s*[—–:\-]\s+\S")
+    entry_re = re.compile(r"^[A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9@+./-]{0,30}\s*[—–:=\-]\s+\S")
     result: set[str] = set()
     active = False
     for block in document.get("blocks", []):
@@ -249,6 +251,8 @@ def _abbreviation_list_block_ids(document: dict[str, Any]) -> set[str]:
 
 def abbreviation_list_block_ids(document: dict[str, Any]) -> set[str]:
     """Public read-only view of the explicit abbreviation-list scope."""
+    if document.get('factStore') is not None:
+        return set((document['factStore'].get('abbreviationGlossary') or {}).get('blockIds') or [])
     return set(_abbreviation_list_block_ids(document))
 
 

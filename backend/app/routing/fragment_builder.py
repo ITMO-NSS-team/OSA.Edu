@@ -11,6 +11,7 @@ import regex as re
 from ..document.chapter_linker import infer_result_kind
 from ..document.semantic_model import build_semantic_document, resolve_statement_chapter_roles
 from ..document.semantic_ranges import trim_blocks_for_element
+from ..document.fact_store import build_document_fact_store
 
 def _unique_blocks(blocks: list[dict]) -> list[dict]:
     seen: set[str] = set()
@@ -28,6 +29,7 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
     semantic_document = build_semantic_document(document, map_value)
     block_index = {block.get("id"): index for index, block in enumerate(blocks)}
     fragments: list[dict] = []
+    store = document.get('factStore') or build_document_fact_store(document)
 
     # Direct map fragments. IDs intentionally stay equal to DocumentMap element IDs;
     # the React client and reports can therefore refer to exactly the same semantic ranges.
@@ -41,7 +43,11 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
         end = block_index.get(element.get("endBlockId"))
         if start is None or end is None or start > end:
             continue
-        selected = trim_blocks_for_element(element.get("type", "other"), blocks[start:end + 1])
+        fact = (store.get('facts') or {}).get(element.get('type'))
+        element_fact = (store.get('elementFacts') or {}).get(str(element.get('id')))
+        if fact and fact.get('status') != 'found':
+            continue
+        selected = element_fact['blocks'] if element_fact else trim_blocks_for_element(element.get("type", "other"), blocks[start:end + 1])
         if not selected:
             continue
         fragments.append({
@@ -50,7 +56,7 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
             "selector": element.get("type", "other"),
             "label": element.get("label") or element.get("type", "other"),
             "blocks": selected,
-            "complete": element.get("state") == "confirmed",
+            "complete": element_fact.get('status') == 'found' if element_fact else element.get("state") == "confirmed",
         })
 
     def by_type(element_type: str) -> list[dict]:
@@ -69,6 +75,9 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
             return
         if complete is None:
             complete = bool(source) and all(item.get("complete") for item in source)
+        if source:
+            expected_ids = {b['id'] for item in source for b in item.get('blocks', [])}
+            complete = bool(complete and expected_ids <= {b['id'] for b in unique})
         fragments.append({
             "id": f"virtual-{selector}",
             "type": "virtual",
@@ -117,28 +126,14 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
             conclusion_fragment['chapterId'] = linked_chapter
 
     derived_conclusions = list(explicit_conclusions)
-    explicit_chapter_ids = {item.get("chapterId") for item in explicit_conclusions if item.get("chapterId")}
-    # Keep explicit map ranges authoritative, but deterministically derive a
-    # missing conclusion for an individual chapter when an actual conclusion
-    # heading exists inside that chapter.  A conclusion in one chapter must not
-    # disable discovery for all other chapters.
-    for index, chapter in enumerate(chapters):
-        if chapter.get("id") in explicit_chapter_ids:
-            continue
-        derived = _derive_chapter_conclusion(chapter, index)
-        if derived is not None:
-            derived_conclusions.append(derived)
-    existing_ids = {fragment.get("id") for fragment in fragments}
-    for item in derived_conclusions:
-        if item.get("id") not in existing_ids:
-            fragments.append(item)
-            existing_ids.add(item.get("id"))
+    # Missing chapter conclusions remain missing in every rule's view.
 
     add_virtual(
         "title_goal",
         "Название и цель",
-        [*title, *goal, *introduction],
+        [*title, *goal],
         [*(_flatten_blocks(title)), *(_flatten_blocks(goal))],
+        complete=bool(title and goal and all(x.get('complete') for x in [*title, *goal])),
     )
 
     scientific_source = [*title, *introduction, *goal, *tasks, *defense, *chapters, *conclusion]

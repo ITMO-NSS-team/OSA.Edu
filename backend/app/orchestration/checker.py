@@ -25,7 +25,7 @@ from .result_processing import (
     _prune_resolved_warnings,
 )
 from .semantic_packets import ABSENCE_RULES, RULE_GUIDANCE, _fact_recovery_message, _message
-from .verdict_contract import enforce_verdict_contracts, technical_rule_result
+from .verdict_contract import enforce_verdict_contracts, technical_rule_result, required_fact_failure
 
 # Compatibility alias. Canonical direction is Document Map → legacy fields.
 hydrate_fields_from_confirmed_map = hydrate_legacy_fields
@@ -33,9 +33,9 @@ hydrate_fields_from_confirmed_map = hydrate_legacy_fields
 async def check_document(*,document:dict,provider:str,model:str,prompt:str,profile:str,additional_criteria:str,only_rule_ids:list[str]|None=None,on_progress:Callable[[int,int,str],Awaitable[None]|None]|None=None,is_cancelled:Callable[[],Awaitable[bool]|bool]|None=None)->dict:
     if not map_is_confirmed(document.get('map')):
         raise ValueError('Структура документа не подтверждена.')
-    hydrate_legacy_fields(document)
     fact_store=build_document_fact_store(document)
     document['factStore']=fact_store
+    hydrate_legacy_fields(document)
     all_rules=rules_for_profile(profile,additional_criteria)
     selected=set(only_rule_ids or [])
     rules=[r for r in all_rules if not selected or r['id'] in selected]
@@ -48,8 +48,16 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
     llm_routed=[]
     candidate_routed=[]
     abbreviation_routed=[]
+    notation_dependent=[]
     for routed in routing['routed']:
         st=routed['strategy']; rule=routed['rule']
+        prerequisite = required_fact_failure(rule, fact_store)
+        if prerequisite and st not in {'manual', 'unavailable'}:
+            local[rule['id']] = prerequisite
+            continue
+        if st in {'deterministic', 'structural'} and 'notations' in (rule.get('globalFactKeys') or []):
+            notation_dependent.append(routed)
+            continue
         if rule.get('engineKind') == 'abbreviation_fact_map':
             # Abbreviation rules are intercepted by the shared fact-map stage
             # before ordinary semantic routing. Python owns candidate discovery/scope;
@@ -361,6 +369,15 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             rule=routed['rule']
             local.setdefault(rule['id'],technical_rule_result(rule,'abbreviation_fact_map',exc))
 
+    for routed in notation_dependent:
+        rule = routed['rule']
+        try:
+            res = (run_deterministic(rule, document) if routed['strategy'] == 'deterministic'
+                   else run_structural(rule, document, routing.get('fragments', [])))
+            local[rule['id']] = _normalize_local(routed, res)
+        except Exception as exc:
+            local[rule['id']] = technical_rule_result(rule, 'notation_dependent', exc)
+
     routed_by={x['rule']['id']:x for x in routing['routed']}
     initial=[]
     for rule in rules:
@@ -380,9 +397,12 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
         merge_usage(usage, verifier_usage)
         warnings.extend(verifier_warnings)
     except Exception as exc:
-        warnings.append(f"Evidence verifier завершился ошибкой; сохранены предварительные результаты: {exc}")
+        warnings.append(f"Evidence verifier завершился ошибкой; зависимые результаты помечены как технически незавершённые: {exc}")
         merge_usage(usage,getattr(exc,'llm_usage',None))
-        verified=initial
+        by_rule = {r['id']: r for r in rules}
+        verified = [technical_rule_result(by_rule[item['ruleId']], 'evidence_verifier', exc)
+                    if by_rule[item['ruleId']]['engineKind'] in {'semantic', 'semantic_fact', 'candidate'}
+                    and item.get('status') in {'pass', 'violation'} else item for item in initial]
 
     try:
         results=apply_consistency_checks(verified, document=document)
@@ -390,7 +410,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
         warnings.append(f"Consistency post-processing завершился ошибкой; сохранены проверенные результаты: {exc}")
         results=verified
 
-    results=enforce_verdict_contracts(results)
+    results=enforce_verdict_contracts(results, rules=rules, fact_store=fact_store)
     rule_by_id={str(rule.get('id')):rule for rule in rules}
     validated=[]
     for item in results:

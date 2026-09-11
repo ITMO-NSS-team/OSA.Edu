@@ -1,6 +1,6 @@
 from __future__ import annotations
 import regex as re
-from .common import evidence, contextual, dedupe_evidence, result, is_actual_caption, looks_like_contents, is_code_or_prompt, mapped_excluded_ids
+from .common import grounded_check, evidence, contextual, dedupe_evidence, result, is_actual_caption, looks_like_contents, is_code_or_prompt, mapped_excluded_ids
 from .bibliography import run_bibliography_rule
 from .abbreviations import run_abbreviation_check, combined_abbreviation_rules
 from ..document.numbered_items import collect_unique_defense_items, collect_unique_numbered_items
@@ -79,20 +79,28 @@ def _positions_chapters(rule,document,routing_fragments=None):
 
 def _defense_section(rule,document):
     element=next((x for x in (document.get('map') or {}).get('elements',[]) if x.get('type')=='defense_statements'),None)
-    if not element or not document.get('fields',{}).get('defenseStatements'): return _violation(rule,'Отдельный раздел с положениями, выносимыми на защиту, не распознан.',[],'Добавить отдельный раздел с положениями на защиту.')
+    if not element or not document.get('fields',{}).get('defenseStatements'): return _uncertain(rule, 'Раздел положений не извлечён надёжно; отсутствие диапазона не доказывает отсутствие раздела.')
     return _uncertain(rule,'Отдельный раздел с положениями распознан, но указание научной новизны или практической значимости внутри каждого положения требует смысловой проверки.')
 
 
 def _chapters_new_page(rule,document):
     if not document.get('pages'): return _uncertain(rule,'Для DOCX без постраничной разметки начало глав с новой страницы проверить нельзя.')
-    ev=[]; blocks=document.get('blocks',[])
+    ev=[]; blocks=document.get('blocks',[]); incomplete=False
     for h in document.get('fields',{}).get('chapterHeadings',[]):
         page=h.get('page')
-        if not page: continue
-        page_blocks=[b for b in blocks if b.get('page')==page]
+        if not page:
+            incomplete=True
+            continue
+        page_blocks=[b for b in blocks if b.get('page')==page and b.get('layoutRole') not in {'header', 'footer', 'page_number'}]
         try: pos=next(i for i,b in enumerate(page_blocks) if b['id']==h['id'])
-        except StopIteration: continue
-        if pos>1: ev.append(evidence(h,h['text']))
+        except StopIteration:
+            incomplete=True
+            continue
+        if pos>0:
+            incomplete=True
+            # Unknown leading blocks can be unlabelled running headers. Their
+            # mere count is not proof that the chapter starts mid-page.
+    if incomplete: return _uncertain(rule, 'Начало всех глав не подтверждено: отсутствуют страницы или перед заголовком есть блоки неизвестной роли.')
     return _violation(rule,'Заголовок главы расположен не в начале страницы.',ev,'Перенести начало главы на новую страницу.') if ev else _pass(rule,'Распознанные заголовки глав находятся в начале страниц.')
 
 
@@ -109,10 +117,8 @@ def _heading_format(rule,document):
         # CORE-19 and must not be evidence for this rule.
         if not (is_chapter or is_section or is_numbered_object):
             continue
-        bad_separator = bool(
-            re.search(r'^глава\s+\d+\s+(?![.–—-])',t,re.I)
-            or re.search(r'^\d+(?:\.\d+)+\s+(?=[А-ЯЁ])',t)
-        )
+        heading = re.match(r'^(?:(?:глава|рис(?:унок)?|таблица)\s*)?\d+(?:\.\d+)*([.])?\s*(.*)$', t, re.I)
+        bad_separator = bool(heading and (not heading.group(1) or not re.match(r'^\p{Lu}', heading.group(2))))
         if bad_separator or t.endswith('.'):
             ev.append(evidence(b,t))
     return _violation(rule,'Обнаружен нумерованный заголовок или подпись с неверной точкой после номера либо лишней точкой в конце.',ev[:15],'Исправить нумерацию и убрать точку в конце названия.') if ev else _pass(rule,'Явных нарушений формата распознанных нумерованных заголовков и подписей не обнаружено.')
@@ -353,24 +359,21 @@ def _bibliography_entry_numbers(entries: list[dict]) -> tuple[set[int], str]:
 def _bibliography_refs(rule,document):
     entries=document.get('fields',{}).get('bibliographyBlocks',[])
     if not entries: return _uncertain(rule,'Список литературы не удалось распознать.')
-    nums, numbering_style = _bibliography_entry_numbers(entries)
-    if not nums: return _uncertain(rule,'Нумерацию библиографии не удалось надёжно распознать.')
-    bibids={b['id'] for b in entries}; cited=set()
-    excluded=mapped_excluded_ids(document)
-    for b in document.get('blocks',[]):
-        if b['id'] in bibids or b['id'] in excluded: continue
-        for br in re.finditer(r'\[([^\]]+)\]',b.get('text','')): cited|=_citation_numbers(br.group(1))
-    missing=sorted(nums-cited)
-    if not missing: return _pass(rule,'Для всех распознанных источников найдены ссылки в основном тексте, включая номера внутри диапазонов.')
-    ev=[]
-    for b in entries:
-        text=b.get('text','')
-        if numbering_style == 'bracket':
-            hit=any(re.search(rf'(?:^|\n|\s)\[{n}\]\s+', text, re.M) for n in missing)
-        else:
-            hit=any(re.search(rf'(?:^|\n)\s*{n}[.)]\s+', text, re.M) for n in missing)
-        if hit: ev.append(evidence(b,text[:450]))
-    return _violation(rule,'Не найдены ссылки на источники: '+', '.join(map(str,missing[:25]))+'.',ev[:15],'Добавить ссылки либо удалить неиспользованные записи.')
+    from .bibliography import bibliography_entries
+    records, complete = bibliography_entries(entries)
+    if not complete:
+        return _uncertain(rule, 'Не подтверждено полное выделение библиографических записей; проверка всех ссылок невозможна.')
+    nums = {r['number'] for r in records}
+    cited = set()
+    for b in _main_work_blocks(document):
+        for br in re.finditer(r'\[([^\]]+)\]', b.get('text', '')):
+            cited |= _citation_numbers(br.group(1))
+    missing = sorted(nums - cited)
+    if not missing:
+        return _pass(rule, 'Для каждого выделенного источника найдена ссылка в основном тексте.')
+    ev = [evidence(b, b.get('text', '')[:450]) for r in records if r['number'] in missing for b in r['blocks']]
+    return _violation(rule, 'Не найдены ссылки на источники: ' + ', '.join(map(str, missing)) + '.',
+                      dedupe_evidence(ev)[:15], 'Добавить ссылки либо удалить неиспользованные записи.')
 
 
 def _is_code(value:str)->bool:
@@ -420,24 +423,7 @@ def _is_code(value:str)->bool:
 def _code_explanation(rule,document):
     blocks=_main_work_blocks(document); code=[b for b in blocks if _is_code(b.get('text',''))]
     if not code:return _na(rule,'Фрагменты программного кода не обнаружены.')
-    ev=[]
-    for b in code:
-        i=next((j for j,x in enumerate(blocks) if x['id']==b['id']),0)
-        # Explanation can be immediately before the listing, in the same
-        # flattened PDF block, or directly after it.  The check is intentionally
-        # semantic-light: require Russian explanatory vocabulary, not a specific
-        # heading or page layout.
-        context=' '.join(x.get('text','') for x in blocks[max(0,i-4):min(len(blocks),i+2)])
-        explanation_markers=re.search(
-            r'(?:фрагмент|код|листинг|реализ|выполня|алгоритм|функц\p{L}*|парсер\p{L}*|'
-            r'вычисл\p{L}*|извлека\p{L}*|проверя\p{L}*|преобраз\p{L}*|назначени\p{L}*)',
-            context,
-            re.I,
-        )
-        enough_prose=len(re.findall(r'[А-ЯЁа-яё]{3,}',context)) >= 8
-        if not (explanation_markers and enough_prose):
-            ev.append(evidence(b,b.get('text','')[:400]))
-    return _violation(rule,'Для фрагмента кода не найдено предшествующее описание.',ev,'Перед кодом объяснить его назначение.') if ev else _pass(rule,'Для распознанных фрагментов кода найдено описание.')
+    return _uncertain(rule, 'Найдены фрагменты кода. Подробность и соответствие русского описания назначению кода требуют смысловой проверки; наличие соседних слов не доказывает выполнение правила.')
 
 
 def _heading_periods(rule,document):
@@ -445,6 +431,7 @@ def _heading_periods(rule,document):
     return _violation(rule,'В конце заголовка или подписи стоит точка.',ev[:15],'Убрать точку.') if ev else _pass(rule,'В распознанных заголовках и подписях лишние точки не обнаружены.')
 
 
+@grounded_check
 def run_structural(rule:dict,document:dict,routing_fragments:list[dict]|None=None)->dict:
     rid=rule['id']
     if rid in DEFERRED_ABBREVIATIONS:
@@ -461,7 +448,8 @@ def run_structural(rule:dict,document:dict,routing_fragments:list[dict]|None=Non
     if rid in {'CORE-7-2','SOFT-066'}: return _caption_format(rule,document)
     if rid in {'CORE-7-4','SOFT-070'}: return _formula_numbering(rule,document)
     if rid in {'CORE-7-5','SOFT-072'}: return _formula_explanation(rule,document)
-    if rid in {'CORE-8-1','SOFT-160'}: return _chapter_conclusions(rule,document)
+    if rid == 'CORE-8-1': return _chapter_conclusions(rule,document)
+    if rid == 'SOFT-160': return _uncertain(rule, 'Итоги каждого раздела требуют смысловой проверки; наличие нумерации выводов по главам этого не доказывает.')
     if rid in {'CORE-9-1','CORE-18'}: return run_bibliography_rule(rule,document)
     if rid=='CORE-9-4': return _bibliography_refs(rule,document)
     if rid=='CORE-13': return _code_explanation(rule,document)

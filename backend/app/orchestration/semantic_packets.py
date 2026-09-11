@@ -34,8 +34,9 @@ def _message(map_value:dict,fragment:dict,rules:list[dict],fact_store:dict|None=
     fact_keys = []
     for rule in rules:
         fact_keys.extend(rule.get('globalFactKeys') or [])
+        fact_keys.extend(rule.get('requiredFacts') or [])
     global_facts = fact_store_prompt_text(fact_store, fact_keys)
-    global_section = f"\nGLOBAL_DOCUMENT_FACTS (grounded facts, построенные Python один раз для всего документа; использовать как контекст, но evidence нарушения всё равно брать из BLOCK):\n{global_facts}\n" if global_facts else ''
+    global_section = f"\nGLOBAL_DOCUMENT_FACTS (единый источник структурных фактов; не переопределяй и не восстанавливай отсутствующие факты из других заголовков. Конфликт или недостаточное evidence означает uncertain; evidence нарушения брать из BLOCK):\n{global_facts}\n" if global_facts else ''
     return f'''DOCUMENT_MAP:\n{summary}\n\nCHECK_FRAGMENT:\nid={fragment['id']}\nlabel={fragment['label']}\ncomplete={str(fragment.get('complete',False)).lower()}\ntotalBlocks={len(fragment.get('blocks',[]))}{semantic_section}{global_section}\n{blocks}\n\nRULES:\n{'\n\n'.join(chunks)}\n\nОБЯЗАТЕЛЬНОЕ ОГРАНИЧЕНИЕ: используй только факты и названия, которые присутствуют в BLOCK, SEMANTIC_CONTEXT или GLOBAL_DOCUMENT_FACTS. Внешние знания запрещены. GLOBAL_DOCUMENT_FACTS можно использовать, чтобы не объявлять термин необъяснённым, если его grounded-определение уже найдено в другой части документа. Не предлагай в explanation/fix новые методы, статьи, продукты, авторов или бенчмарки, которых нет во входном тексте. Если документ не даёт основания для конкретного совета, формулируй исправление обобщённо.\n\nВерни JSON: {{"results":[{{"ruleId":"...","status":"pass|violation|uncertain|not_applicable","explanation":"...","fix":"...","evidence":[{{"blockId":"...","quote":"точная непрерывная цитата"}}],"absenceCheck":...}}]}}.'''
 
 
@@ -51,7 +52,7 @@ def _fact_recovery_message(fragment: dict, rule: dict, fact_store: dict | None =
         '{"name":"'+name+'","status":"found|not_found|ambiguous","reason":"коротко","evidence":[{"blockId":"...","quote":"точная цитата"}],"candidates":[]}'
         for name in required
     )
-    global_facts = fact_store_prompt_text(fact_store, rule.get('globalFactKeys') or [])
+    global_facts = fact_store_prompt_text(fact_store, [*(rule.get('globalFactKeys') or []), *(rule.get('requiredFacts') or [])])
     global_section = f"\nGLOBAL_DOCUMENT_FACTS:\n{global_facts}\n" if global_facts else ''
     return f'''RECOVERY FACT-FIRST. Проверяется только одна сущность и одно правило.{global_section}
 Не формируй pass/violation: Python проигнорирует status. Для status=found ОБЯЗАТЕЛЬНО дай хотя бы одну точную evidence-цитату из BLOCK; found без проверяемого evidence будет автоматически понижен до ambiguous. Просмотри ВСЕ {len(fragment.get('blocks', []))} BLOCK.

@@ -230,6 +230,9 @@ def _parse_rows(value: Any, allowed_ids: set[str]) -> dict[str, dict]:
 
 
 def _candidate_facts(candidate: dict, mapped: dict | None, fact_store: dict | None = None) -> dict[str, str]:
+    cached = (((fact_store or {}).get('notations') or {}).get('entities') or {}).get(str(candidate.get('candidateId')))
+    if cached:
+        return dict(cached['facts'])
     row = mapped or {}
     direct = str(row.get("isAbbreviation") or "").strip().lower()
     normative_class = str(row.get("normativeClass") or "uncertain")
@@ -244,17 +247,22 @@ def _candidate_facts(candidate: dict, mapped: dict | None, fact_store: dict | No
         normative_class in {"proper_name", "identifier_or_symbol", "ordinary_text"} and direct == "yes"
     ):
         direct = "uncertain"
-    is_abbreviation = direct
+    listed = abbreviation_is_listed(fact_store, str(candidate.get('term') or ''))
+    conflict = listed and direct == 'no'
+    # A grounded explicit list resolves missing/uncertain classification. An
+    # explicit contrary classification remains visible as conflicting evidence.
+    is_abbreviation = 'uncertain' if conflict else 'yes' if listed else direct
 
     return {
         "isAbbreviation": is_abbreviation,
+        "classificationConflict": "yes" if conflict else "no",
         "isForeignAbbreviation": str(row.get("isForeignAbbreviation") or "uncertain"),
         "firstUseHasRussianFullTermBefore": str(row.get("firstUseHasRussianFullTermBefore") or "uncertain"),
-        "hasExplanationAnywhere": str(row.get("hasExplanationAnywhere") or "uncertain"),
+        "hasExplanationAnywhere": "yes" if listed and not conflict else str(row.get("hasExplanationAnywhere") or "uncertain"),
         "hasRussianExplanationAnywhere": str(row.get("hasRussianExplanationAnywhere") or "uncertain"),
         "hasHeadingUse": "yes" if candidate.get("headingUses") else "no",
         "contextLanguage": str(candidate.get("contextLanguage") or "unknown"),
-        "listedInAbbreviationList": "yes" if abbreviation_is_listed(fact_store, str(candidate.get("term") or "")) else "no",
+        "listedInAbbreviationList": "yes" if listed else "no",
     }
 
 
@@ -271,6 +279,8 @@ def _evaluate_contract(rule_id: str, candidate: dict, mapped: dict | None, fact_
     if not contract:
         return "uncertain"
     facts = _candidate_facts(candidate, mapped, fact_store)
+    if facts.get('classificationConflict') == 'yes':
+        return 'uncertain'
 
     for condition in contract.get("notApplicableWhenAny") or []:
         if _condition_matches(facts, condition):
@@ -582,7 +592,33 @@ async def execute_abbreviation_inventory_check(
     usage["abbreviationResolvedCandidates"] = len(fact_map)
     usage["abbreviationUnresolvedCandidates"] = max(0, len(inventory) - len(fact_map))
 
-    if not fact_map:
+    if fact_store is not None:
+        entities = {}
+        for candidate in inventory:
+            cid = str(candidate['candidateId'])
+            facts = _candidate_facts(candidate, fact_map.get(cid), fact_store)
+            sources = [*(candidate.get('listedDefinitions') or []), *(candidate.get('headingUses') or []),
+                       *(candidate.get('contextUses') or []), *([candidate['firstUse']] if candidate.get('firstUse') else [])]
+            entities[cid] = {'term': candidate.get('term'), 'facts': facts,
+                             'classification': fact_map.get(cid),
+                             'firstUse': candidate.get('firstUse'),
+                             'headingUses': candidate.get('headingUses') or [],
+                             'blockIds': list(dict.fromkeys(ev['blockId'] for ev in sources if ev.get('blockId'))),
+                             'pages': list(dict.fromkeys(ev['page'] for ev in sources if ev.get('page') is not None)),
+                             'confidence': (1.0 if facts['listedInAbbreviationList'] == 'yes' else .8)
+                                           if facts['isAbbreviation'] in {'yes', 'no'} else 0,
+                             'source': 'shared_inventory+explicit_glossary'}
+        by_term = {}
+        for entity in entities.values():
+            by_term.setdefault(str(entity.get('term') or '').upper().replace('–', '-'), []).append(entity)
+        for rows in by_term.values():
+            if len({row['facts']['isAbbreviation'] for row in rows}) > 1:
+                for row in rows:
+                    row['facts'] = {**row['facts'], 'isAbbreviation': 'uncertain', 'classificationConflict': 'yes'}
+                    row['confidence'] = 0
+        fact_store['notations'] = {'status': 'found' if fact_map else 'not_processed', 'entities': entities}
+
+    if not fact_map and not any(abbreviation_is_listed(fact_store, str(item.get('term') or '')) for item in inventory):
         detail = f"LLM не вернула ни одной строки карты для {len(inventory)} найденных обозначений"
         if primary_errors:
             detail += f": {primary_errors[-1]}"

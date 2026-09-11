@@ -47,6 +47,7 @@ class RuleEngineModel(BaseModel):
     factNameMap: dict[str, str] = Field(default_factory=dict)
     inventory: str | None = None
     globalFactKeys: list[str] = Field(default_factory=list)
+    requiredFacts: list[str] = Field(default_factory=list)
     conditionalEvidence: dict[str, Any] | None = None
     literalRequirement: dict[str, Any] | None = None
 
