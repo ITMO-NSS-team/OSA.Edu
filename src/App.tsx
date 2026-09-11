@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { CheckPage } from "./components/CheckPage";
+import { LiteraturePage } from "./components/LiteraturePage";
 import { NormControlPage } from "./components/NormControlPage";
 import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
 import type { CheckProfile, Health, Job, NormControlJob, Rule } from "./types";
-import { LiteraturePage } from "./components/LiteraturePage";
 
-type Page = "check" | "normcontrol"| "literature" | "prompt" | "rules" | "reports";
+type Page = "check" | "normcontrol" | "literature" | "prompt" | "rules" | "reports";
 const ACTIVE_NORMCONTROL: NormControlJob["status"][] = ["queued", "queued_report", "submitting", "running", "reporting", "downloading"];
 
 
@@ -75,12 +75,16 @@ export default function App() {
     <header className="app-header">
       <button className="brand" onClick={() => setPage("check")}><strong>OSA.Edu</strong><span>содержательная проверка ВКР</span></button>
       <nav>
-        <NavButton active={page === "check"} onClick={() => setPage("check")}>Проверка</NavButton>
-        <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>Нормоконтроль{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
-        <NavButton active={page === "literature"} onClick={() => setPage("literature")}>Литература</NavButton>
-        <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>Промпты</NavButton>
-        <NavButton active={page === "rules"} onClick={() => setPage("rules")}>Правила</NavButton>
-        <NavButton active={page === "reports"} onClick={() => setPage("reports")}>Отчёты{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
+        <div className="nav-group">
+          <NavButton active={page === "check"} onClick={() => setPage("check")}>Формальная и смысловая проверка</NavButton>
+          <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>Промпты</NavButton>
+          <NavButton active={page === "rules"} onClick={() => setPage("rules")}>Правила</NavButton>
+          <NavButton active={page === "reports"} onClick={() => setPage("reports")}>Отчёты{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
+        </div>
+        <div className="nav-group nav-group-secondary">
+          <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>Нормоконтроль{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
+          <NavButton active={page === "literature"} onClick={() => setPage("literature")}>Проверка литературы</NavButton>
+        </div>
       </nav>
       <div className="queue-state">{queueState}</div>
     </header>
@@ -103,6 +107,6 @@ export default function App() {
   </main>;
 }
 
-function NavButton({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
+function NavButton({ active, children, onClick }: { active: boolean; children: ReactNode; onClick: () => void }) {
   return <button className={active ? "active" : ""} onClick={onClick}>{children}</button>;
 }
