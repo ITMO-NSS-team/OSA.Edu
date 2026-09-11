@@ -6,11 +6,33 @@ import { NormControlPage } from "./components/NormControlPage";
 import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
-import type { CheckProfile, Health, Job, NormControlJob, Rule } from "./types";
+import { LiteraturePage } from "./components/LiteraturePage";
+import { ReproducibilityPage } from "./components/ReproducibilityPage";
+import type {
+  CheckProfile,
+  Health,
+  Job,
+  NormControlJob,
+  Rule,
+} from "./types";
 
-type Page = "check" | "normcontrol" | "literature" | "prompt" | "rules" | "reports";
-const ACTIVE_NORMCONTROL: NormControlJob["status"][] = ["queued", "queued_report", "submitting", "running", "reporting", "downloading"];
+type Page =
+  | "check"
+  | "normcontrol"
+  | "literature"
+  | "reproducibility"
+  | "prompt"
+  | "rules"
+  | "reports";
 
+const ACTIVE_NORMCONTROL: NormControlJob["status"][] = [
+  "queued",
+  "queued_report",
+  "submitting",
+  "running",
+  "reporting",
+  "downloading",
+];
 
 export default function App() {
   const [page, setPage] = useState<Page>("check");
@@ -84,6 +106,7 @@ export default function App() {
         <div className="nav-group nav-group-secondary">
           <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>Нормоконтроль{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
           <NavButton active={page === "literature"} onClick={() => setPage("literature")}>Проверка литературы</NavButton>
+           <NavButton active={page === "reproducibility"} onClick={() => setPage("reproducibility")}>Проверка воспроизводимости</NavButton>
         </div>
       </nav>
       <div className="queue-state">{queueState}</div>
@@ -95,6 +118,7 @@ export default function App() {
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
     <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
+    {page === "reproducibility" && <ReproducibilityPage />}
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}
