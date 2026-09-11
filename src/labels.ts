@@ -1,4 +1,4 @@
-import type { RuleMode, RuleScope, RuleStatus, Severity, Status } from "./types";
+import type { NormControlStatus, RuleMode, RuleScope, RuleStatus, Severity, Status } from "./types";
 
 export const statusLabel: Record<RuleStatus, string> = {
   violation: "Нарушено",
@@ -22,6 +22,18 @@ export const jobStatusLabel: Record<Status, string> = {
   awaiting_review: "Ожидает проверки структуры",
   queued_check: "Проверка поставлена в очередь",
   checking: "Проверка фрагментов",
+  completed: "Готово",
+  failed: "Ошибка",
+  cancelled: "Отменено"
+};
+
+export const normControlStatusLabel: Record<NormControlStatus, string> = {
+  queued: "В очереди",
+  queued_report: "Запрос отчёта",
+  submitting: "Отправка PDF",
+  running: "Нормоконтроль",
+  reporting: "Генерация отчёта",
+  downloading: "Скачивание отчёта",
   completed: "Готово",
   failed: "Ошибка",
   cancelled: "Отменено"
