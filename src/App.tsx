@@ -4,9 +4,10 @@ import { CheckPage } from "./components/CheckPage";
 import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
+import { LiteraturePage } from "./components/LiteraturePage";
 import type { CheckProfile, Health, Job, Rule } from "./types";
 
-type Page = "check" | "prompt" | "rules" | "reports";
+type Page = "check" | "literature" | "prompt" | "rules" | "reports";
 
 export default function App() {
   const [page, setPage] = useState<Page>("check");
@@ -67,6 +68,7 @@ export default function App() {
       <button className="brand" onClick={() => setPage("check")}><strong>OSA.Edu</strong><span>содержательная проверка ВКР</span></button>
       <nav>
         <NavButton active={page === "check"} onClick={() => setPage("check")}>Проверка</NavButton>
+        <NavButton active={page === "literature"} onClick={() => setPage("literature")}>Литература</NavButton>
         <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>Промпты</NavButton>
         <NavButton active={page === "rules"} onClick={() => setPage("rules")}>Правила</NavButton>
         <NavButton active={page === "reports"} onClick={() => setPage("reports")}>Отчёты{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
@@ -79,6 +81,7 @@ export default function App() {
     {page === "check" && <CheckPage health={health} prompt={prompt} mapPrompt={mapPrompt} profile={profile} model={model} criteria={criteria}
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
+    <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}

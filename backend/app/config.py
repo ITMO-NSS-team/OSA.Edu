@@ -37,7 +37,6 @@ def env_list(name: str) -> list[str]:
     raw = os.getenv(name, '')
     return [item.strip() for item in raw.split(',') if item.strip()]
 
-
 PORT = env_int('PORT', 8787)
 WEB_ORIGIN = os.getenv('WEB_ORIGIN', 'http://127.0.0.1:5173').strip()
 WEB_ORIGINS = env_list('WEB_ORIGINS') or ([WEB_ORIGIN] if WEB_ORIGIN else [])

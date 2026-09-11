@@ -18,6 +18,9 @@ from .defaults import DEFAULT_ADDITIONAL_CRITERIA, DEFAULT_MAP_PROMPT, DEFAULT_P
 from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
 from .llm.rate_limiter import configured_rate_limits
+from .literature.queue import start_literature_queue
+from .literature.router import router as literature_router
+from .literature.store import recover_literature_jobs
 from .queue import start_queue
 from .pdf_reporting import report_to_pdf as developer_report_to_pdf
 from .user_pdf_reporting import report_to_user_pdf
@@ -30,11 +33,14 @@ from .util import map_is_confirmed, normalized_quote, now_iso
 async def lifespan(_app: FastAPI):
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     await recover_interrupted_jobs()
+    await recover_literature_jobs()
     start_queue()
+    start_literature_queue()
     yield
 
 
 app = FastAPI(title="OSA.Edu API", version=APP_VERSION, lifespan=lifespan)
+app.include_router(literature_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=WEB_ORIGINS,
