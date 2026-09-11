@@ -1,7 +1,34 @@
 from __future__ import annotations
 import regex as re
+from functools import wraps
 from ..util import compact, normalized_quote
 from ..scope import main_work_ids, is_code_or_prompt as _scope_is_code_or_prompt
+
+
+def grounded_check(check):
+    """Apply the same prerequisites to direct detector calls and orchestration."""
+    @wraps(check)
+    def run(rule, document, *args, **kwargs):
+        from ..document.semantic_model import hydrate_legacy_fields
+        from ..orchestration.verdict_contract import required_fact_failure
+        hydrate_legacy_fields(document)
+        failure = required_fact_failure(rule, document['factStore'])
+        if failure:
+            return failure
+        out = check(rule, document, *args, **kwargs)
+        from ..rules.manifest import manifest_entry
+        entry = manifest_entry(str(rule.get('id') or ''))
+        routing = rule.get('routing') or (entry.routing.model_dump(exclude_none=True) if entry else {})
+        if (out.get('status') == 'pass' and routing.get('allowPass') is False) or (
+            out.get('status') == 'violation' and routing.get('allowViolation') is False
+        ):
+            out = {**out, 'status': 'uncertain', 'confidence': 0,
+                   'explanation': routing.get('reason') or 'Detector не покрывает полный смысл правила.',
+                   'coverage': {'exhaustive': False}}
+        out.setdefault('coverage', {'exhaustive': out.get('status') in {'pass', 'violation'}})
+        out['factStoreVersion'] = document['factStore']['schemaVersion']
+        return out
+    return run
 
 
 def evidence(block:dict, quote:str) -> dict:

@@ -58,7 +58,7 @@ def enforce_verdict_contract(result: dict[str, Any]) -> dict[str, Any]:
 
     # PASS is a universal claim over the assigned scope. It is forbidden when
     # the checker explicitly reports that this scope was not exhausted.
-    if status == "pass" and exhaustive is False:
+    if status == "pass" and exhaustive is not True:
         return _downgrade(item, "PASS по неполной области запрещён: результат требует ручной проверки.")
 
     if status == "pass" and evidence_status == "rejected":
@@ -73,11 +73,47 @@ def enforce_verdict_contract(result: dict[str, Any]) -> dict[str, Any]:
     checked_by = str(item.get("checkedBy") or "")
     evidence = item.get("evidence") if isinstance(item.get("evidence"), list) else []
     llm_like = checked_by.startswith("llm") or "candidate" in checked_by
+    if status == 'pass' and checked_by.startswith('llm') and not evidence and evidence_status != 'coverage_verified':
+        return _downgrade(item, 'Смысловой PASS без grounded evidence или полной матрицы фактов не подтверждён.')
     if status == "violation" and llm_like and not evidence and evidence_status != "coverage_verified":
         return _downgrade(item, "LLM-нарушение без подтверждённого evidence не может быть окончательным.")
 
     return item
 
 
-def enforce_verdict_contracts(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [enforce_verdict_contract(item) for item in results]
+def required_fact_failure(rule: dict, fact_store: dict) -> dict | None:
+    from ..document.fact_store import MIN_FACT_CONFIDENCE
+    from ..rules.manifest import manifest_entry
+
+    entry = manifest_entry(str(rule.get('id') or ''))
+    required = rule.get('requiredFacts') or (list(entry.engine.requiredFacts) if entry else ['document_text'])
+    facts = fact_store.get('facts') or {}
+    bad = [(name, facts.get(name) or {'status': 'missing', 'confidence': 0}) for name in required
+           if (facts.get(name) or {}).get('status') != 'found'
+           or float((facts.get(name) or {}).get('confidence') or 0) < MIN_FACT_CONFIDENCE]
+    if not bad:
+        return None
+    technical = any(fact.get('status') == 'not_processed' for _, fact in bad)
+    reason = '; '.join(f"{name}: {fact.get('status', 'missing')} (confidence={fact.get('confidence', 0):.2f})" for name, fact in bad)
+    return {
+        'ruleId': rule['id'], 'severity': rule.get('severity', 'major'),
+        'status': 'not_checked' if technical else 'uncertain',
+        'explanation': 'Обязательные факты не извлечены надёжно: ' + reason + '.',
+        'confidence': 0, 'evidence': [], 'evidenceStatus': 'not_required',
+        'checkedBy': 'required-facts', 'coverage': {'exhaustive': False},
+        'requiredFactStates': {name: {k: v for k, v in fact.items() if k not in {'blocks', 'candidates'}} for name, fact in bad},
+        **({'technicalIncomplete': True} if technical else {}),
+    }
+
+
+def enforce_verdict_contracts(results: list[dict[str, Any]], *, rules: list[dict] | None = None,
+                              fact_store: dict | None = None) -> list[dict[str, Any]]:
+    by_id = {r['id']: r for r in rules or []}
+    out = []
+    for item in results:
+        rule = by_id.get(item.get('ruleId'), {'id': item.get('ruleId')})
+        failure = required_fact_failure(rule, fact_store) if fact_store is not None else None
+        if failure and item.get('status') in {'pass', 'violation'}:
+            item = failure
+        out.append(enforce_verdict_contract(item))
+    return out

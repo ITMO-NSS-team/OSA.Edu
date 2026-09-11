@@ -23,6 +23,7 @@ def _manual(rule,reason=None): return _validated_result({'ruleId':rule['id'],'st
 def _normalize_local(routed:dict,res:dict)->dict:
     checked=0 if res.get('status')=='not_checked' else 1
     cov={'candidateCount':1,'checkedCandidateCount':checked,'packetCount':1,'checkedPacketCount':checked,'fraction':checked,'exhaustive':checked==1}
+    cov.update(res.get('coverage') or {'exhaustive': False})
     if res.get('status')=='pass' and not routed.get('allowPass',True):
         return {**res,'status':'uncertain','explanation':(res.get('explanation','')+' '+(routed.get('reason') or 'Полная область не подтверждена.')).strip(),'coverage':{**cov,'exhaustive':False},'checkedFragments':[routed.get('strategy')]}
     return {**res,'coverage':cov,'checkedFragments':[routed.get('strategy')]}
@@ -157,6 +158,10 @@ def _aggregate(rule:dict,routed:dict,items:list[dict])->dict:
     all_pass=all(x.get('status')=='pass' for x in checked); matrices_complete=not matrices or all(r.get('complete') and all(c.get('status')=='found' for c in r.get('items',[])) for r in matrices)
     if all_pass and cov['exhaustive'] and routed.get('allowPass',True) and matrices_complete:
         out={'ruleId':rule['id'],'status':'pass','severity':rule.get('severity','major'),'explanation':f'Проверена вся назначенная область ({len(checked)} фрагм.); подтверждённых нарушений не найдено.','confidence':0,'evidence':[],'evidenceStatus':'coverage_verified' if matrices else 'not_required','checkedBy':'llm','coverage':cov,'checkedFragments':unique([x.get('fragmentId','') for x in items])}
+        # Preserve positive support instead of discarding it during aggregation.
+        if all(x.get('evidence') for x in checked):
+            out['evidence'] = _dedupe_ev([e for x in checked for e in x.get('evidence', [])])
+            out['evidenceStatus'] = 'verified'
         if matrices:out['coverageMatrix']=matrices
         return out
     details=' '.join(unique([x.get('explanation','') for x in checked])); reason=routed.get('reason') if not routed.get('allowPass',True) else ('Часть ответов или ячеек матрицы осталась неопределённой.' if cov['exhaustive'] else 'Проверена не вся обязательная область правила.')

@@ -257,6 +257,14 @@ def canonicalize_document_units(
         ]
         if candidates:
             canonical[element_type] = max(candidates, key=lambda item: float(item.get("confidence") or 0.0))
+            distinct_ranges = {(item.get('startBlockId'), item.get('endBlockId')) for item in candidates}
+            if len(distinct_ranges) > 1:
+                for item in candidates:
+                    item['state'] = 'ambiguous'
+                    item['canonicalRole'] = 'conflicting_candidate'
+                issues.append({'code': 'conflicting_canonical_fact', 'severity': 'warning',
+                               'message': f'Конфликт диапазонов {element_type} внутри основного введения.',
+                               'elementIds': [item.get('id') for item in candidates]})
 
     # Recover explicit canonical sections from the main introduction when the
     # structure model selected only a synopsis copy.
@@ -290,7 +298,9 @@ def canonicalize_document_units(
     for item in prepared:
         item = dict(item)
         if item.get("type") in _CANONICAL_TYPES:
-            if str(item.get("id")) in canonical_ids:
+            if item.get('canonicalRole') == 'conflicting_candidate':
+                pass
+            elif str(item.get("id")) in canonical_ids:
                 item["documentUnit"] = "main_work"
                 item["canonicalRole"] = "canonical"
                 item["state"] = "confirmed" if item.get("state") != "ambiguous" else item.get("state")
@@ -317,4 +327,4 @@ def canonicalize_document_units(
 def canonical_elements(elements: list[dict[str, Any]], element_type: str) -> list[dict[str, Any]]:
     matching = [item for item in elements if item.get("type") == element_type]
     preferred = [item for item in matching if item.get("canonicalRole") == "canonical"]
-    return preferred or [item for item in matching if item.get("canonicalRole") != "secondary_copy"] or matching
+    return preferred or [item for item in matching if item.get("canonicalRole") != "secondary_copy"]

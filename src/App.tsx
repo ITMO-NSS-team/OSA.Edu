@@ -6,9 +6,11 @@ import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
 import type { CheckProfile, Health, Job, NormControlJob, Rule } from "./types";
+import { LiteraturePage } from "./components/LiteraturePage";
 
-type Page = "check" | "normcontrol" | "prompt" | "rules" | "reports";
+type Page = "check" | "normcontrol"| "literature" | "prompt" | "rules" | "reports";
 const ACTIVE_NORMCONTROL: NormControlJob["status"][] = ["queued", "queued_report", "submitting", "running", "reporting", "downloading"];
+
 
 export default function App() {
   const [page, setPage] = useState<Page>("check");
@@ -75,6 +77,7 @@ export default function App() {
       <nav>
         <NavButton active={page === "check"} onClick={() => setPage("check")}>Проверка</NavButton>
         <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>Нормоконтроль{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
+        <NavButton active={page === "literature"} onClick={() => setPage("literature")}>Литература</NavButton>
         <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>Промпты</NavButton>
         <NavButton active={page === "rules"} onClick={() => setPage("rules")}>Правила</NavButton>
         <NavButton active={page === "reports"} onClick={() => setPage("reports")}>Отчёты{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
@@ -87,6 +90,7 @@ export default function App() {
     {page === "check" && <CheckPage health={health} prompt={prompt} mapPrompt={mapPrompt} profile={profile} model={model} criteria={criteria}
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
+    <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}

@@ -176,7 +176,12 @@ def _deterministic_exclusion(term: str) -> str | None:
     return None
 
 
-def _classify(term: str) -> tuple[str, bool, bool]:
+def _classify(term: str, document: dict | None = None) -> tuple[str, bool, bool]:
+    if document is not None and document.get('factStore') is not None:
+        from ..document.fact_store import notation_classification
+        value = notation_classification(document['factStore'], term)
+        return ('term_abbreviation', True, bool(re.search(r'[A-Za-z]', term))) if value == 'yes' else (
+            ('proper_name', False, False) if value == 'no' else ('unknown', False, False))
     excluded = _deterministic_exclusion(term)
     if excluded:
         return (excluded, False, False)
@@ -428,7 +433,7 @@ def analyze_terms(document: dict) -> list[dict]:
             if key in seen or _deterministic_exclusion(raw):
                 continue
             seen.add(key)
-            kind, requires_expansion, requires_russian = _classify(raw)
+            kind, requires_expansion, requires_russian = _classify(raw, document)
             local = _term_context(text, match.start(), len(match.group(0)))
             russian_parenthetical = _russian_parenthetical_term(local, raw)
             russian_bare = _russian_bare_term(local, raw)
@@ -465,7 +470,7 @@ def _heading_terms(document: dict) -> list[dict]:
             term = _canonical(match.group(0))
             if _deterministic_exclusion(term):
                 continue
-            kind, requires_expansion, _ = _classify(term)
+            kind, requires_expansion, _ = _classify(term, document)
             key = (_normalize(term), str(block.get("id")))
             if key in seen:
                 continue

@@ -16,36 +16,57 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Res
 from .config import (
     APP_VERSION,
     MAX_FILE_SIZE_MB,
-    NORMCONTROL_MCP_ATTEMPTS,
-    NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
     NORMCONTROL_DAG_ID,
+    NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
+    NORMCONTROL_MCP_ATTEMPTS,
     NORMCONTROL_MCP_URL,
     NORMCONTROL_UPLOADS_DIR,
-    PORT,
     UPLOADS_DIR,
     WEB_ORIGINS,
 )
-from .defaults import DEFAULT_ADDITIONAL_CRITERIA, DEFAULT_MAP_PROMPT, DEFAULT_PROFILE, DEFAULT_PROMPT, MODELS, model_definition
+from .defaults import (
+    DEFAULT_ADDITIONAL_CRITERIA,
+    DEFAULT_MAP_PROMPT,
+    DEFAULT_PROFILE,
+    DEFAULT_PROMPT,
+    MODELS,
+    model_definition,
+)
 from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
+from .literature.queue import start_literature_queue
+from .literature.router import router as literature_router
+from .literature.store import recover_literature_jobs
 from .llm.rate_limiter import configured_rate_limits
 from .normcontrol.client import inspect_server as inspect_normcontrol_server
 from .normcontrol.queue import start_normcontrol_queue
 from .normcontrol.store import (
     ACTIVE_STATUSES as ACTIVE_NORMCONTROL_STATUSES,
+)
+from .normcontrol.store import (
     create_normcontrol_job as persist_normcontrol_job,
+)
+from .normcontrol.store import (
     delete_normcontrol_job,
     get_normcontrol_job,
     list_normcontrol_jobs,
     recover_interrupted_normcontrol_jobs,
 )
-from .queue import start_queue
 from .pdf_reporting import report_to_pdf as developer_report_to_pdf
-from .user_pdf_reporting import report_to_user_pdf
+from .queue import start_queue
 from .reporting import report_to_markdown
 from .rules.registry import load_rule_registry
-from .store import create_jobs, delete_job, get_job, list_jobs, recover_interrupted_jobs, update_job
+from .store import (
+    create_jobs,
+    delete_job,
+    get_job,
+    list_jobs,
+    recover_interrupted_jobs,
+    update_job,
+)
+from .user_pdf_reporting import report_to_user_pdf
 from .util import map_is_confirmed, normalized_quote, now_iso
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -55,10 +76,14 @@ async def lifespan(_app: FastAPI):
     await recover_interrupted_normcontrol_jobs()
     start_queue()
     start_normcontrol_queue()
+    await recover_literature_jobs()
+    start_queue()
+    start_literature_queue()
     yield
 
 
 app = FastAPI(title="OSA.Edu API", version=APP_VERSION, lifespan=lifespan)
+app.include_router(literature_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=WEB_ORIGINS,
@@ -70,7 +95,10 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(_request: Request, exc: RequestValidationError):
-    return JSONResponse(status_code=422, content={"error": "Некорректный запрос.", "details": exc.errors()})
+    return JSONResponse(
+        status_code=422,
+        content={"error": "Некорректный запрос.", "details": exc.errors()},
+    )
 
 
 @app.get("/api/health")
@@ -80,7 +108,11 @@ async def health():
         "ok": True,
         "models": MODELS,
         "configured": {
-            "gemini": bool((os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()),
+            "gemini": bool(
+                (
+                    os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
+                ).strip()
+            ),
             "openrouter": bool(os.getenv("OPENROUTER_API_KEY", "").strip()),
         },
         "defaults": {
@@ -156,7 +188,10 @@ async def create_normcontrol_job_endpoint(file: UploadFile = File(...)):
         await file.close()
         return _error(400, "Интеграция нормоконтроля не настроена.")
 
-    technical = NORMCONTROL_UPLOADS_DIR / f"{int(__import__('time').time()*1000)}-{uuid.uuid4()}.pdf"
+    technical = (
+        NORMCONTROL_UPLOADS_DIR
+        / f"{int(__import__('time').time() * 1000)}-{uuid.uuid4()}.pdf"
+    )
     try:
         size = await _save_upload(file, technical)
     except Exception as exc:
@@ -210,7 +245,9 @@ async def retry_normcontrol_job(job_id: str):
     patch = {
         "status": "queued_report" if run_id else "queued",
         "progress": 65 if run_id else 0,
-        "progressMessage": "Повторно запрашиваем готовый отчёт без отправки PDF." if run_id else "Повторно отправляем PDF на сервер нормоконтроля.",
+        "progressMessage": "Повторно запрашиваем готовый отчёт без отправки PDF."
+        if run_id
+        else "Повторно отправляем PDF на сервер нормоконтроля.",
         "attempts": 0,
         "maxAttempts": NORMCONTROL_MCP_ATTEMPTS,
         "timeoutSeconds": NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS,
@@ -307,7 +344,10 @@ async def create_job_endpoint(
     now = now_iso()
     try:
         for upload, original_name, suffix in validated:
-            technical = UPLOADS_DIR / f"{int(__import__('time').time()*1000)}-{uuid.uuid4()}{suffix}"
+            technical = (
+                UPLOADS_DIR
+                / f"{int(__import__('time').time() * 1000)}-{uuid.uuid4()}{suffix}"
+            )
             size = await _save_upload(upload, technical)
             written.append(technical)
             if size > MAX_FILE_SIZE_MB * 1024 * 1024:
@@ -316,26 +356,28 @@ async def create_job_endpoint(
                 for remaining, *_ in validated:
                     await remaining.close()
                 return _error(413, f"Файл больше {MAX_FILE_SIZE_MB} МБ.")
-            prepared.append({
-                "id": str(uuid.uuid4()),
-                "originalName": original_name,
-                "filePath": str(technical.resolve()),
-                "mimeType": upload.content_type or "application/octet-stream",
-                "size": size,
-                "createdAt": now,
-                "updatedAt": now,
-                "status": "queued",
-                "provider": selected["provider"],
-                "model": selected["id"],
-                "profile": selected_profile,
-                "prompt": semantic_prompt,
-                "mapPrompt": map_prompt,
-                "additionalCriteria": additional,
-                "developerMode": bool(developerMode),
-                "attempts": 0,
-                "progress": 0,
-                "progressMessage": "Файл принят. Ожидаем запуск обработки.",
-            })
+            prepared.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "originalName": original_name,
+                    "filePath": str(technical.resolve()),
+                    "mimeType": upload.content_type or "application/octet-stream",
+                    "size": size,
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "status": "queued",
+                    "provider": selected["provider"],
+                    "model": selected["id"],
+                    "profile": selected_profile,
+                    "prompt": semantic_prompt,
+                    "mapPrompt": map_prompt,
+                    "additionalCriteria": additional,
+                    "developerMode": bool(developerMode),
+                    "attempts": 0,
+                    "progress": 0,
+                    "progressMessage": "Файл принят. Ожидаем запуск обработки.",
+                }
+            )
     except Exception as exc:
         for path in written:
             path.unlink(missing_ok=True)
@@ -362,16 +404,31 @@ async def patch_map_element(job_id: str, element_id: str, request: Request):
         return _error(404, "Структура документа не найдена.")
     job, document = context
     body = await request.json()
-    element = next((x for x in document["map"].get("elements", []) if x.get("id") == element_id), None)
+    element = next(
+        (x for x in document["map"].get("elements", []) if x.get("id") == element_id),
+        None,
+    )
     if not element:
         return _error(404, "Фрагмент структуры не найден.")
-    proposed_start = body.get("startBlockId") if isinstance(body.get("startBlockId"), str) else element.get("startBlockId")
-    proposed_end = body.get("endBlockId") if isinstance(body.get("endBlockId"), str) else element.get("endBlockId")
-    boundary_error = _validate_boundaries(document.get("blocks", []), proposed_start, proposed_end)
+    proposed_start = (
+        body.get("startBlockId")
+        if isinstance(body.get("startBlockId"), str)
+        else element.get("startBlockId")
+    )
+    proposed_end = (
+        body.get("endBlockId")
+        if isinstance(body.get("endBlockId"), str)
+        else element.get("endBlockId")
+    )
+    boundary_error = _validate_boundaries(
+        document.get("blocks", []), proposed_start, proposed_end
+    )
     if boundary_error:
         return _error(400, boundary_error)
     if isinstance(body.get("quote"), str) and body["quote"].strip():
-        quote_error = _validate_quote(document.get("blocks", []), proposed_start, proposed_end, body["quote"])
+        quote_error = _validate_quote(
+            document.get("blocks", []), proposed_start, proposed_end, body["quote"]
+        )
         if quote_error:
             return _error(400, quote_error)
     if isinstance(body.get("type"), str) and body["type"] in ALLOWED_TYPES:
@@ -407,20 +464,22 @@ async def add_map_element(job_id: str, request: Request):
     boundary_error = _validate_boundaries(blocks, start, end)
     if boundary_error:
         return _error(400, boundary_error)
-    document["map"].setdefault("elements", []).append({
-        "id": f"section-{str(uuid.uuid4())[:8]}",
-        "type": element_type,
-        "label": str(body.get("label") or "Новый фрагмент")[:180],
-        "startBlockId": start,
-        "endBlockId": end,
-        "blockIds": [],
-        "pages": [],
-        "text": "",
-        "quote": "",
-        "confidence": 1,
-        "state": "confirmed",
-        "source": "user",
-    })
+    document["map"].setdefault("elements", []).append(
+        {
+            "id": f"section-{str(uuid.uuid4())[:8]}",
+            "type": element_type,
+            "label": str(body.get("label") or "Новый фрагмент")[:180],
+            "startBlockId": start,
+            "endBlockId": end,
+            "blockIds": [],
+            "pages": [],
+            "text": "",
+            "quote": "",
+            "confidence": 1,
+            "state": "confirmed",
+            "source": "user",
+        }
+    )
     _unconfirm(document["map"])
     document["map"] = refresh_map(document, document["map"])
     await _persist_map(job, document)
@@ -434,7 +493,9 @@ async def delete_map_element(job_id: str, element_id: str):
         return _error(404, "Структура документа не найдена.")
     job, document = context
     before = len(document["map"].get("elements", []))
-    document["map"]["elements"] = [x for x in document["map"].get("elements", []) if x.get("id") != element_id]
+    document["map"]["elements"] = [
+        x for x in document["map"].get("elements", []) if x.get("id") != element_id
+    ]
     if before == len(document["map"]["elements"]):
         return _error(404, "Фрагмент структуры не найден.")
     _unconfirm(document["map"])
@@ -454,21 +515,40 @@ async def confirm_structure(job_id: str):
         return _error(400, "Добавьте хотя бы один смысловой фрагмент.")
     invalid_codes = {"invalid_boundaries", "invalid_boundary", "empty_structure"}
     if any(x.get("code") in invalid_codes for x in document["map"].get("issues", [])):
-        return _error(400, "Исправьте недействительные границы фрагментов перед запуском проверки.")
+        return _error(
+            400,
+            "Исправьте недействительные границы фрагментов перед запуском проверки.",
+        )
     document["map"].setdefault("review", {})["required"] = True
     document["map"]["review"]["confirmedByUser"] = True
     document["map"]["review"]["autoConfirmed"] = False
     document["map"]["review"]["confirmationMode"] = "user"
     document["map"]["review"]["confirmedAt"] = now_iso()
     save_extracted(job_id, document)
-    updated = await update_job(job_id, {"status": "queued_check", "progress": 32, "progressMessage": "Структура подтверждена. Проверка правил начнётся следующим шагом.", "documentMap": document["map"], "error": None})
+    updated = await update_job(
+        job_id,
+        {
+            "status": "queued_check",
+            "progress": 32,
+            "progressMessage": "Структура подтверждена. Проверка правил начнётся следующим шагом.",
+            "documentMap": document["map"],
+            "error": None,
+        },
+    )
     start_queue()
     return updated
 
 
 @app.post("/api/jobs/{job_id}/cancel")
 async def cancel(job_id: str):
-    job = await update_job(job_id, {"status": "cancelled", "progressMessage": "Проверка отменена пользователем.", "finishedAt": now_iso()})
+    job = await update_job(
+        job_id,
+        {
+            "status": "cancelled",
+            "progressMessage": "Проверка отменена пользователем.",
+            "finishedAt": now_iso(),
+        },
+    )
     return job if job else _error(404, "Задача не найдена.")
 
 
@@ -477,22 +557,33 @@ async def retry(job_id: str):
     current = await get_job(job_id)
     if not current:
         return _error(404, "Задача не найдена.")
-    cache_exists = bool(current.get("extractedPath") and Path(current["extractedPath"]).exists())
+    cache_exists = bool(
+        current.get("extractedPath") and Path(current["extractedPath"]).exists()
+    )
     source_exists = bool(current.get("filePath") and Path(current["filePath"]).exists())
     if not source_exists and not cache_exists:
         return _error(409, "Нет исходного файла или кэша. Загрузите ВКР заново.")
-    next_status = "queued_check" if map_is_confirmed(current.get("documentMap")) and cache_exists else "queued"
-    job = await update_job(job_id, {
-        "status": next_status,
-        "progress": 32 if next_status == "queued_check" else 0,
-        "progressMessage": "Повторяем проверку по подтверждённой структуре." if next_status == "queued_check" else "Проверка поставлена в очередь заново.",
-        "error": None,
-        "diagnostics": [],
-        "finishedAt": None,
-        "report": None,
-        "retryRuleIds": [],
-        "attempts": 0,
-    })
+    next_status = (
+        "queued_check"
+        if map_is_confirmed(current.get("documentMap")) and cache_exists
+        else "queued"
+    )
+    job = await update_job(
+        job_id,
+        {
+            "status": next_status,
+            "progress": 32 if next_status == "queued_check" else 0,
+            "progressMessage": "Повторяем проверку по подтверждённой структуре."
+            if next_status == "queued_check"
+            else "Проверка поставлена в очередь заново.",
+            "error": None,
+            "diagnostics": [],
+            "finishedAt": None,
+            "report": None,
+            "retryRuleIds": [],
+            "attempts": 0,
+        },
+    )
     start_queue()
     return job
 
@@ -503,7 +594,9 @@ async def restart(job_id: str):
     current = await get_job(job_id)
     if not current:
         return _error(404, "Задача не найдена.")
-    cache_exists = bool(current.get("extractedPath") and Path(current["extractedPath"]).exists())
+    cache_exists = bool(
+        current.get("extractedPath") and Path(current["extractedPath"]).exists()
+    )
     source_exists = bool(current.get("filePath") and Path(current["filePath"]).exists())
     if not source_exists and not cache_exists:
         return _error(409, "Нет исходного файла или кэша. Загрузите ВКР заново.")
@@ -517,20 +610,26 @@ async def restart(job_id: str):
             save_extracted(job_id, document)
         except Exception:
             if not source_exists:
-                return _error(409, "Не удалось подготовить кэш для нового запуска. Загрузите ВКР заново.")
-    job = await update_job(job_id, {
-        "status": "queued",
-        "progress": 0,
-        "progressMessage": "Новый запуск поставлен в очередь. Структура будет построена заново.",
-        "startedAt": None,
-        "finishedAt": None,
-        "documentMap": None,
-        "report": None,
-        "error": None,
-        "diagnostics": [],
-        "retryRuleIds": [],
-        "attempts": 0,
-    })
+                return _error(
+                    409,
+                    "Не удалось подготовить кэш для нового запуска. Загрузите ВКР заново.",
+                )
+    job = await update_job(
+        job_id,
+        {
+            "status": "queued",
+            "progress": 0,
+            "progressMessage": "Новый запуск поставлен в очередь. Структура будет построена заново.",
+            "startedAt": None,
+            "finishedAt": None,
+            "documentMap": None,
+            "report": None,
+            "error": None,
+            "diagnostics": [],
+            "retryRuleIds": [],
+            "attempts": 0,
+        },
+    )
     start_queue()
     return job
 
@@ -546,15 +645,33 @@ async def retry_failed(job_id: str):
         checked_by = str(item.get("checkedBy") or "")
         is_llm = checked_by.startswith("llm")
         failed = item.get("status") == "not_checked" and is_llm
-        incomplete = item.get("status") == "uncertain" and is_llm and (
-            item.get("evidenceStatus") == "rejected" or int(coverage.get("checkedCandidateCount", 0)) < int(coverage.get("candidateCount", 0))
+        incomplete = (
+            item.get("status") == "uncertain"
+            and is_llm
+            and (
+                item.get("evidenceStatus") == "rejected"
+                or int(coverage.get("checkedCandidateCount", 0))
+                < int(coverage.get("candidateCount", 0))
+            )
         )
         if failed or incomplete:
             retry_ids.append(item.get("ruleId"))
     retry_ids = [x for x in retry_ids if x]
     if not retry_ids:
         return _error(409, "Правил с ошибкой запроса или неполным покрытием нет.")
-    job = await update_job(job_id, {"status": "queued_check", "progress": 32, "progressMessage": f"Повторяем только незавершённые проверки: {len(retry_ids)}.", "error": None, "diagnostics": [], "finishedAt": None, "retryRuleIds": retry_ids, "attempts": 0})
+    job = await update_job(
+        job_id,
+        {
+            "status": "queued_check",
+            "progress": 32,
+            "progressMessage": f"Повторяем только незавершённые проверки: {len(retry_ids)}.",
+            "error": None,
+            "diagnostics": [],
+            "finishedAt": None,
+            "retryRuleIds": retry_ids,
+            "attempts": 0,
+        },
+    )
     start_queue()
     return job
 
@@ -638,7 +755,10 @@ async def report_json(job_id: str):
     if not job or not job.get("report"):
         return _error(404, "Отчёт ещё не готов.")
     filename = quote(f"{job['originalName']}-protocol.json")
-    return JSONResponse(job["report"], headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"})
+    return JSONResponse(
+        job["report"],
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
 
 
 async def _save_upload(upload: UploadFile, target: Path) -> int:
@@ -672,7 +792,15 @@ async def _persist_map(job: dict[str, Any], document: dict[str, Any]) -> None:
     path = save_extracted(job["id"], document)
     if path != job.get("extractedPath"):
         await update_job(job["id"], {"extractedPath": path})
-    await update_job(job["id"], {"documentMap": document.get("map"), "status": "awaiting_review", "progress": 30, "report": None})
+    await update_job(
+        job["id"],
+        {
+            "documentMap": document.get("map"),
+            "status": "awaiting_review",
+            "progress": 30,
+            "report": None,
+        },
+    )
 
 
 def _unconfirm(document_map: dict[str, Any]) -> None:
@@ -684,7 +812,9 @@ def _unconfirm(document_map: dict[str, Any]) -> None:
     review.pop("confirmedAt", None)
 
 
-def _validate_boundaries(blocks: list[dict[str, Any]], start_id: str, end_id: str) -> str:
+def _validate_boundaries(
+    blocks: list[dict[str, Any]], start_id: str, end_id: str
+) -> str:
     index = {x.get("id"): i for i, x in enumerate(blocks)}
     if start_id not in index or end_id not in index:
         return "Выбранный блок не найден в документе."
@@ -693,21 +823,23 @@ def _validate_boundaries(blocks: list[dict[str, Any]], start_id: str, end_id: st
     return ""
 
 
-def _validate_quote(blocks: list[dict[str, Any]], start_id: str, end_id: str, quote_value: str) -> str:
+def _validate_quote(
+    blocks: list[dict[str, Any]], start_id: str, end_id: str, quote_value: str
+) -> str:
     index = {x.get("id"): i for i, x in enumerate(blocks)}
     if start_id not in index or end_id not in index or index[start_id] > index[end_id]:
         return "Нельзя проверить цитату при недействительных границах."
     target = normalized_quote(quote_value)
     if len(target) < 4:
         return "Опорная цитата слишком короткая."
-    for block in blocks[index[start_id]:index[end_id] + 1]:
+    for block in blocks[index[start_id] : index[end_id] + 1]:
         if target in normalized_quote(block.get("text", "")):
             return ""
     return "Опорная цитата должна дословно находиться внутри выбранного диапазона."
 
 
 def _sanitize(value: str) -> str:
-    return re.sub(r'[\\/:*?"<>|]', '_', value)
+    return re.sub(r'[\\/:*?"<>|]', "_", value)
 
 
 def _error(status: int, message: str) -> JSONResponse:

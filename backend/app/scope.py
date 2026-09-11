@@ -33,6 +33,11 @@ def mapped_ids(
     to their legacy behaviour. An empty set means a usable map exists but none of
     the requested section types are present.
     """
+    store = document.get('factStore')
+    if store is not None:
+        facts = store.get('facts') or {}
+        return {str(bid) for name in element_types for bid in (facts.get(name) or {}).get('blockIds', [])
+                if (facts.get(name) or {}).get('status') == 'found'}
     blocks, index = _index(document)
     elements = (document.get("map") or {}).get("elements") or []
     if not blocks or not elements:
