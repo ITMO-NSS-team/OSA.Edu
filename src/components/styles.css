@@ -29,7 +29,6 @@ button { cursor: pointer; }
 .brand strong { display: block; font-size: 16px; }
 .brand span { display: block; font-size: 12px; color: #767b82; margin-top: 2px; }
 .app-header nav { display: flex; justify-content: center; gap: 6px; }
-.app-header nav .nav-right-group { display: flex; gap: 6px; margin-left: 12px; padding-left: 18px; border-left: 1px solid #e2e4e7; }
 .app-header nav button { border: 0; background: transparent; color: #5d6269; padding: 9px 14px; border-radius: 8px; }
 .app-header nav button:hover { background: #f1f2f3; color: #202124; }
 .app-header nav button.active { background: #202124; color: #fff; }
@@ -508,57 +507,18 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
   .repro-source-text blockquote { background: #fff; }
 }
 
-
-/* Reproducibility: clickable statistics filters */
-.repro-print-only { display: none; }
-.repro-stat-button {
-  width: 100%;
-  appearance: none;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-}
-.repro-stat-button:hover {
-  transform: translateY(-1px);
-  border-color: #c7ccd1;
-  box-shadow: 0 4px 14px rgba(26, 31, 36, .07);
-}
-.repro-stat-button:focus-visible {
-  outline: 2px solid #5b7083;
-  outline-offset: 2px;
-}
-.repro-stat-button.active {
-  border-color: #7f8d99;
-  box-shadow: 0 0 0 2px rgba(91, 112, 131, .12);
-}
-.repro-stat-button.confirmed.active { border-color: #86aa8e; }
-.repro-stat-button.rejected.active { border-color: #c99790; }
-.repro-stat-button.uncertain.active { border-color: #a5adb4; }
-
-.repro-filter-note {
-  margin-bottom: 10px;
-  padding: 15px 16px;
-  display: grid;
-  gap: 5px;
-  background: #fafbfb;
-}
+/* Reproducibility claim filters */
+.repro-claims-tabs { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; padding: 4px; border: 1px solid #e0e3e6; border-radius: 12px; background: #f7f8f9; }
+.repro-claims-tabs button { border: 0; border-radius: 9px; background: transparent; color: #60676e; padding: 8px 11px; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.repro-claims-tabs button:hover { background: #fff; color: #2f3438; }
+.repro-claims-tabs button.active { background: #fff; color: #202428; box-shadow: 0 1px 3px rgba(20, 24, 28, .08); }
+.repro-claims-tabs button span { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: #eceff1; display: inline-grid; place-items: center; color: #6b7279; font-size: 11px; font-weight: 750; }
+.repro-claims-tabs button.active span { background: #e7ebee; color: #343a40; }
+.repro-filter-note { margin-bottom: 10px; padding: 15px 16px; display: grid; gap: 5px; background: #fafbfb; }
 .repro-filter-note strong { font-size: 14px; }
 .repro-filter-note span { color: #697078; font-size: 13px; line-height: 1.5; }
 
-@media print {
-  .repro-print-only { display: grid !important; }
-}
-
-
-/* Reproducibility: primary run action */
-.repro-run-row {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 2px;
-}
-.repro-run-button {
-  min-width: 150px;
+@media (max-width: 700px) {
+  .repro-claims-tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .repro-claims-tabs button { flex: 0 0 auto; }
 }

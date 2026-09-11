@@ -5,9 +5,10 @@ import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
 import { LiteraturePage } from "./components/LiteraturePage";
+import { ReproducibilityPage } from "./components/ReproducibilityPage";
 import type { CheckProfile, Health, Job, Rule } from "./types";
 
-type Page = "check" | "literature" | "prompt" | "rules" | "reports";
+type Page = "check" | "literature" | "reproducibility" | "prompt" | "rules" | "reports";
 
 export default function App() {
   const [page, setPage] = useState<Page>("check");
@@ -68,10 +69,13 @@ export default function App() {
       <button className="brand" onClick={() => setPage("check")}><strong>OSA.Edu</strong><span>содержательная проверка ВКР</span></button>
       <nav>
         <NavButton active={page === "check"} onClick={() => setPage("check")}>Проверка</NavButton>
-        <NavButton active={page === "literature"} onClick={() => setPage("literature")}>Литература</NavButton>
         <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>Промпты</NavButton>
         <NavButton active={page === "rules"} onClick={() => setPage("rules")}>Правила</NavButton>
         <NavButton active={page === "reports"} onClick={() => setPage("reports")}>Отчёты{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
+        <div className="nav-right-group">
+          <NavButton active={page === "literature"} onClick={() => setPage("literature")}>Литература</NavButton>
+          <NavButton active={page === "reproducibility"} onClick={() => setPage("reproducibility")}>Проверка воспроизводимости</NavButton>
+        </div>
       </nav>
       <div className="queue-state">{activeJobs ? `${runningJobs ? `Проверяется: ${runningJobs}` : ""}${runningJobs && queuedJobs ? " · " : ""}${queuedJobs ? `ожидает: ${queuedJobs}` : ""}` : "Очередь свободна"}</div>
     </header>
@@ -82,6 +86,7 @@ export default function App() {
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
     <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
+    {page === "reproducibility" && <ReproducibilityPage />}
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}
