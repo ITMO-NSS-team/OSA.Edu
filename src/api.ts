@@ -5,6 +5,10 @@ import type {
   LiteratureJob,
   NormControlJob,
   NormControlServerStatus,
+  ReproducibilityJob,
+  ReproducibilityLog,
+  ReproducibilityPreflight,
+  ReproducibilityStatus,
   Rule,
   StructureDetails,
 } from "./types";
@@ -27,6 +31,28 @@ export const api = {
   normControlJobs: () => request<NormControlJob[]>("/api/normcontrol/jobs"),
   normControlStatus: () =>
     request<NormControlServerStatus>("/api/normcontrol/status"),
+  reproducibilityStatus: () =>
+    request<ReproducibilityStatus>("/api/reproducibility/status"),
+  reproducibilityJobs: () =>
+    request<ReproducibilityJob[]>("/api/reproducibility/jobs"),
+  reproducibilityPreflight: (repository: string) =>
+    request<ReproducibilityPreflight>(`/api/reproducibility/preflight?repository=${encodeURIComponent(repository)}`),
+  createReproducibilityJob: (body: FormData) =>
+    request<ReproducibilityJob>("/api/reproducibility/jobs", { method: "POST", body }),
+  reproducibilityJob: (id: string) =>
+    request<ReproducibilityJob>(`/api/reproducibility/jobs/${id}`),
+  reproducibilityResult: (id: string) =>
+    request<unknown>(`/api/reproducibility/jobs/${id}/result`),
+  reproducibilityLog: (id: string) =>
+    request<ReproducibilityLog>(`/api/reproducibility/jobs/${id}/log`),
+  reproducibilityLogDownloadUrl: (id: string) =>
+    `${API}/api/reproducibility/jobs/${id}/log.txt`,
+  cancelReproducibilityJob: (id: string) =>
+    request<ReproducibilityJob>(`/api/reproducibility/jobs/${id}/cancel`, { method: "POST" }),
+  retryReproducibilityJob: (id: string) =>
+    request<ReproducibilityJob>(`/api/reproducibility/jobs/${id}/retry`, { method: "POST" }),
+  resumeReproducibilityJob: (id: string) =>
+    request<ReproducibilityJob>(`/api/reproducibility/jobs/${id}/resume`, { method: "POST" }),
   rules: (profile: CheckProfile) =>
     request<Rule[]>(`/api/rules?profile=${profile}`),
   createJobs: (body: FormData) =>

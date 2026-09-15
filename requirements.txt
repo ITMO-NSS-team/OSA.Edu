@@ -8,3 +8,4 @@ fastmcp>=2.0,<3.0
 python-docx>=1.1,<2.0
 reportlab>=4.2,<5.0
 regex>=2024.11.6
+osa_tool[paper-claims] @ git+https://github.com/aimclub/OSA.git@feat/thesis-repository-analysis

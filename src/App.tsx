@@ -6,7 +6,6 @@ import { NormControlPage } from "./components/NormControlPage";
 import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
-import { LiteraturePage } from "./components/LiteraturePage";
 import { ReproducibilityPage } from "./components/ReproducibilityPage";
 import type {
   CheckProfile,

@@ -39,6 +39,62 @@ export interface Health { ok: boolean; models: ModelInfo[]; configured: { gemini
 export interface StructureBlock { id: string; page?: number; location: string; type: string; text: string; }
 export interface StructureDetails { map: DocumentMap; blocks: StructureBlock[]; }
 
+export type ReproducibilityJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
+export interface ReproducibilityArtifacts {
+  logAvailable?: boolean;
+  sectionsAvailable?: boolean;
+  sectionCount?: number | null;
+  claimsAvailable?: boolean;
+  claimsCount?: number | null;
+  claimsPath?: string | null;
+  verificationAvailable?: boolean;
+  verifiedClaimsCount?: number | null;
+  resultAvailable?: boolean;
+}
+export interface ReproducibilityAvailableActions {
+  retryFull?: boolean;
+  resumeVerification?: boolean;
+  downloadLog?: boolean;
+  openResult?: boolean;
+  resumeStage?: "verification" | "claims" | null;
+}
+export interface ReproducibilityJob {
+  id: string;
+  originalName: string;
+  repository: string;
+  size: number;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  status: ReproducibilityJobStatus;
+  progress: number;
+  progressMessage?: string;
+  resultAvailable?: boolean;
+  error?: string | null;
+  runMode?: "full" | "verification-only";
+  artifacts?: ReproducibilityArtifacts;
+  availableActions?: ReproducibilityAvailableActions;
+}
+export interface ReproducibilityStatus {
+  ok: boolean;
+  osaInstalled: boolean;
+  osaVersion?: string | null;
+  llmConfigured: boolean;
+  model: string;
+  baseUrl?: string;
+  pythonVersion?: string;
+  pythonSupportedForPaperClaims?: boolean;
+  gitInstalled?: boolean;
+  gitVersion?: string | null;
+  windowsReloadWarning?: boolean;
+  markerLowVram?: boolean;
+}
+export interface ReproducibilityPreflightCheck { id: string; label: string; ok: boolean; blocking: boolean; detail: string; }
+export interface ReproducibilityPreflight { ok: boolean; checks: ReproducibilityPreflightCheck[]; warnings: string[]; model: string; baseUrl: string; }
+export interface ReproducibilityLog { text: string; available: boolean; size: number; truncated?: boolean; }
+
 export type LiteratureStatus = "OK" | "OK_MINOR_MISMATCH" | "METADATA_MISMATCH" | "SUSPICIOUS" | "LIKELY_HALLUCINATED" | "UNVERIFIED" | "ERROR" | "NOT_A_PAPER";
 export type LiteratureVerdict = "VERIFIED" | "SUSPICIOUS" | "UNVERIFIED" | "ERROR";
 export type LiteratureSourceType = "PAPER" | "PREPRINT" | "BOOK" | "STANDARD" | "REPORT" | "DATASET" | "DOCUMENTATION" | "REPOSITORY" | "WEB" | "OTHER" | "UNKNOWN";

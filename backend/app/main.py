@@ -42,16 +42,15 @@ from .normcontrol.client import inspect_server as inspect_normcontrol_server
 from .normcontrol.queue import start_normcontrol_queue
 from .normcontrol.store import (
     ACTIVE_STATUSES as ACTIVE_NORMCONTROL_STATUSES,
-)
-from .normcontrol.store import (
     create_normcontrol_job as persist_normcontrol_job,
-)
-from .normcontrol.store import (
     delete_normcontrol_job,
     get_normcontrol_job,
     list_normcontrol_jobs,
     recover_interrupted_normcontrol_jobs,
 )
+from .reproducibility.job_queue import start_reproducibility_queue
+from .reproducibility.router import router as reproducibility_router
+from .reproducibility.store import recover_reproducibility_jobs
 from .pdf_reporting import report_to_pdf as developer_report_to_pdf
 from .queue import start_queue
 from .reporting import report_to_markdown
@@ -77,13 +76,15 @@ async def lifespan(_app: FastAPI):
     start_queue()
     start_normcontrol_queue()
     await recover_literature_jobs()
-    start_queue()
+    await recover_reproducibility_jobs()
     start_literature_queue()
+    start_reproducibility_queue()
     yield
 
 
 app = FastAPI(title="OSA.Edu API", version=APP_VERSION, lifespan=lifespan)
 app.include_router(literature_router)
+app.include_router(reproducibility_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=WEB_ORIGINS,
