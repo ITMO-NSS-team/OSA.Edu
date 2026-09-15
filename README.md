@@ -33,9 +33,10 @@ OSA.Edu позволяет:
 
 Перед запуском установите:
 
-- Python 3.10+
+- Python 3.11–3.14
 - Node.js 20.19+
 - npm
+- Git
 
 Также необходим API-ключ OpenRouter.
 
@@ -83,7 +84,7 @@ pip install -r requirements.txt
 - fastmcp
 - python-docx
 - ReportLab
-
+- OSA (`osa_tool`)
 ---
 
 ## 4. Установка frontend-зависимостей
@@ -201,6 +202,15 @@ MCP-вызовы во вкладке «Нормоконтроль» ограни
 
 Проверка литературы работает консервативно: отсутствие надёжного найденного кандидата помечается как `UNVERIFIED`, а не как доказанная фабрикация источника. Статус `LIKELY_HALLUCINATED` выставляется только при повышенной уверенности и наличии независимых веб-доказательств.
 
+## Проверка воспроизводимости
+
+1. Откройте вкладку «Проверка воспроизводимости».
+2. Укажите URL Git-репозитория проекта.
+3. Загрузите PDF ВКР.
+4. Запустите проверку.
+5. Дождитесь извлечения технических утверждений и их проверки по коду.
+6. Просмотрите статистику, результат каждого утверждения, уверенность и найденные доказательства.
+7. При необходимости скачайте JSON или PDF-отчёт.
 ---
 
 # Как работает проверка
@@ -487,6 +497,7 @@ OSA.Edu/
 │       ├── literature/      # отдельная очередь и проверка литературы
 │       ├── llm/             # работа с LLM
 │       ├── normcontrol/     # очередь и MCP-интеграция нормоконтроля
+│       ├── reproducibility/ # интеграция OSA и проверка воспроизводимости
 │       ├── orchestration/   # orchestration pipeline
 │       ├── routing/         # выбор способа проверки правил
 │       ├── rules/           # загрузка и обработка правил
@@ -516,6 +527,7 @@ OSA.Edu/
 │   │   ├── CheckPage.tsx
 │   │   ├── LiteraturePage.tsx
 │   │   ├── NormControlPage.tsx
+│   │   ├── ReproducibilityPage.tsx
 │   │   ├── PromptPage.tsx
 │   │   ├── ReportsPage.tsx
 │   │   └── RulesPage.tsx
@@ -606,6 +618,18 @@ POST   /api/literature/jobs/{id}/retry
 DELETE /api/literature/jobs/{id}
 
 POST /api/literature/check
+
+GET    /api/reproducibility/status
+GET    /api/reproducibility/preflight
+GET    /api/reproducibility/jobs
+POST   /api/reproducibility/jobs
+GET    /api/reproducibility/jobs/{id}
+GET    /api/reproducibility/jobs/{id}/result
+GET    /api/reproducibility/jobs/{id}/log
+POST   /api/reproducibility/jobs/{id}/cancel
+POST   /api/reproducibility/jobs/{id}/retry
+POST   /api/reproducibility/jobs/{id}/resume
+DELETE /api/reproducibility/jobs/{id}
 ```
 
 ---
@@ -631,6 +655,9 @@ data/normcontrol/uploads/
 data/normcontrol/reports/
 data/normcontrol/jobs.json
 data/literature_jobs.json
+data/reproducibility/uploads/
+data/reproducibility/runs/
+data/reproducibility/jobs.json
 ```
 
 ---
@@ -643,6 +670,7 @@ data/literature_jobs.json
 
 ```env
 OPENROUTER_API_KEY=
+
 ```
 
 В `.env.example` также находятся параметры:
@@ -656,7 +684,7 @@ OPENROUTER_API_KEY=
 - MCP endpoint, DAG, количества попыток и timeouts для вкладки «Нормоконтроль»: `NORMCONTROL_MCP_URL`, `NORMCONTROL_DAG_ID`, `NORMCONTROL_MCP_ATTEMPTS`, `NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS`, `NORMCONTROL_HTTP_TIMEOUT_SECONDS`;
 - модели и веб-этапа проверки литературы: `LITERATURE_REVIEW_MODEL`, `LITERATURE_WEB_SEARCH_ENABLED`, `LITERATURE_WEB_FALLBACK_TO_PLUGIN`, `LITERATURE_WEB_SEARCH_ENGINE`, `LITERATURE_WEB_PROVIDER_ORDER`;
 - опционального контакта для polite pool Crossref: `CROSSREF_MAILTO`.
-
+- параметры проверки воспроизводимости: модель OSA, timeout, context window, max tokens и количество повторов (`REPRODUCIBILITY_*`);
 Обычно значения по умолчанию менять не требуется.
 
 ---
