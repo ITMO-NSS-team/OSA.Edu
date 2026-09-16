@@ -69,6 +69,8 @@ def _collect_items(blocks: list[dict], *, allow_bullets: bool) -> list[dict]:
             {
                 "match": match,
                 "number": int(match.group(1) or match.group(2)),
+                "marker": match.group(0).strip(),
+                "markerKind": "paren" if match.group(1) else ("dot" if "." in match.group(0) else "paren"),
                 "marker_end": match.end(),
             }
             for match in numbered
@@ -78,7 +80,7 @@ def _collect_items(blocks: list[dict], *, allow_bullets: bool) -> list[dict]:
     elif allow_bullets:
         bullets = list(_BULLET_START.finditer(joined))
         starts = [
-            {"match": match, "number": index + 1, "marker_end": match.end()}
+            {"match": match, "number": index + 1, "marker": match.group(0).strip(), "markerKind": "bullet", "marker_end": match.end()}
             for index, match in enumerate(bullets)
         ]
     else:
@@ -112,12 +114,26 @@ def _collect_items(blocks: list[dict], *, allow_bullets: bool) -> list[dict]:
             (item["block"] for item in offsets if marker_start >= item["start"] and marker_start <= item["end"]),
             blocks[0],
         )
+        end_pos = max(marker_start, end - 1)
+        end_source = next(
+            (item["block"] for item in offsets if end_pos >= item["start"] and end_pos <= item["end"]),
+            source,
+        )
+        source_blocks = [
+            item["block"] for item in offsets
+            if item["end"] >= marker_start and item["start"] < end
+        ]
         result.append({
             "number": row["number"],
+            "marker": row.get("marker") or "",
+            "markerKind": row.get("markerKind") or "unknown",
             "text": text,
             "body": text,
             "full": raw if text in raw else text,
             "source": source,
+            "endSource": end_source,
+            "sourceBlocks": source_blocks,
+            "sourceBlockIds": [b.get("id") for b in source_blocks if b.get("id")],
             "block": source,
         })
     return result

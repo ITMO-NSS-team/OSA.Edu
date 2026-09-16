@@ -19,6 +19,7 @@ from ..util import empty_usage, map_is_confirmed, merge_usage
 from .abbreviation_inventory_checker import execute_abbreviation_inventory_check
 from .candidate_checker import build_candidate_plan, execute_candidate_plan
 from .evidence_verifier import verify_semantic_evidence
+from .full_scope_aggregation import aggregate_full_scope_rule
 from .result_processing import (
     _aggregate, _coverage_matrix, _derive_shared_fact_item, _fact_item_needs_recovery,
     _manual, _normalize_local, _not_checked, _parse_evidence, _parse_fragment_results,
@@ -95,6 +96,8 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
     }
     fact_cache_hits=0
     fact_recovery_requests=0
+    full_scope_routed=[item for item in llm_routed if item.get('aggregationMode') == 'full_scope']
+    full_scope_aggregation_usage=empty_usage()
     for routed in llm_routed:
         if str(routed['rule'].get('id')) in shared_fact_targets:
             continue
@@ -116,7 +119,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             rule=item['rule']
             local[rule['id']]=technical_rule_result(rule,'candidate_plan',exc)
     abbreviation_rules=[item['rule'] for item in abbreviation_routed]
-    total_requests=max(1,len(requests)+len(candidate_plan['requests'])+(1 if abbreviation_rules else 0))
+    total_requests=max(1,len(requests)+len(candidate_plan['requests'])+(1 if abbreviation_rules else 0)+len(full_scope_routed))
     completed_total=0
     progress_lock=asyncio.Lock()
 
@@ -239,6 +242,12 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
                     if is_retryable_provider_error(exc):
                         break
                     if attempt<packet_attempts:
+                        # Operation-level resend after structured-output failure.
+                        # Transport retries inside ask_structured_json are already
+                        # accounted for there; this counter records this outer resend.
+                        usage['retries']=int(usage.get('retries',0))+1
+                        if getattr(exc,'raw_response',None) is not None:
+                            usage['structuredOutputResends']=int(usage.get('structuredOutputResends',0))+1
                         await asyncio.sleep(.6*attempt)
             if error and fatal is None:
                 warnings.append(f"Фрагмент «{fragment['label']}» не проверен: {error}")
@@ -305,6 +314,9 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
                             fatal=exc
                             return
                     if attempt<recovery_attempts:
+                        usage['retries']=int(usage.get('retries',0))+1
+                        if getattr(last_error,'raw_response',None) is not None:
+                            usage['structuredOutputResends']=int(usage.get('structuredOutputResends',0))+1
                         await asyncio.sleep(.4*attempt)
                 if last_error is not None:
                     warnings.append(f"Fact recovery «{fragment['label']}» / {rule['id']} не завершён: {last_error}")
@@ -343,6 +355,50 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
                     'checkedFragments':[fid],
                     'technicalIncomplete':True,
                 })
+
+    # Quality-first document-level rules are scanned chunk-by-chunk and receive a
+    # separate final aggregation only after every assigned chunk has been handled.
+    # This prevents a sampled scientific_core from masquerading as exhaustive
+    # coverage and prevents one chunk from making a document-level absence claim.
+    async def full_scope_aggregate_one(routed):
+        rule=routed['rule']; rid=str(rule.get('id'))
+        if fatal is not None:
+            local[rid]={
+                **_not_checked(rule, f'Финальная full-scope агрегация не выполнена из-за ошибки провайдера: {fatal}'),
+                'status':'uncertain',
+                'checkedBy':'llm',
+                'technicalIncomplete':True,
+                'coverage':{
+                    'candidateCount':len(routed.get('fragmentIds',[])),
+                    'checkedCandidateCount':0,
+                    'packetCount':len(routed.get('fragmentIds',[])),
+                    'checkedPacketCount':0,
+                    'fraction':0,
+                    'exhaustive':False,
+                    'fullScope':True,
+                },
+                'checkedFragments':[],
+            }
+            await progress_step(f'Агрегируем полную область {rid}: {completed_total + 1}/{total_requests}')
+            return
+        result,agg_usage,agg_warnings=await aggregate_full_scope_rule(
+            rule=rule,
+            routed=routed,
+            items=[x for x in raw if x.get('ruleId')==rid],
+            fragment_by=fragment_by,
+            fact_store=fact_store,
+            provider=provider,
+            model=model,
+            system_prompt=prompt,
+        )
+        merge_usage(full_scope_aggregation_usage,agg_usage)
+        merge_usage(usage,agg_usage)
+        warnings.extend(agg_warnings)
+        local[rid]=result
+        await progress_step(f'Агрегируем полную область {rid}: {completed_total + 1}/{total_requests}')
+
+    if full_scope_routed:
+        await asyncio.gather(*(full_scope_aggregate_one(item) for item in full_scope_routed))
 
     try:
         candidate_results,candidate_warnings=await candidate_task
@@ -436,7 +492,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             # plannedCheckRequests is the logical first-pass plan. physicalRequests
             # includes targeted recovery and evidence critics and is therefore the
             # truthful network-request metric for production diagnostics.
-            'plannedCheckRequests':len(requests)+len(candidate_plan['requests'])+(1 if abbreviation_rules else 0),
+            'plannedCheckRequests':len(requests)+len(candidate_plan['requests'])+(1 if abbreviation_rules else 0)+len(full_scope_routed),
             'checkRequests':int(usage.get('requests',0)),
             'physicalRequests':int(usage.get('requests',0)),
             'semanticRequests':len(requests),
@@ -450,6 +506,9 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             'abbreviationRecoveryRequests':int(abbreviation_usage.get('abbreviationRecoveryRequests',0)),
             'evidenceVerifierRequests':int(verifier_usage.get('requests',0)),
             'factRecoveryRequests':fact_recovery_requests,
+            'fullScopeRuleCount':len(full_scope_routed),
+            'fullScopeAggregationRequests':int(full_scope_aggregation_usage.get('requests',0)),
+            'fullScopeChunkRequests':sum(len(item.get('fragmentIds',[])) for item in full_scope_routed),
             'factCacheHits':fact_cache_hits,
             'globalFactStoreVersion':int(fact_store.get('schemaVersion',1)),
             'globalAbbreviationGlossaryEntries':len(((fact_store.get('abbreviationGlossary') or {}).get('definitions') or {})),

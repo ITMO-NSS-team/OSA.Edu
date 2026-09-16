@@ -261,7 +261,9 @@ def _merge_usage_stats(left: dict[str, Any] | None, right: dict[str, Any]) -> di
     if not left:
         return right
     result = {
-        "requests": 0, "retries": 0, "packets": 0, "candidates": 0,
+        "requests": 0, "retries": 0, "transportRetries": 0,
+        "structuredOutputRepairAttempts": 0, "structuredOutputRepairs": 0, "structuredOutputResends": 0,
+        "packets": 0, "candidates": 0,
         "estimatedInputTokens": 0, "rateLimitWaitMs": 0, "requestDurationMs": 0,
         "diagnostics": [], "traces": [],
     }

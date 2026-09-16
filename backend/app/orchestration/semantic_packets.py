@@ -18,6 +18,14 @@ ABSENCE_RULES = {
     if entry.engine.kind.value == 'semantic_fact'
 }
 
+FULL_SCOPE_EVIDENCE_GUIDANCE = {
+    "CORE-2-1": "Собирай положительные evidence: конкретный аналог/прототип, основание считать его ближайшим или лучшим, и явное отличие результата автора.",
+    "CORE-2-2": "Собирай положительные evidence собственных научных результатов: новые методы/модели/теоретические результаты/доказательства/содержательные эксперименты, даже если локальный status uncertain.",
+    "CORE-4-4": "Собирай evidence первого/существенного употребления специальных терминов и evidence их определения/пояснения, если оно встречается в этой части.",
+    "CORE-14": "Собирай evidence структурно выделенного внедрения/использования и конкретных реквизитов: организации, акты, номера/сроки подтверждающих документов, адреса или идентификаторы открытого ПО.",
+}
+
+
 def _message(map_value:dict,fragment:dict,rules:list[dict],fact_store:dict|None=None)->str:
     summary='\n'.join(f"{e.get('type')} | {e.get('label')} | {e.get('startBlockId')}…{e.get('endBlockId')}" for e in map_value.get('elements',[]))
     blocks='\n\n'.join(f"BLOCK {b['id']} | {b.get('location','')}"+(f" | page={b['page']}" if b.get('page') else '')+f" | type={b.get('type','paragraph')}\n{b.get('text','')}" for b in fragment.get('blocks',[]))
@@ -31,13 +39,31 @@ def _message(map_value:dict,fragment:dict,rules:list[dict],fact_store:dict|None=
         chunks.append(f"RULE {rule['id']}\nКатегория: {rule.get('category','')}\nТребование: {rule.get('requirement','')}\nКорректный пример: {rule.get('correctExample') or '—'}\nПример нарушения: {rule.get('incorrectExample') or '—'}{guidance_text}{absence}")
     semantic_context = str(fragment.get('semanticContext') or '').strip()
     semantic_section = f"\nSEMANTIC_CONTEXT (контекст для понимания; evidence всё равно только из BLOCK):\n{semantic_context}\n" if semantic_context else ''
+    full_scope_section = ''
+    if fragment.get('fullScopeChunk'):
+        evidence_guidance = " ".join(
+            FULL_SCOPE_EVIDENCE_GUIDANCE.get(str(rule.get('id')), '')
+            for rule in rules
+            if FULL_SCOPE_EVIDENCE_GUIDANCE.get(str(rule.get('id')), '')
+        )
+        full_scope_section = (
+            "\nFULL_SCOPE_CHUNK: это не самостоятельный документ, а одна часть полного exhaustive-scan. "
+            f"Часть {fragment.get('scopeChunkIndex')}/{fragment.get('scopeChunkCount')}. "
+            "Просмотри КАЖДЫЙ BLOCK этой части и собери точные evidence для любых фактов, которые могут "
+            "подтвердить или опровергнуть правило. Evidence ОБЯЗАТЕЛЬНО возвращать и для положительных "
+            "подтверждающих фактов, а не только для violation. Локальный status является предварительным: "
+            "НЕ объявляй глобальное отсутствие факта только потому, что его нет в этой части. "
+            "Если часть нейтральна или вывод зависит от других частей, используй uncertain, но всё равно "
+            "верни релевантные evidence. Финальный verdict будет рассчитан отдельной fact-first агрегацией "
+            "после проверки всех частей. " + evidence_guidance + "\n"
+        )
     fact_keys = []
     for rule in rules:
         fact_keys.extend(rule.get('globalFactKeys') or [])
         fact_keys.extend(rule.get('requiredFacts') or [])
     global_facts = fact_store_prompt_text(fact_store, fact_keys)
     global_section = f"\nGLOBAL_DOCUMENT_FACTS (единый источник структурных фактов; не переопределяй и не восстанавливай отсутствующие факты из других заголовков. Конфликт или недостаточное evidence означает uncertain; evidence нарушения брать из BLOCK):\n{global_facts}\n" if global_facts else ''
-    return f'''DOCUMENT_MAP:\n{summary}\n\nCHECK_FRAGMENT:\nid={fragment['id']}\nlabel={fragment['label']}\ncomplete={str(fragment.get('complete',False)).lower()}\ntotalBlocks={len(fragment.get('blocks',[]))}{semantic_section}{global_section}\n{blocks}\n\nRULES:\n{'\n\n'.join(chunks)}\n\nОБЯЗАТЕЛЬНОЕ ОГРАНИЧЕНИЕ: используй только факты и названия, которые присутствуют в BLOCK, SEMANTIC_CONTEXT или GLOBAL_DOCUMENT_FACTS. Внешние знания запрещены. GLOBAL_DOCUMENT_FACTS можно использовать, чтобы не объявлять термин необъяснённым, если его grounded-определение уже найдено в другой части документа. Не предлагай в explanation/fix новые методы, статьи, продукты, авторов или бенчмарки, которых нет во входном тексте. Если документ не даёт основания для конкретного совета, формулируй исправление обобщённо.\n\nВерни JSON: {{"results":[{{"ruleId":"...","status":"pass|violation|uncertain|not_applicable","explanation":"...","fix":"...","evidence":[{{"blockId":"...","quote":"точная непрерывная цитата"}}],"absenceCheck":...}}]}}.'''
+    return f'''DOCUMENT_MAP:\n{summary}\n\nCHECK_FRAGMENT:\nid={fragment['id']}\nlabel={fragment['label']}\ncomplete={str(fragment.get('complete',False)).lower()}\ntotalBlocks={len(fragment.get('blocks',[]))}{semantic_section}{full_scope_section}{global_section}\n{blocks}\n\nRULES:\n{'\n\n'.join(chunks)}\n\nОБЯЗАТЕЛЬНОЕ ОГРАНИЧЕНИЕ: используй только факты и названия, которые присутствуют в BLOCK, SEMANTIC_CONTEXT или GLOBAL_DOCUMENT_FACTS. Внешние знания запрещены. GLOBAL_DOCUMENT_FACTS можно использовать, чтобы не объявлять термин необъяснённым, если его grounded-определение уже найдено в другой части документа. Не предлагай в explanation/fix новые методы, статьи, продукты, авторов или бенчмарки, которых нет во входном тексте. Если документ не даёт основания для конкретного совета, формулируй исправление обобщённо.\n\nВерни JSON: {{"results":[{{"ruleId":"...","status":"pass|violation|uncertain|not_applicable","explanation":"...","fix":"...","evidence":[{{"blockId":"...","quote":"точная непрерывная цитата"}}],"absenceCheck":...}}]}}.'''
 
 
 def _fact_recovery_message(fragment: dict, rule: dict, fact_store: dict | None = None) -> str:

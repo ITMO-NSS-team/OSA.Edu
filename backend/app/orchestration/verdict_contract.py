@@ -73,7 +73,14 @@ def enforce_verdict_contract(result: dict[str, Any]) -> dict[str, Any]:
     checked_by = str(item.get("checkedBy") or "")
     evidence = item.get("evidence") if isinstance(item.get("evidence"), list) else []
     llm_like = checked_by.startswith("llm") or "candidate" in checked_by
-    if status == 'pass' and checked_by.startswith('llm') and not evidence and evidence_status != 'coverage_verified':
+    candidate_exhaustive_pass = (
+        status == 'pass'
+        and checked_by == 'llm-candidate'
+        and exhaustive is True
+        and isinstance(coverage.get('candidateCount'), int)
+        and coverage.get('terminalCandidateCount') == coverage.get('candidateCount')
+    )
+    if status == 'pass' and checked_by.startswith('llm') and not evidence and evidence_status != 'coverage_verified' and not candidate_exhaustive_pass:
         return _downgrade(item, 'Смысловой PASS без grounded evidence или полной матрицы фактов не подтверждён.')
     if status == "violation" and llm_like and not evidence and evidence_status != "coverage_verified":
         return _downgrade(item, "LLM-нарушение без подтверждённого evidence не может быть окончательным.")

@@ -137,6 +137,20 @@ _ADVICE_BY_PREFIX: list[tuple[tuple[str, ...], dict[str, Any]]] = [
 
 # Longest / most specific internal identifiers must come first.
 _INTERNAL_REPLACEMENTS = [
+    (re.compile(r"\bprimary_chapter_conclusions\b", re.I), "выводы по профильной главе"),
+    (re.compile(r"\bchapter_conclusions\b", re.I), "выводы по главе"),
+    (re.compile(r"\bdefense_statements_complete\b", re.I), "полный раздел с положениями на защиту"),
+    (re.compile(r"\bdefense_statements\b", re.I), "раздел с положениями на защиту"),
+    (re.compile(r"\bdefense_chapter_matrix\b", re.I), "связь положений с профильными главами"),
+    (re.compile(r"\bdefense_chapters\b", re.I), "главы, соответствующие положениям на защиту"),
+    (re.compile(r"\bimplementation_full_scope\b", re.I), "разделы о внедрении и использовании результатов"),
+    (re.compile(r"\bimplementation_context\b", re.I), "раздел о внедрении и использовании результатов"),
+    (re.compile(r"\bscientific_full_scope\b", re.I), "разделы с научными результатами"),
+    (re.compile(r"\bscientific_core\b", re.I), "основные разделы с научными результатами"),
+    (re.compile(r"\bwhole_document\b", re.I), "весь документ"),
+    (re.compile(r"\bmajor_sections\b", re.I), "основные разделы работы"),
+    (re.compile(r"\btitle_goal\b", re.I), "название и цель работы"),
+    (re.compile(r"\bconclusion_global\b", re.I), "заключение по всей работе"),
     (re.compile(r"\bprototype_disadvantages_inside_chapter\b", re.I), "недостатки прототипа в этой главе"),
     (re.compile(r"\bcomparison_with_prototype_in_chapter_conclusions\b", re.I), "сравнение с прототипом в выводах главы"),
     (re.compile(r"\banalogs_inside_chapter\b", re.I), "аналоги в этой главе"),
@@ -198,6 +212,19 @@ def clean_user_text(value: str) -> str:
     text = re.sub(
         r"Fact[- ]first:\s*категорический вывод не формируется, потому что часть обязательных фактов неоднозначна\.?",
         "По тексту нельзя сделать однозначный вывод, поскольку часть обязательных элементов остаётся неоднозначной.",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(r"\bsemantic[- ]проверка\b", "смысловая проверка", text, flags=re.I)
+    text = re.sub(r"\bindependent evidence verifier\b", "независимая проверка доказательств", text, flags=re.I)
+    text = re.sub(r"\bevidence verifier\b", "проверка доказательств", text, flags=re.I)
+    text = re.sub(r"\bverifier evidence\b", "проверка доказательств", text, flags=re.I)
+    text = re.sub(r"\bverifier\b", "проверка", text, flags=re.I)
+    text = re.sub(r"независимый\s+доказательство\s+проверка", "независимая проверка доказательств", text, flags=re.I)
+    text = re.sub(r"независимый\s+проверка\s+доказательств", "независимая проверка доказательств", text, flags=re.I)
+    text = re.sub(
+        r"(независимая проверка доказательств)\s+не\s+подтвердил\b",
+        r"\1 не подтвердила",
         text,
         flags=re.I,
     )

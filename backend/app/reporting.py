@@ -370,7 +370,7 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
             if result.get("coverageMatrix"):
                 lines += ["", "#### Матрица полного покрытия", "", "| Фрагмент | Проверено блоков | Полнота | Элементы |", "|---|---:|---|---|"]
                 for row in result["coverageMatrix"]:
-                    cell = "; ".join(f"{x.get('name')}: {_matrix_status(str(x.get('status')))}" for x in row.get("items", []))
+                    cell = "; ".join(f"{x.get('label') or x.get('name')}: {_matrix_status(str(x.get('status')))}" for x in row.get("items", []))
                     lines.append(f"| {_escape_table(row.get('label',''))} | {row.get('checkedBlocks',0)}/{row.get('totalBlocks',0)} | {'полная' if row.get('complete') else 'неполная'} | {cell} |")
                 lines.append("")
             if result.get("evidence"):
@@ -410,6 +410,8 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
         "## Нагрузка LLM", "",
         f"- Физических запросов: {usage.get('requests',0)}",
         f"- Повторных попыток: {usage.get('retries',0)}",
+        f"- Transport retries: {usage.get('transportRetries',0)}",
+        f"- Structured JSON repair: попыток {usage.get('structuredOutputRepairAttempts',0)}, успешно {usage.get('structuredOutputRepairs',0)}, повторных полных запросов {usage.get('structuredOutputResends',0)}",
         f"- Проверено пакетов: {usage.get('packets',0)}",
         f"- Передано правил/объектов: {usage.get('candidates',0)}",
         f"- Маршрутизация: {routing.get('strategy','')}; явно задано: {routing.get('explicitRules',0)}; fallback: {routing.get('fallbackRules',0)}; фрагментов: {routing.get('fragments',0)}; физических запросов проверки: {routing.get('physicalRequests', routing.get('checkRequests',0))}; план первого прохода: {routing.get('plannedCheckRequests', routing.get('checkRequests',0))}; evidence verifier: {routing.get('evidenceVerifierRequests',0)}; сокращения: {routing.get('abbreviationMode','deterministic')}",

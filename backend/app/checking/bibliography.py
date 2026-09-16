@@ -45,11 +45,29 @@ def _reference_profile(text: str) -> tuple[str, dict]:
             kind = 'CONFERENCE_PAPER'
         elif re.search(r'\b(?:journal|transactions)\b|(?:\bvol\.|\bт\.)\s*\d', text, re.I):
             kind = 'JOURNAL_ARTICLE'
+        elif re.search(r',\s*\d+(?:\(\d+(?:\s*[-–—]\s*\d+)?\))?\s*:\s*[A-Za-zА-Яа-я]?\w+(?:\s*[-–—]\s*\w+)?\s*,\s*(?:19|20)\d{2}\.?\s*$', text):
+            kind = 'JOURNAL_ARTICLE'
         else:
             kind = 'UNKNOWN'
-    # A URL alone does not prove a web source (papers also have URLs).
     if kind in {'UNKNOWN', 'OTHER'}:
-        return kind, {}
+        # Common BibTeX-rendered forms often omit words such as "Journal" and
+        # "Book". Classify only when the publication tail is structurally clear.
+        if re.search(r',\s*\d+(?:\(\d+(?:\s*[-–—]\s*\d+)?\))?\s*:\s*[A-Za-zА-Яа-я]?\w+(?:\s*[-–—]\s*\w+)?\s*,\s*(?:19|20)\d{2}\.?\s*$', text):
+            kind='JOURNAL_ARTICLE'
+        elif re.search(r'\b(?:proceedings\s+of|in\s+proceedings|conference|workshop|symposium)\b', text, re.I):
+            kind='CONFERENCE_PAPER'
+        elif re.search(r'\b(?:Oxford University Press|Princeton University Press|Cambridge University Press|SUNY Textbooks|Springer|Wiley|Elsevier|CRC Press|MIT Press|Academic Press|Apress|Cambridge Elements|Frontiers in Applied Dynamical Systems)\b', text, re.I):
+            kind='BOOK'
+        elif re.search(r'\b(?:technical report|report)\b', text, re.I):
+            kind='REPORT'
+        elif re.search(r'https?\s*:\s*//\s*github\.com|\bgithub\b', text, re.I):
+            kind='REPOSITORY'
+        elif re.search(r'(?:\bIn\s+[^.]{1,100},\s*)?\bpages\s+\d+(?:\s*[-–—]\s*\d+)?(?:\.|,)\s*(?:[^,]{0,80},\s*)?(?:19|20)\d{2}', text, re.I):
+            kind='CONFERENCE_PAPER'
+        elif re.search(r'\b(?:solver|software|package|library)\b', text, re.I) and re.search(r'\b(?:19|20)\d{2}\b', text):
+            kind='SOFTWARE'
+        else:
+            return kind, {}
     fields = {}
     initials = r'(?:[A-ZА-ЯЁ]\.\s*){1,3}'
     surname = r'[A-ZА-ЯЁ][\p{L}’\'-]+'
@@ -62,7 +80,7 @@ def _reference_profile(text: str) -> tuple[str, dict]:
         'year': r'\b(?:19|20)\d{2}\b',
         'volume': r'(?i)(?:\bvol\.|\bт\.)\s*\d+',
         'issue': r'(?i)(?:\bno\.|№)\s*\d+',
-        'pages': r'(?i)(?:\bpp?\.|\bс\.)\s*\d+(?:\s*[-–—]\s*\d+)?',
+        'pages': r'(?i)(?:(?:\bpp?\.|\bс\.)\s*\d+(?:\s*[-–—]\s*\d+)?|(?<=:)\d+(?:\s*[-–—]\s*\d+)?)',
         'url': r'https?://\S+',
         'doi': r'(?i)\bdoi\s*:\s*\S+',
         'electronic': r'(?i)\[(?:электронный\s+ресурс|electronic\s+resource)\]',
@@ -82,10 +100,14 @@ def _reference_profile(text: str) -> tuple[str, dict]:
         if name == 'url':
             fields['url_label'] = bool(re.search(r'(?i)URL\s*:\s*$', prefix))
         if name == 'pages':
-            marker = re.match(r'\D+', match.group()).group().strip().casefold()
-            # Russian с. is valid for both single pages and ranges.
+            marker_match = re.match(r'\D+', match.group())
+            marker = marker_match.group().strip().casefold() if marker_match else ''
+            # Russian с. is valid for both single pages and ranges. Bare
+            # ``volume:pages`` BibTeX-like tails intentionally have no marker.
             if marker in {'p.', 'pp.'}:
                 fields['pages_marker'] = marker
+            elif not marker:
+                fields['pages_separator'] = ':'
     # Compare relative order only for fields actually observed in both entries.
     fields['field_positions'] = positions
     if '//' in text:
@@ -116,14 +138,19 @@ def _bibliography_consistency(rule: dict, blocks: list[dict]) -> dict:
                     ev.extend(evidence(block, block.get('text', '')[:500]) for block in entry['blocks'])
             if len(differences) >= 15:
                 break
+    classified_count=sum(len(rows) for rows in groups.values())
+    classification_fraction=classified_count / len(entries) if entries else 0.0
     if differences:
         out = result(rule, 'violation', 'В записях одного типа обнаружены различия структуры библиографического оформления: '
                      + '; '.join(f"{d['type']} №{d['entries']}: {', '.join(d['fields'])}" for d in differences),
                      dedupe_evidence(ev)[:20], .95, 'detector', 'Согласовать структуру оформления записей одного типа.')
+    elif complete and classification_fraction >= 1.0:
+        out = result(rule, 'pass', f'Полностью выделено {len(entries)} библиографических записей; структурные профили определены для {classified_count} ({classification_fraction:.0%}), подтверждённых различий оформления внутри одного типа не найдено.', confidence=.96)
     else:
-        out = result(rule, 'uncertain', 'Структурные различия в распознанных полях не подтверждены. '
-                     'Полный разбор типов источников и всех полей оформления не гарантирован; нумерация не доказывает единообразие.')
+        out = result(rule, 'uncertain', 'Структурные различия в распознанных полях не подтверждены, но классифицировано '
+                     f'{classified_count} из {len(entries)} записей ({classification_fraction:.0%}); этого недостаточно для универсального PASS.')
     out['bibliographyComparison'] = {'entryCount': len(entries), 'segmentationComplete': complete,
+                                     'classifiedEntryCount': classified_count, 'classificationFraction': classification_fraction,
                                      'comparedTypes': list(groups), 'differences': differences}
     return out
 

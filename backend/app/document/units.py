@@ -181,6 +181,37 @@ def _find_defense(blocks: list[dict[str, Any]], start: int, end: int) -> tuple[i
     return None
 
 
+def _defense_items_for_element(
+    element: dict[str, Any],
+    blocks: list[dict[str, Any]],
+    index: dict[str, int],
+) -> list[dict[str, Any]]:
+    """Return substantive defence statements grounded inside one mapped range.
+
+    A heading-only ``Положения, выносимые на защиту`` range intentionally returns
+    an empty list.  This distinction is what allows a combined synopsis+thesis
+    PDF to fall back to a substantive synopsis copy without treating the mere
+    heading in the main introduction as the content itself.
+    """
+    range_blocks = _element_range(element, blocks, index)
+    if not range_blocks:
+        return []
+    return collect_unique_defense_items(range_blocks)
+
+
+def _defense_signature(
+    element: dict[str, Any],
+    blocks: list[dict[str, Any]],
+    index: dict[str, int],
+) -> tuple[str, ...]:
+    items = _defense_items_for_element(element, blocks, index)
+    return tuple(
+        re.sub(r"\s+", " ", str(item.get("text") or "")).strip().casefold()
+        for item in items
+        if str(item.get("text") or "").strip()
+    )
+
+
 def _overlaps(start: int, end: int, bounds: tuple[int, int]) -> bool:
     return start <= bounds[1] and end >= bounds[0]
 
@@ -266,6 +297,24 @@ def canonicalize_document_units(
                                'message': f'Конфликт диапазонов {element_type} внутри основного введения.',
                                'elementIds': [item.get('id') for item in candidates]})
 
+    # A map can contain a heading-only defence section inside the main
+    # introduction.  That heading proves the section label exists, but it is not
+    # evidence of the propositions themselves.  Do not let it block recovery.
+    main_defense = canonical.get("defense_statements")
+    if main_defense is not None and not _defense_items_for_element(main_defense, blocks, index):
+        main_defense["canonicalRole"] = "main_heading_only"
+        main_defense["usedForChecking"] = False
+        canonical.pop("defense_statements", None)
+        issues.append({
+            "code": "main_defense_heading_without_items",
+            "severity": "info",
+            "message": (
+                "В основном введении найден заголовок раздела положений, но содержательные положения "
+                "в его диапазоне не извлечены."
+            ),
+            "elementIds": [str(main_defense.get("id"))],
+        })
+
     # Recover explicit canonical sections from the main introduction when the
     # structure model selected only a synopsis copy.
     finders = {
@@ -293,6 +342,54 @@ def canonicalize_document_units(
             "elementIds": [auto.get("id")],
         })
 
+    # Quality-safe fallback for combined synopsis+thesis files.  It is used only
+    # when the main introduction contains no substantive defence statements, and
+    # only when all usable secondary copies agree on the same statement list.
+    # The fallback remains physically marked as secondary front matter so broad
+    # main-text checks cannot silently start scanning the synopsis.
+    if "defense_statements" not in canonical:
+        secondary_defense = [
+            item for item in prepared
+            if item.get("type") == "defense_statements"
+            and item.get("canonicalRole") == "secondary_copy"
+            and item.get("state") == "confirmed"
+            and _defense_items_for_element(item, blocks, index)
+        ]
+        signatures: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        for item in secondary_defense:
+            signature = _defense_signature(item, blocks, index)
+            if signature:
+                signatures.setdefault(signature, []).append(item)
+        if len(signatures) == 1:
+            agreeing = next(iter(signatures.values()))
+            chosen = max(agreeing, key=lambda item: float(item.get("confidence") or 0.0))
+            chosen["canonicalRole"] = "fallback_canonical"
+            chosen["documentUnit"] = "secondary_front_matter"
+            chosen["usedForChecking"] = True
+            chosen["recoveredFromSecondary"] = True
+            chosen["fallbackReason"] = "main_defense_missing_or_heading_only"
+            canonical["defense_statements"] = chosen
+            issues.append({
+                "code": "secondary_defense_fallback",
+                "severity": "info",
+                "message": (
+                    "В основном введении содержательные положения не найдены; для правил о положениях "
+                    "использована подтверждённая содержательная копия из реферата/синопсиса. "
+                    "Она не добавляется в общий scope основного текста."
+                ),
+                "elementIds": [str(chosen.get("id"))],
+            })
+        elif len(signatures) > 1:
+            issues.append({
+                "code": "conflicting_secondary_defense_copies",
+                "severity": "warning",
+                "message": (
+                    "Найдено несколько различающихся содержательных копий положений вне основной работы; "
+                    "автоматический fallback отключён, требуется ручной выбор."
+                ),
+                "elementIds": [str(item.get("id")) for item in secondary_defense],
+            })
+
     canonical_ids = {str(item.get("id")) for item in canonical.values()}
     result: list[dict[str, Any]] = []
     for item in prepared:
@@ -301,9 +398,17 @@ def canonicalize_document_units(
             if item.get('canonicalRole') == 'conflicting_candidate':
                 pass
             elif str(item.get("id")) in canonical_ids:
-                item["documentUnit"] = "main_work"
-                item["canonicalRole"] = "canonical"
+                if item.get("canonicalRole") == "fallback_canonical":
+                    item["documentUnit"] = "secondary_front_matter"
+                    item["usedForChecking"] = True
+                    item["recoveredFromSecondary"] = True
+                else:
+                    item["documentUnit"] = "main_work"
+                    item["canonicalRole"] = "canonical"
                 item["state"] = "confirmed" if item.get("state") != "ambiguous" else item.get("state")
+            elif item.get("canonicalRole") == "main_heading_only":
+                item["documentUnit"] = "main_work"
+                item["usedForChecking"] = False
             else:
                 item["canonicalRole"] = "secondary_copy"
         result.append(item)
@@ -312,7 +417,7 @@ def canonicalize_document_units(
     # an ambiguity that would poison semantic completeness.
     for element_type, chosen in canonical.items():
         secondary = [item for item in result if item.get("type") == element_type and item.get("canonicalRole") == "secondary_copy"]
-        if secondary:
+        if secondary and chosen.get("canonicalRole") != "fallback_canonical":
             issues.append({
                 "code": f"secondary_{element_type}_copy",
                 "severity": "info",
@@ -320,11 +425,19 @@ def canonicalize_document_units(
                 "elementIds": [str(item.get("id")) for item in secondary],
             })
 
-    result.sort(key=lambda item: (_idx(index, item) if _idx(index, item) is not None else 10**9, 0 if item.get("canonicalRole") == "canonical" else 1))
+    role_order = {"canonical": 0, "fallback_canonical": 1, "main_heading_only": 2, "secondary_copy": 3}
+    result.sort(key=lambda item: (
+        _idx(index, item) if _idx(index, item) is not None else 10**9,
+        role_order.get(str(item.get("canonicalRole") or ""), 4),
+    ))
     return result, issues
 
 
 def canonical_elements(elements: list[dict[str, Any]], element_type: str) -> list[dict[str, Any]]:
     matching = [item for item in elements if item.get("type") == element_type]
     preferred = [item for item in matching if item.get("canonicalRole") == "canonical"]
-    return preferred or [item for item in matching if item.get("canonicalRole") != "secondary_copy"]
+    fallback = [item for item in matching if item.get("canonicalRole") == "fallback_canonical"]
+    return preferred or fallback or [
+        item for item in matching
+        if item.get("canonicalRole") not in {"secondary_copy", "main_heading_only"}
+    ]

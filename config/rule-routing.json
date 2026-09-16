@@ -55,16 +55,18 @@
     "CORE-2-1": {
       "strategy": "llm",
       "selectors": [
-        "scientific_core"
+        "scientific_full_scope"
       ],
-      "exhaustive": true
+      "exhaustive": true,
+      "aggregationMode": "full_scope"
     },
     "CORE-2-2": {
       "strategy": "llm",
       "selectors": [
-        "scientific_core"
+        "scientific_full_scope"
       ],
-      "exhaustive": true
+      "exhaustive": true,
+      "aggregationMode": "full_scope"
     },
     "CORE-2-3": {
       "strategy": "llm",
@@ -87,9 +89,7 @@
       "exhaustive": true
     },
     "CORE-3-3": {
-      "strategy": "deterministic",
-      "allowPass": false,
-      "reason": "Проверяется начало списка, но не все границы предложений."
+      "strategy": "deterministic"
     },
     "CORE-3-4": {
       "strategy": "deterministic"
@@ -103,11 +103,12 @@
       "detectorId": "obvious-claims"
     },
     "CORE-3-7": {
-      "strategy": "candidate",
-      "candidateFamily": "overclaim",
+      "strategy": "llm",
+      "selectors": [
+        "scientific_full_scope"
+      ],
       "exhaustive": true,
-      "allowPass": false,
-      "reason": "Словарь кандидатов оценочных выражений не покрывает все способы необоснованной похвалы."
+      "aggregationMode": "full_scope"
     },
     "CORE-4-1": {
       "strategy": "llm",
@@ -133,11 +134,12 @@
     "CORE-4-4": {
       "strategy": "llm",
       "selectors": [
-        "scientific_core"
+        "scientific_full_scope"
       ],
       "exhaustive": true,
       "allowPass": false,
-      "reason": "Проверяется научное ядро; терминологическая понятность остаётся экспертной оценкой."
+      "reason": "Проверяется научное ядро; терминологическая понятность остаётся экспертной оценкой.",
+      "aggregationMode": "full_scope"
     },
     "CORE-5-1": {
       "strategy": "unavailable",
@@ -157,18 +159,17 @@
       "strategy": "deterministic"
     },
     "CORE-5-6": {
-      "strategy": "deterministic",
-      "allowPass": false,
-      "reason": "Проверены парные кавычки в прозе; вложенные кавычки и все области документа требуют дополнительной проверки.",
-      "allowViolation": false
+      "strategy": "deterministic"
     },
     "CORE-5-7": {
       "strategy": "deterministic"
     },
     "CORE-6-1": {
-      "strategy": "deterministic",
-      "allowPass": false,
-      "reason": "Отсутствие трёх процессуальных слов не доказывает, что название обозначает научный результат."
+      "strategy": "llm",
+      "selectors": [
+        "title"
+      ],
+      "exhaustive": true
     },
     "CORE-6-2": {
       "strategy": "deterministic"
@@ -196,14 +197,10 @@
       "reason": "Подписи осей требуют визуального анализа графиков."
     },
     "CORE-7-4": {
-      "strategy": "structural",
-      "allowPass": false,
-      "reason": "PDF может терять номер и расположение формулы."
+      "strategy": "structural"
     },
     "CORE-7-5": {
-      "strategy": "structural",
-      "allowPass": false,
-      "reason": "PDF может терять перенос строки после формулы."
+      "strategy": "structural"
     },
     "CORE-8-1": {
       "strategy": "structural",
@@ -291,11 +288,12 @@
       "detectorId": "to-est"
     },
     "CORE-11-6": {
-      "strategy": "candidate",
-      "candidateFamily": "diminutive",
+      "strategy": "llm",
+      "selectors": [
+        "scientific_full_scope"
+      ],
       "exhaustive": true,
-      "allowPass": false,
-      "reason": "Словарь кандидатов не покрывает все уменьшительно-ласкательные суффиксы."
+      "aggregationMode": "full_scope"
     },
     "CORE-12": {
       "strategy": "llm",
@@ -312,9 +310,10 @@
     "CORE-14": {
       "strategy": "llm",
       "selectors": [
-        "implementation_context"
+        "implementation_full_scope"
       ],
-      "exhaustive": true
+      "exhaustive": true,
+      "aggregationMode": "full_scope"
     },
     "CORE-15": {
       "strategy": "llm",

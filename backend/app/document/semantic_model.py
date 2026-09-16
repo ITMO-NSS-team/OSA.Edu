@@ -67,10 +67,21 @@ def build_semantic_document(document: dict[str, Any], map_value: dict[str, Any])
     # Individual defense statements are semantic entities reused by routing.
     defense_statements: list[dict[str, Any]] = []
     blocks = document.get('blocks', [])
+    defense_sections = [section for section in sections if section.type == 'defense_statements']
     canonical_defense = next((
-        section for section in sections
-        if section.type == 'defense_statements' and section.canonicalRole != 'secondary_copy'
+        section for section in defense_sections
+        if section.canonicalRole == 'canonical'
     ), None)
+    if canonical_defense is None:
+        canonical_defense = next((
+            section for section in defense_sections
+            if section.canonicalRole == 'fallback_canonical'
+        ), None)
+    if canonical_defense is None:
+        canonical_defense = next((
+            section for section in defense_sections
+            if section.canonicalRole not in {'secondary_copy', 'main_heading_only', 'conflicting_candidate'}
+        ), None)
     if canonical_defense:
         start = block_index.get(canonical_defense.startBlockId)
         end = block_index.get(canonical_defense.endBlockId)

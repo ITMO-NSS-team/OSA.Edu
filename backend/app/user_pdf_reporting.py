@@ -105,6 +105,29 @@ _MAX_USER_EVIDENCE = 3
 _MAX_USER_QUOTE = 900
 _MAX_USER_TERMS = 12
 
+_STATUS_GUIDE = [
+    (
+        "Нужно исправить",
+        "Система нашла подтверждённое несоответствие. В карточке указаны причина, место и способ исправления.",
+    ),
+    (
+        "Требует проверки",
+        "Автоматическая проверка не даёт однозначного ответа. В карточке указано, что именно проверить вручную.",
+    ),
+    (
+        "Проверено",
+        "Назначенная для правила область проверена, подтверждённых нарушений не найдено.",
+    ),
+    (
+        "Не удалось проверить",
+        "Проверка этого правила технически или содержательно не завершена. Это не означает, что правило выполнено.",
+    ),
+    (
+        "Не проверялось",
+        "Для правила нужен другой материал или оно не относится к загруженному PDF. В карточке указано, что требуется.",
+    ),
+]
+
 
 def report_to_user_pdf(
     name: str,
@@ -241,8 +264,14 @@ def _cover(
         table.setStyle(_table_style())
         result.extend([table, Spacer(1, 4 * mm)])
 
+    result.extend([
+        Paragraph("Как читать статусы", styles["subsection"]),
+        _status_guide_table(styles),
+        Spacer(1, 3 * mm),
+    ])
+
     result.append(Table([[_p(
-        "Отчёт фиксирует нарушения и спорные места по выбранным правилам. Сначала исправляйте подтверждённые нарушения, затем просматривайте пункты, требующие ручной проверки. Для краткости длинные цитаты могут быть сокращены; полный текст доказательств доступен в отчёте для разработчика. Техническая диагностика доступна только в отчёте для разработчика.",
+        "Отчёт рассчитан на самостоятельную проверку работы: для каждого проблемного или непроверенного правила ниже указано, что произошло и что нужно сделать вручную. Длинные цитаты могут быть сокращены до читаемого фрагмента, но в карточке сохраняются страница, ключевой фрагмент и практическое действие.",
         styles["notice"],
     )]], colWidths=[174 * mm], style=TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF7E6")),
@@ -288,7 +317,11 @@ def _structure_section(document_map: dict[str, Any] | None, styles: dict[str, Pa
             pages_text = _pages_range(pages)
             rows.append([
                 _p(_TYPE_LABELS.get(str(item.get("type")), str(item.get("type", ""))), styles["table_cell"]),
-                _p(str(item.get("label", "")), styles["table_cell"]),
+                _p(
+                    str(item.get("label", ""))
+                    + (" [из реферата]" if item.get("canonicalRole") == "fallback_canonical" else ""),
+                    styles["table_cell"],
+                ),
                 _p(pages_text or "—", styles["table_cell_center"]),
             ])
         table = LongTable(rows, colWidths=[38 * mm, 112 * mm, 24 * mm], repeatRows=1)
@@ -301,7 +334,7 @@ def _structure_section(document_map: dict[str, Any] | None, styles: dict[str, Pa
         for message in issues[:5]:
             result.append(Paragraph(f"• {_safe(message)}", styles["body"]))
         if len(issues) > 5:
-            result.append(Paragraph(f"Ещё замечаний к структуре: {len(issues) - 5}. Полный список — в отчёте для разработчика.", styles["muted"]))
+            result.append(Paragraph(f"Ещё замечаний к структуре: {len(issues) - 5}. Проверьте остальные разделы по карте структуры работы.", styles["muted"]))
     return result
 
 
@@ -343,7 +376,13 @@ def _passed_section(results: list[dict[str, Any]], catalog: dict[str, dict[str, 
     cells: list[Any] = []
     for result, rule in passed:
         title = user_rule_title(rule, str(result.get("explanation") or result.get("ruleId") or ""))
-        cells.append(Paragraph(f"✓ {_safe(title)} <font color='#777777'>({_safe(str(result.get('ruleId') or ''))})</font>", styles["passed_item"]))
+        requirement = user_rule_requirement(rule)
+        detail = requirement if requirement and requirement != title else "Назначенная область проверена; подтверждённых нарушений не найдено."
+        cells.append(Paragraph(
+            f"✓ <b>{_safe(title)}</b> <font color='#777777'>({_safe(str(result.get('ruleId') or ''))})</font><br/>"
+            f"{_safe(detail)}",
+            styles["passed_item"],
+        ))
     rows = []
     for idx in range(0, len(cells), 2):
         rows.append([cells[idx], cells[idx + 1] if idx + 1 < len(cells) else ""])
@@ -369,35 +408,45 @@ def _not_checked_section(results: list[dict[str, Any]], catalog: dict[str, dict[
     if not not_checked and not not_applicable:
         return []
 
-    story: list[Any] = [Spacer(1, 7 * mm)]
-    intro = "По текущему PDF нельзя надёжно проверить:" if not_checked else "Часть требований не относится к предоставленному набору материалов."
-    story.append(KeepTogether([
-        Paragraph("Что не проверялось", styles["section"]),
-        Paragraph(intro, styles["body"]),
-    ]))
+    story: list[Any] = [
+        Spacer(1, 7 * mm),
+        Paragraph("Что не удалось проверить автоматически", styles["section"]),
+        Paragraph(
+            "Эти статусы не являются подтверждением выполнения правила. Для каждого пункта ниже указано, почему автоматический вывод не получен и что проверить самостоятельно.",
+            styles["body"],
+        ),
+    ]
     if not_checked:
-        for result, rule in not_checked:
-            title = user_rule_title(rule, str(result.get("ruleId") or ""))
-            explanation = str(result.get("explanation") or "").strip()
-            text = f"• <b>{_safe(title)}</b>"
-            if explanation:
-                text += f" — {_safe(explanation)}"
-            story.append(Paragraph(text, styles["body"]))
+        grouped = _group_pairs(not_checked)
+        for category, items in grouped:
+            story.extend([Spacer(1, 3 * mm), Paragraph(category, styles["category"]), HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#D9DDE1"), spaceAfter=2 * mm)])
+            for result, rule in items:
+                story.extend(_user_rule_card(result, rule, styles))
 
     if not_applicable:
-        grouped = Counter(_user_category(r, rule) for r, rule in not_applicable)
-        presentation_count = grouped.pop("Презентация и доклад", 0)
-        if presentation_count:
-            story.extend([
-                Spacer(1, 2 * mm),
-                Paragraph(
-                    f"<b>Презентация и доклад.</b> {presentation_count} требований не проверялись: для них нужна презентация и/или запись выступления.",
-                    styles["body"],
-                ),
-            ])
-        for category, count in sorted(grouped.items(), key=lambda item: (_CATEGORY_ORDER.index(item[0]) if item[0] in _CATEGORY_ORDER else 999, item[0])):
-            story.append(Paragraph(f"• {_safe(category)}: неприменимых к предоставленному документу требований — {count}.", styles["body"]))
+        story.extend([
+            Spacer(1, 4 * mm),
+            Paragraph("Что не относится к текущему PDF", styles["subsection"]),
+            Paragraph("Для этих требований нужен другой материал или отдельный раздел, которого нет в предоставленном документе.", styles["muted"]),
+        ])
+        grouped = _group_pairs(not_applicable)
+        for category, items in grouped:
+            story.extend([Spacer(1, 3 * mm), Paragraph(category, styles["category"]), HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#D9DDE1"), spaceAfter=2 * mm)])
+            for result, rule in items:
+                story.extend(_user_rule_card(result, rule, styles))
     return story
+
+
+def _group_pairs(items: list[tuple[dict[str, Any], dict[str, Any]]]) -> list[tuple[str, list[tuple[dict[str, Any], dict[str, Any]]]]]:
+    grouped: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = defaultdict(list)
+    for result, rule in items:
+        grouped[_user_category(result, rule)].append((result, rule))
+    order = {name: idx for idx, name in enumerate(_CATEGORY_ORDER)}
+    output: list[tuple[str, list[tuple[dict[str, Any], dict[str, Any]]]]] = []
+    for category in sorted(grouped, key=lambda name: (order.get(name, 999), name)):
+        grouped[category].sort(key=lambda pair: _rule_sort_key(pair[0], pair[1]))
+        output.append((category, grouped[category]))
+    return output
 
 
 def _group_results(results: list[dict[str, Any]], catalog: dict[str, dict[str, Any]]) -> list[tuple[str, list[tuple[dict[str, Any], dict[str, Any]]]]]:
@@ -458,23 +507,29 @@ def _user_rule_card(result: dict[str, Any], rule: dict[str, Any], styles: dict[s
     body: list[Any] = [heading, Spacer(1, 2 * mm)]
     requirement = user_rule_requirement(rule)
     if requirement and requirement != title:
-        body.append(_label_value("Правило", requirement, styles))
+        body.extend(_label_value("Что требует правило", requirement, styles))
 
-    explanation = clean_user_text(str(result.get("explanation") or "").strip())
+    explanation = _user_result_explanation(result, status)
     if explanation:
-        body.append(_label_value("Нарушение" if status == "violation" else "Результат проверки", explanation, styles))
+        explanation_label = {
+            "violation": "Что найдено",
+            "uncertain": "Почему нет однозначного вывода",
+            "not_checked": "Почему не удалось проверить",
+            "not_applicable": "Почему не проверялось",
+        }.get(status, "Результат проверки")
+        body.extend(_label_value(explanation_label, explanation, styles))
 
     where = _where_text(result)
     if where:
-        body.append(_label_value("Где", where, styles))
+        body.extend(_label_value("Где смотреть", where, styles))
 
     term_text = _term_findings_text(result)
     if term_text:
-        body.append(_label_value("Обозначения", term_text, styles))
+        body.extend(_label_value("Обозначения", term_text, styles))
 
     fact_text = _fact_matrix_text(result)
     if fact_text and status == "uncertain":
-        body.append(_label_value("Что неоднозначно", fact_text, styles))
+        body.extend(_label_value("Что неоднозначно", fact_text, styles))
 
     evidence = list(result.get("evidence") or [])
     if evidence:
@@ -482,27 +537,146 @@ def _user_rule_card(result: dict[str, Any], rule: dict[str, Any], styles: dict[s
         for item in evidence[:_MAX_USER_EVIDENCE]:
             body.append(_compact_evidence(item, styles))
         if len(evidence) > _MAX_USER_EVIDENCE:
-            body.append(Paragraph(f"Ещё примеров: {len(evidence) - _MAX_USER_EVIDENCE}. Полный список — в отчёте для разработчика.", styles["muted"]))
+            body.append(Paragraph(
+                f"Ещё найдено примеров: {len(evidence) - _MAX_USER_EVIDENCE}. В отчёте показаны репрезентативные фрагменты; проверьте аналогичные случаи по всей работе.",
+                styles["muted"],
+            ))
 
     fix = clean_user_text(str(result.get("fix") or "").strip())
     if fix:
-        body.append(_label_value("Как исправить", fix, styles))
-    elif status == "uncertain":
-        body.append(_label_value("Как проверить", "Просмотреть указанный фрагмент вручную и при необходимости уточнить формулировку.", styles))
+        body.extend(_label_value("Как исправить", fix, styles))
+    elif status == "violation":
+        body.extend(_label_value("Как исправить", _manual_action(result, rule, status), styles))
+    elif status in {"uncertain", "not_checked"}:
+        body.extend(_label_value("Что проверить вручную", _manual_action(result, rule, status), styles))
+    elif status == "not_applicable":
+        body.extend(_label_value("Что делать", _manual_action(result, rule, status), styles))
 
     advice = rule.get("relatedAdvice") or advice_for_rule(rid)
     if advice and status in {"violation", "uncertain"}:
         advice_text = f"{advice.get('summary', '')} Источник: {advice.get('source', 'А.А. Шалыто')}, стр. {advice.get('page', '—')}."
-        body.append(_label_value("Связанный совет Шалыто", clean_user_text(advice_text), styles))
+        body.extend(_label_value("Связанный совет Шалыто", clean_user_text(advice_text), styles))
 
     correct_example = clean_user_text(str(rule.get("correctExample") or "").strip())
     incorrect_example = clean_user_text(str(rule.get("incorrectExample") or "").strip())
     if correct_example:
         example = f"Неверно: {incorrect_example}\nВерно: {correct_example}" if incorrect_example else f"Верно: {correct_example}"
-        body.append(_label_value("Пример по правилу", example, styles))
+        body.extend(_label_value("Пример по правилу", example, styles))
 
-    lead_count = min(3, len(body))
+    # Keep only the compact heading together. Long explanation/action
+    # paragraphs must remain free to split across pages.
+    lead_count = min(2, len(body))
     return [KeepTogether(body[:lead_count]), *body[lead_count:], Spacer(1, 4 * mm)]
+
+
+def _user_result_explanation(result: dict[str, Any], status: str) -> str:
+    """Return an author-facing reason without leaking backend diagnostics."""
+    raw = str(result.get("explanation") or "").strip()
+    if status == "not_checked" and (
+        bool(result.get("technicalIncomplete"))
+        or re.search(r"техническ(?:ая|ой|ую)|HTTP|timeout|exception|traceback|LLM не вернула", raw, re.I)
+    ):
+        return (
+            "Автоматическая проверка этого требования завершилась не полностью, поэтому система не делает вывод, "
+            "выполнено правило или нет."
+        )
+    text = clean_user_text(raw)
+    if not text:
+        if status == "not_applicable":
+            return "По загруженному PDF это требование нельзя оценить без дополнительного материала."
+        if status == "not_checked":
+            return "Автоматическая проверка не смогла получить достаточные данные для вывода."
+        if status == "uncertain":
+            return "Полученных данных недостаточно для однозначного вывода."
+    return text
+
+
+def _manual_action(result: dict[str, Any], rule: dict[str, Any], status: str) -> str:
+    """Build a concrete next step for every non-pass author-facing status."""
+    rid = str(result.get("ruleId") or rule.get("id") or "")
+    requirement = user_rule_requirement(rule) or user_rule_title(rule, rid)
+    explanation = clean_user_text(str(result.get("explanation") or ""))
+    where = _where_text(result)
+    terms = _term_findings_text(result)
+
+    if rid == "CORE-1-5":
+        mentioned = ""
+        match = re.search(r"(?:классификац(?:ией|ии)|обозначени[яй])\s*:\s*([^.]*)", explanation, re.I)
+        if match:
+            mentioned = match.group(1).strip(" ,;:")
+        suffix = f" Особое внимание: {mentioned}." if mentioned else ""
+        return (
+            "Откройте каждое положение на защиту и проверьте, нет ли внутри сокращений, математических обозначений или формул. "
+            "Если встречается спорное обозначение, определите вручную, является ли оно сокращением/символом или обычным словом."
+            + suffix
+        )
+
+    if terms:
+        return (
+            f"Проверьте обозначения {terms}: найдите первое употребление каждого термина и убедитесь, что оно расшифровано "
+            "в тексте или присутствует в отдельном списке сокращений."
+        )
+
+    fact_rows: list[str] = []
+    for row in result.get("coverageMatrix", []) or []:
+        missing: list[str] = []
+        for item in row.get("items", []) or []:
+            state = str(item.get("status") or "")
+            if state not in {"ambiguous", "not_found"}:
+                continue
+            fact_name = _FACT_LABELS.get(str(item.get("name") or ""), str(item.get("name") or ""))
+            if fact_name:
+                missing.append(fact_name)
+        if missing:
+            label = str(row.get("label") or "").strip()
+            fact_rows.append((label + ": " if label else "") + ", ".join(missing))
+    if fact_rows:
+        target = "; ".join(fact_rows[:3])
+        return (
+            f"Проверьте вручную, явно ли в соответствующем фрагменте работы присутствуют следующие элементы: {target}. "
+            f"После этого сверьте их с требованием правила: {requirement}"
+        )
+
+    visual_actions = {
+        "CORE-5-1": "Откройте исходный файл в редакторе и проверьте шрифт, кегль и межстрочный интервал по всему основному тексту.",
+        "CORE-5-2": "Откройте несколько типичных страниц и визуально проверьте выравнивание основного текста по левому и правому краю.",
+        "CORE-7-2": "Просмотрите все рисунки и таблицы в PDF: у таблицы название должно быть сверху, у рисунка подпись снизу, без точки в конце.",
+        "CORE-7-3": "Просмотрите графики и диаграммы: у каждой оси должны быть понятная подпись и единицы измерения, если величина размерная.",
+        "CORE-16": "Просмотрите рисунки, схемы и слайды: различия должны читаться не только по цвету, но и по форме, подписи, типу линии или другому признаку.",
+    }
+    if rid in visual_actions:
+        return visual_actions[rid]
+
+    if rid.startswith("CORE-10"):
+        return (
+            "Для проверки нужен комплект материалов защиты: презентация, а для правил о речи — также запись или текст доклада. "
+            f"После добавления этих материалов проверьте: {requirement}"
+        )
+
+    if "defense_statements" in explanation or re.search(r"положен(?:ие|ия).*защит", explanation, re.I):
+        return (
+            "Найдите в диссертации раздел с положениями, выносимыми на защиту. Если он есть, проверьте, что он явно обозначен "
+            f"и что каждое положение соответствует требованию: {requirement}"
+        )
+    if "primary_chapter_conclusions" in explanation or "вывод" in explanation.lower() and "глав" in explanation.lower():
+        return f"Найдите выводы по профильной главе и вручную проверьте: {requirement}"
+
+    if status == "violation":
+        location = f" в указанном месте ({where})" if where else ""
+        return f"Исправьте формулировку{location} так, чтобы она соответствовала требованию: {requirement}"
+    if status == "not_applicable":
+        lower = explanation.lower()
+        if re.search(r"не обнаружен|не найден", lower):
+            return (
+                f"Если соответствующий объект действительно отсутствует в работе, ничего исправлять не нужно. "
+                f"Если он есть, но система его не распознала, найдите его вручную и проверьте: {requirement}"
+            )
+        if "не относится" in lower or "только к" in lower or "иная отрасл" in lower:
+            return "Если указанная в отчёте причина применимости определена верно, это правило к вашей работе не относится и исправлений не требуется."
+        return f"Уточните, относится ли это требование к вашей работе. Если относится, проверьте его вручную: {requirement}"
+
+    location = f" Сначала просмотрите {where}." if where else ""
+    return f"Сверьте соответствующий фрагмент работы с требованием: {requirement}{location}"
 
 
 def _where_text(result: dict[str, Any]) -> str:
@@ -753,15 +927,26 @@ def _styles(regular_font: str, bold_font: str) -> dict[str, ParagraphStyle]:
     }
 
 
-def _label_value(label: str, value: str, styles: dict[str, ParagraphStyle]) -> Table:
-    table = Table([[_p(label, styles["label"]), _p(value, styles["value"]) ]], colWidths=[34 * mm, 140 * mm])
-    table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 1.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
-    ]))
+def _label_value(label: str, value: str, styles: dict[str, ParagraphStyle]) -> list[Paragraph]:
+    """Render long fields as splittable paragraphs, never as a one-row table.
+
+    ReportLab cannot split a single table row across pages. A long explanation
+    could therefore become taller than the available frame and abort the whole
+    PDF with ``LayoutError``. Separate Paragraph flowables split naturally.
+    """
+    return [
+        Paragraph(_safe(label), styles["label"]),
+        Paragraph(_safe(value), styles["value"]),
+        Spacer(1, 1 * mm),
+    ]
+
+
+def _status_guide_table(styles: dict[str, ParagraphStyle]) -> Table:
+    rows = [[_p("Статус", styles["table_head"]), _p("Что это значит", styles["table_head"])]]
+    for label, meaning in _STATUS_GUIDE:
+        rows.append([_p(label, styles["table_cell"]), _p(meaning, styles["table_cell"])])
+    table = Table(rows, colWidths=[42 * mm, 132 * mm], repeatRows=1)
+    table.setStyle(_table_style())
     return table
 
 

@@ -11,7 +11,10 @@
       "mode": "semantic",
       "dedupKey": "defense-statement-form",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -34,12 +37,17 @@
       "mode": "semantic",
       "dedupKey": "defense-statement-form",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "semantic",
         "literalRequirement": {
           "source": "defense_statements",
           "quantifier": "each_item",
-          "markers": ["с целью"]
+          "markers": [
+            "с целью"
+          ]
         }
       },
       "routing": {
@@ -62,7 +70,10 @@
       "mode": "semantic",
       "dedupKey": "defense-statement-form",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "semantic",
         "conditionalEvidence": {
           "source": "defense_statements",
@@ -74,8 +85,17 @@
           ],
           "requireGroundedEvidence": true,
           "observableRequirement": "в самом положении должна быть ограничительная часть с признаками, совпадающими с выбранным или документально обозначенным прототипом",
-          "distinctiveMarkers": ["отличающ(?:ийся|аяся|ееся|иеся)", "характеризующ(?:ийся|аяся|ееся|иеся)"],
-          "limitingRelationMarkers": ["прототип", "аналог", "базов", "как в", "соответствующ"]
+          "distinctiveMarkers": [
+            "отличающ(?:ийся|аяся|ееся|иеся)",
+            "характеризующ(?:ийся|аяся|ееся|иеся)"
+          ],
+          "limitingRelationMarkers": [
+            "прототип",
+            "аналог",
+            "базов",
+            "как в",
+            "соответствующ"
+          ]
         }
       },
       "routing": {
@@ -98,7 +118,10 @@
       "mode": "deterministic",
       "dedupKey": "core:1.4",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "deterministic"
       },
       "routing": {
@@ -117,8 +140,13 @@
       "mode": "deterministic",
       "dedupKey": "core:1.5",
       "engine": {
-        "globalFactKeys": ["notations"],
-        "requiredFacts": ["document_text", "defense_statements"],
+        "globalFactKeys": [
+          "notations"
+        ],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "deterministic"
       },
       "routing": {
@@ -137,7 +165,11 @@
       "mode": "structural",
       "dedupKey": "core:1.6",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements",
+          "chapter"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -158,15 +190,41 @@
       "mode": "semantic",
       "dedupKey": "core:2.1",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
-        "kind": "semantic"
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
+        "kind": "semantic",
+        "aggregationFacts": [
+          {
+            "name": "analogue_or_prototype_comparison_present",
+            "polarity": "required",
+            "label": "содержательное сравнение результата автора с конкретным аналогом или прототипом",
+            "description": "Найдено document-grounded сравнение предлагаемого результата с конкретным существующим решением/аналогом/прототипом."
+          },
+          {
+            "name": "best_or_nearest_status_established",
+            "polarity": "required",
+            "label": "основание считать выбранный объект ближайшим/лучшим аналогом или прототипом",
+            "description": "Документ даёт основание считать объект сравнения ближайшим/лучшим аналогом или прототипом; простого упоминания другого метода недостаточно."
+          },
+          {
+            "name": "explicit_difference_from_analogue",
+            "polarity": "required",
+            "label": "явно сформулированное отличие собственного результата от аналога/прототипа",
+            "description": "В документе явно сформулировано, чем результат автора отличается от выбранного аналога/прототипа."
+          }
+        ]
       },
       "routing": {
         "strategy": "llm",
         "selectors": [
-          "scientific_core"
+          "scientific_full_scope"
         ],
-        "exhaustive": true
+        "exhaustive": true,
+        "aggregationMode": "full_scope"
       }
     },
     "CORE-2-2": {
@@ -178,15 +236,29 @@
       "mode": "semantic",
       "dedupKey": "core:2.2",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
-        "kind": "semantic"
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
+        "kind": "semantic",
+        "aggregationFacts": [
+          {
+            "name": "scientific_results_present",
+            "polarity": "required",
+            "label": "собственные научные результаты, а не только инженерная реализация",
+            "description": "Есть document-grounded собственные научные результаты: новые методы/модели/теоретические положения/доказательства либо содержательные экспериментальные результаты, выходящие за простую реализацию и полезность."
+          }
+        ]
       },
       "routing": {
         "strategy": "llm",
         "selectors": [
-          "scientific_core"
+          "scientific_full_scope"
         ],
-        "exhaustive": true
+        "exhaustive": true,
+        "aggregationMode": "full_scope"
       }
     },
     "CORE-2-3": {
@@ -198,7 +270,11 @@
       "mode": "semantic",
       "dedupKey": "core:2.3",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements",
+          "chapter"
+        ],
         "kind": "semantic_fact",
         "facts": [
           "analogs",
@@ -208,7 +284,7 @@
         "externalKnowledge": "forbidden",
         "fixPolicy": "document_only",
         "dedupGroup": "prototype_analysis",
-        "guidance": "Смысловой критерий CORE-2-3: проверяй содержание, а не буквальные маркеры. Не требуй слов «аналог» и «прототип» как обязательных формулировок. analogs=found, если в главе названы или однозначно определены существующие решения/подходы и есть содержательное сравнение с ними. prototype=found, если одно конкретное существующее решение или baseline функционально выделено как ближайшая точка сравнения, основа, от которой отталкивается новый метод, или наиболее близкий подход — даже без слова «прототип». prototype_disadvantages=found, если для этого же решения описаны ограничения/недостатки и понятно, какое из них устраняет или обходит предлагаемое решение. Если сравниваются несколько близких решений, но нельзя уверенно выбрать одно основное, ставь prototype=ambiguous, а не not_found. Для verdict это нарушение: правило требует один явно выбранный прототип; ambiguous фиксирует, что такой выбор не подтверждён. Нарушение ставь по отсутствию требуемого смысла или явного выбора после просмотра всей назначенной главы, а не из-за отсутствия терминов «прототип»/«аналог».",
+        "guidance": "Смысловой критерий CORE-2-3: проверяй содержание, а не буквальные маркеры. Не требуй слов «аналог» и «прототип» как обязательных формулировок. analogs=found, если в главе названы или однозначно определены существующие решения/подходы и есть содержательное сравнение с ними. prototype=found, если одно конкретное существующее решение или baseline функционально выделено как ближайшая точка сравнения, основа, от которой отталкивается новый метод, или наиболее близкий подход — даже без слова «прототип». prototype_disadvantages=found, если для этого же решения описаны ограничения/недостатки и понятно, какое из них устраняет или обходит предлагаемое решение. Если сравниваются несколько близких решений, но нельзя уверенно выбрать одно основное, ставь prototype=ambiguous, а не not_found. Для verdict ambiguous означает, что система не смогла установить единственный прототип по доступному evidence; это uncertain, а не доказанное нарушение. Нарушение по прототипу допустимо только при полном покрытии и статусе not_found. Нарушение ставь по отсутствию требуемого смысла или явного выбора после просмотра всей назначенной главы, а не из-за отсутствия терминов «прототип»/«аналог».",
         "decisionPolicy": {
           "type": "ordered_facts",
           "steps": [
@@ -225,7 +301,7 @@
             {
               "fact": "prototype",
               "value": "ambiguous",
-              "status": "violation",
+              "status": "uncertain",
               "includeIfNotFoundOrAmbiguous": [
                 "prototype_disadvantages"
               ]
@@ -270,7 +346,10 @@
       "mode": "candidate",
       "dedupKey": "impersonal-style",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "impersonal"
       },
@@ -289,7 +368,10 @@
       "mode": "candidate",
       "dedupKey": "small-numerals",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "numerals"
       },
@@ -308,14 +390,15 @@
       "mode": "deterministic",
       "dedupKey": "detector:numbered-list-capitalization",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "numbered-list-capitalization"
       },
       "routing": {
-        "strategy": "deterministic",
-        "allowPass": false,
-        "reason": "Проверяется начало списка, но не все границы предложений."
+        "strategy": "deterministic"
       }
     },
     "CORE-3-4": {
@@ -327,7 +410,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:numbered-list-ending",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "numbered-list-ending"
       },
@@ -344,7 +430,10 @@
       "mode": "deterministic",
       "dedupKey": "filler-language",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "lexical-replacements"
       },
@@ -362,7 +451,10 @@
       "mode": "deterministic",
       "dedupKey": "condescending-language",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "obvious-claims"
       },
@@ -377,19 +469,31 @@
       "scope": "document",
       "severity": "major",
       "weight": 3,
-      "mode": "candidate",
-      "dedupKey": "evaluative-language",
+      "mode": "semantic",
+      "dedupKey": "full-scope:unsupported_praise_found",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
-        "kind": "candidate",
-        "candidateFamily": "overclaim"
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
+        "kind": "semantic",
+        "aggregationFacts": [
+          {
+            "name": "unsupported_praise_found",
+            "polarity": "forbidden",
+            "label": "необоснованная восторженная/оценочная формулировка автора",
+            "description": "Найдена авторская похвала/оценка вроде уникальности, исключительности или высокой эффективности, которая не опирается рядом на измеримое сравнение или доказательство."
+          }
+        ],
+        "guidance": "Не считай нарушением нейтральные количественные выводы и оценки, непосредственно подтверждённые метрикой/сравнением. Ищи именно необоснованную похвалу автора."
       },
       "routing": {
-        "strategy": "candidate",
-        "candidateFamily": "overclaim",
+        "strategy": "llm",
+        "selectors": [
+          "scientific_full_scope"
+        ],
         "exhaustive": true,
-        "allowPass": false,
-        "reason": "Словарь кандидатов оценочных выражений не покрывает все способы необоснованной похвалы."
+        "aggregationMode": "full_scope"
       }
     },
     "CORE-4-1": {
@@ -401,7 +505,9 @@
       "mode": "semantic",
       "dedupKey": "abbreviation-introduction",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "abbreviation_fact_map",
         "inventory": "abbreviation",
         "contract": {
@@ -481,7 +587,11 @@
       "mode": "semantic",
       "dedupKey": "abbreviation-heading",
       "engine": {
-        "requiredFacts": ["document_text", "chapter", "title"],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "title"
+        ],
         "kind": "abbreviation_fact_map",
         "inventory": "abbreviation",
         "contract": {
@@ -536,7 +646,9 @@
       "mode": "semantic",
       "dedupKey": "abbreviation-translation",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "abbreviation_fact_map",
         "inventory": "abbreviation",
         "contract": {
@@ -620,21 +732,35 @@
       "mode": "semantic",
       "dedupKey": "core:4.4",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic",
         "globalFactKeys": [
           "abbreviationGlossary",
           "termDefinitions"
+        ],
+        "aggregationFacts": [
+          {
+            "name": "unexplained_specific_term_found",
+            "polarity": "forbidden",
+            "label": "конкретный специфический термин, оставшийся необъяснённым во всей проверенной области",
+            "description": "Найден конкретный специфический термин, первое/существенное употребление которого подтверждено evidence, а exhaustive-scan не нашёл его определения, ссылки, сноски или иного объяснения."
+          }
         ]
       },
       "routing": {
         "strategy": "llm",
         "selectors": [
-          "scientific_core"
+          "scientific_full_scope"
         ],
         "exhaustive": true,
         "allowPass": false,
-        "reason": "Проверяется научное ядро; терминологическая понятность остаётся экспертной оценкой."
+        "reason": "Проверяется научное ядро; терминологическая понятность остаётся экспертной оценкой.",
+        "aggregationMode": "full_scope"
       }
     },
     "CORE-5-1": {
@@ -646,7 +772,9 @@
       "mode": "manual",
       "dedupKey": "core:5.1",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -663,7 +791,9 @@
       "mode": "manual",
       "dedupKey": "core:5.2",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -680,7 +810,10 @@
       "mode": "structural",
       "dedupKey": "core:5.3",
       "engine": {
-        "requiredFacts": ["document_text", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "chapter"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -696,7 +829,10 @@
       "mode": "structural",
       "dedupKey": "caption-terminal-punctuation",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -712,7 +848,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:dash-spacing",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "dash-spacing"
       },
@@ -729,15 +868,15 @@
       "mode": "deterministic",
       "dedupKey": "detector:quote-consistency",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "quote-consistency"
       },
       "routing": {
-        "strategy": "deterministic",
-        "allowPass": false,
-        "reason": "Проверены парные кавычки в прозе; вложенные кавычки и все области документа требуют дополнительной проверки.",
-        "allowViolation": false
+        "strategy": "deterministic"
       }
     },
     "CORE-5-7": {
@@ -749,7 +888,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:spacing",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "spacing"
       },
@@ -763,17 +905,22 @@
       "scope": "title",
       "severity": "major",
       "weight": 3,
-      "mode": "deterministic",
-      "dedupKey": "detector:title-process",
+      "mode": "semantic",
+      "dedupKey": "semantic:title-scientific-result",
       "engine": {
-        "requiredFacts": ["document_text", "title"],
-        "kind": "deterministic",
-        "detectorId": "title-process"
+        "requiredFacts": [
+          "document_text",
+          "title"
+        ],
+        "kind": "semantic",
+        "guidance": "Оцени только формулировку названия. PASS — название обозначает конкретный научный результат/объект результата (метод, модель, алгоритм, подход, система, критерий, оценка и т.п.), а не сам процесс исследования. Процессуальные существительные «разработка», «исследование», «изучение» в начале — сильный признак нарушения, но не единственный критерий. Для PASS или VIOLATION процитируй название целиком."
       },
       "routing": {
-        "strategy": "deterministic",
-        "allowPass": false,
-        "reason": "Отсутствие трёх процессуальных слов не доказывает, что название обозначает научный результат."
+        "strategy": "llm",
+        "selectors": [
+          "title"
+        ],
+        "exhaustive": true
       }
     },
     "CORE-6-2": {
@@ -785,7 +932,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:title-vague-efficiency",
       "engine": {
-        "requiredFacts": ["document_text", "title"],
+        "requiredFacts": [
+          "document_text",
+          "title"
+        ],
         "kind": "deterministic",
         "detectorId": "title-vague-efficiency"
       },
@@ -802,7 +952,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:title-length",
       "engine": {
-        "requiredFacts": ["document_text", "title"],
+        "requiredFacts": [
+          "document_text",
+          "title"
+        ],
         "kind": "deterministic",
         "detectorId": "title-length"
       },
@@ -819,7 +972,11 @@
       "mode": "semantic",
       "dedupKey": "core:6.4",
       "engine": {
-        "requiredFacts": ["document_text", "goal", "title"],
+        "requiredFacts": [
+          "document_text",
+          "goal",
+          "title"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -839,7 +996,10 @@
       "mode": "structural",
       "dedupKey": "core:7.1",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -855,7 +1015,10 @@
       "mode": "structural",
       "dedupKey": "caption-terminal-punctuation",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -873,7 +1036,9 @@
       "mode": "manual",
       "dedupKey": "core:7.3",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -890,13 +1055,14 @@
       "mode": "structural",
       "dedupKey": "core:7.4",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
-        "strategy": "structural",
-        "allowPass": false,
-        "reason": "PDF может терять номер и расположение формулы."
+        "strategy": "structural"
       }
     },
     "CORE-7-5": {
@@ -908,13 +1074,14 @@
       "mode": "structural",
       "dedupKey": "core:7.5",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
-        "strategy": "structural",
-        "allowPass": false,
-        "reason": "PDF может терять перенос строки после формулы."
+        "strategy": "structural"
       }
     },
     "CORE-8-1": {
@@ -926,7 +1093,12 @@
       "mode": "structural",
       "dedupKey": "core:8.1",
       "engine": {
-        "requiredFacts": ["document_text", "main_text", "chapter", "chapter_conclusions"],
+        "requiredFacts": [
+          "document_text",
+          "main_text",
+          "chapter",
+          "chapter_conclusions"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -944,7 +1116,12 @@
       "mode": "semantic",
       "dedupKey": "core:8.2",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements", "chapter", "chapter_conclusions"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements",
+          "chapter",
+          "chapter_conclusions"
+        ],
         "kind": "semantic_fact",
         "facts": [
           "comparison_with_prototype_in_chapter_conclusions"
@@ -994,7 +1171,10 @@
       "mode": "semantic",
       "dedupKey": "core:8.3",
       "engine": {
-        "requiredFacts": ["document_text", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1014,7 +1194,10 @@
       "mode": "structural",
       "dedupKey": "core:9.1",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -1030,7 +1213,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:bibliography-junk",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography"
+        ],
         "kind": "deterministic",
         "detectorId": "bibliography-junk"
       },
@@ -1047,7 +1233,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:bibliography-pages",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography"
+        ],
         "kind": "deterministic",
         "detectorId": "bibliography-pages"
       },
@@ -1064,7 +1253,11 @@
       "mode": "structural",
       "dedupKey": "core:9.4",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -1080,7 +1273,9 @@
       "mode": "manual",
       "dedupKey": "core:10.1",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -1097,7 +1292,9 @@
       "mode": "manual",
       "dedupKey": "core:10.2",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -1114,7 +1311,9 @@
       "mode": "manual",
       "dedupKey": "core:10.3",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -1131,7 +1330,9 @@
       "mode": "manual",
       "dedupKey": "core:10.4",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -1148,7 +1349,9 @@
       "mode": "manual",
       "dedupKey": "core:10.5",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -1165,7 +1368,9 @@
       "mode": "manual",
       "dedupKey": "core:10.6",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -1182,7 +1387,9 @@
       "mode": "manual",
       "dedupKey": "core:10.7",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -1199,7 +1406,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:yo-letter",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "yo-letter"
       },
@@ -1218,7 +1428,10 @@
       "mode": "candidate",
       "dedupKey": "sentence-start",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "sentence-start"
       },
@@ -1237,7 +1450,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:forbidden-abbreviations",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "forbidden-abbreviations"
       },
@@ -1254,7 +1470,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:colon-a-imenno",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "colon-a-imenno"
       },
@@ -1271,7 +1490,10 @@
       "mode": "deterministic",
       "dedupKey": "to-est",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "to-est"
       },
@@ -1286,19 +1508,31 @@
       "scope": "document",
       "severity": "major",
       "weight": 3,
-      "mode": "candidate",
-      "dedupKey": "diminutive-language",
+      "mode": "semantic",
+      "dedupKey": "full-scope:diminutive_form_found",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
-        "kind": "candidate",
-        "candidateFamily": "diminutive"
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
+        "kind": "semantic",
+        "aggregationFacts": [
+          {
+            "name": "diminutive_form_found",
+            "polarity": "forbidden",
+            "label": "уменьшительно-ласкательная или разговорно-уменьшительная форма в научном тексте",
+            "description": "Найдена реально уменьшительно-ласкательная/разговорная форма слова в авторском научном тексте, а не технический термин с похожим суффиксом."
+          }
+        ],
+        "guidance": "Не выводи уменьшительность только по суффиксу. Учитывай значение в контексте; технические термины и фамилии не являются нарушением."
       },
       "routing": {
-        "strategy": "candidate",
-        "candidateFamily": "diminutive",
+        "strategy": "llm",
+        "selectors": [
+          "scientific_full_scope"
+        ],
         "exhaustive": true,
-        "allowPass": false,
-        "reason": "Словарь кандидатов не покрывает все уменьшительно-ласкательные суффиксы."
+        "aggregationMode": "full_scope"
       }
     },
     "CORE-12": {
@@ -1310,7 +1544,10 @@
       "mode": "semantic",
       "dedupKey": "abbreviation-introduction",
       "engine": {
-        "requiredFacts": ["document_text", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "chapter"
+        ],
         "kind": "abbreviation_fact_map",
         "inventory": "abbreviation",
         "contract": {
@@ -1373,7 +1610,10 @@
       "mode": "structural",
       "dedupKey": "core:13",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -1391,15 +1631,34 @@
       "mode": "semantic",
       "dedupKey": "core:14",
       "engine": {
-        "requiredFacts": ["document_text", "main_text", "chapter"],
-        "kind": "semantic"
+        "requiredFacts": [
+          "document_text",
+          "main_text",
+          "chapter"
+        ],
+        "kind": "semantic",
+        "aggregationFacts": [
+          {
+            "name": "dedicated_implementation_or_use_section",
+            "polarity": "required",
+            "label": "самостоятельная глава/раздел о внедрении или использовании результатов",
+            "description": "В документе есть самостоятельная структурно выделенная глава или раздел о внедрении/использовании результатов, а не только отдельная фраза о практической значимости."
+          },
+          {
+            "name": "concrete_requisites_present",
+            "polarity": "required",
+            "label": "конкретные реквизиты внедрения/использования или адреса открытого ПО",
+            "description": "В этой части документа подтверждены конкретные реквизиты: организация/акт/срок/номер подтверждающего документа либо адрес/репозиторий/идентификатор открытого ПО, достаточный для проверки факта использования."
+          }
+        ]
       },
       "routing": {
         "strategy": "llm",
         "selectors": [
-          "implementation_context"
+          "implementation_full_scope"
         ],
-        "exhaustive": true
+        "exhaustive": true,
+        "aggregationMode": "full_scope"
       },
       "applicability": {
         "predicate": "technical_dissertation"
@@ -1414,7 +1673,11 @@
       "mode": "semantic",
       "dedupKey": "core:15",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements",
+          "chapter"
+        ],
         "kind": "semantic_fact",
         "facts": [
           "analogs_inside_chapter",
@@ -1491,7 +1754,9 @@
       "mode": "manual",
       "dedupKey": "core:16",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -1508,7 +1773,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:see-figure",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "see-figure"
       },
@@ -1525,7 +1793,10 @@
       "mode": "structural",
       "dedupKey": "core:18",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -1543,7 +1814,10 @@
       "mode": "structural",
       "dedupKey": "caption-terminal-punctuation",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -1561,7 +1835,10 @@
       "mode": "candidate",
       "dedupKey": "detector:first-new",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "novelty-claim"
       },
@@ -1580,7 +1857,12 @@
       "mode": "semantic",
       "dedupKey": "soft:1",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1600,7 +1882,12 @@
       "mode": "semantic",
       "dedupKey": "soft:2",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1620,7 +1907,12 @@
       "mode": "semantic",
       "dedupKey": "soft:3",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1640,7 +1932,12 @@
       "mode": "semantic",
       "dedupKey": "soft:4",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1660,7 +1957,12 @@
       "mode": "semantic",
       "dedupKey": "soft:5",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1680,7 +1982,12 @@
       "mode": "semantic",
       "dedupKey": "soft:6",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1700,7 +2007,12 @@
       "mode": "semantic",
       "dedupKey": "soft:7",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1720,7 +2032,13 @@
       "mode": "semantic",
       "dedupKey": "soft:8",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1740,7 +2058,10 @@
       "mode": "semantic",
       "dedupKey": "soft:9",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1760,7 +2081,12 @@
       "mode": "semantic",
       "dedupKey": "soft:10",
       "engine": {
-        "requiredFacts": ["document_text", "chapter", "main_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "main_text",
+          "defense_statements"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1780,7 +2106,12 @@
       "mode": "semantic",
       "dedupKey": "soft:11",
       "engine": {
-        "requiredFacts": ["document_text", "chapter", "main_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "main_text",
+          "defense_statements"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1800,7 +2131,10 @@
       "mode": "semantic",
       "dedupKey": "soft:12",
       "engine": {
-        "requiredFacts": ["document_text", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "chapter"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1820,7 +2154,10 @@
       "mode": "semantic",
       "dedupKey": "soft:13",
       "engine": {
-        "requiredFacts": ["document_text", "chapter_conclusions"],
+        "requiredFacts": [
+          "document_text",
+          "chapter_conclusions"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1840,7 +2177,11 @@
       "mode": "semantic",
       "dedupKey": "soft:14",
       "engine": {
-        "requiredFacts": ["document_text", "chapter", "chapter_conclusions"],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "chapter_conclusions"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1860,7 +2201,12 @@
       "mode": "semantic",
       "dedupKey": "soft:15",
       "engine": {
-        "requiredFacts": ["document_text", "chapter", "main_text", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "main_text",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1880,7 +2226,11 @@
       "mode": "semantic",
       "dedupKey": "soft:16",
       "engine": {
-        "requiredFacts": ["document_text", "chapter", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1900,7 +2250,12 @@
       "mode": "semantic",
       "dedupKey": "soft:17",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1920,7 +2275,12 @@
       "mode": "semantic",
       "dedupKey": "soft:18",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1940,7 +2300,10 @@
       "mode": "semantic",
       "dedupKey": "soft:19",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1960,7 +2323,10 @@
       "mode": "semantic",
       "dedupKey": "soft:20",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -1980,7 +2346,10 @@
       "mode": "semantic",
       "dedupKey": "soft:21",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2000,7 +2369,10 @@
       "mode": "semantic",
       "dedupKey": "soft:22",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2020,7 +2392,10 @@
       "mode": "deterministic",
       "dedupKey": "soft:23",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "deterministic",
         "detectorId": "defense-punctuation"
       },
@@ -2044,8 +2419,13 @@
       "mode": "deterministic",
       "dedupKey": "soft:24",
       "engine": {
-        "globalFactKeys": ["notations"],
-        "requiredFacts": ["document_text", "defense_statements"],
+        "globalFactKeys": [
+          "notations"
+        ],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "deterministic",
         "detectorId": "defense-symbols"
       },
@@ -2068,7 +2448,12 @@
       "mode": "semantic",
       "dedupKey": "soft:25",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements", "main_text", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements",
+          "main_text",
+          "chapter"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2088,7 +2473,10 @@
       "mode": "structural",
       "dedupKey": "soft:26",
       "engine": {
-        "requiredFacts": ["document_text", "defense_statements"],
+        "requiredFacts": [
+          "document_text",
+          "defense_statements"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2104,7 +2492,10 @@
       "mode": "candidate",
       "dedupKey": "impersonal-style",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "impersonal"
       },
@@ -2123,7 +2514,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:numbered-list-capitalization",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "numbered-list-capitalization"
       },
@@ -2142,7 +2536,9 @@
       "mode": "manual",
       "dedupKey": "detector:heading-final-period",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -2159,7 +2555,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:numbered-list-ending",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "numbered-list-ending"
       },
@@ -2176,7 +2575,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:bullet-list-ending",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "bullet-list-ending"
       },
@@ -2195,7 +2597,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:dash-spacing",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "dash-spacing"
       },
@@ -2212,7 +2617,9 @@
       "mode": "manual",
       "dedupKey": "soft:33",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2229,7 +2636,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:quote-consistency",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "quote-consistency"
       },
@@ -2249,7 +2659,10 @@
       "mode": "candidate",
       "dedupKey": "small-numerals",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "numerals"
       },
@@ -2268,7 +2681,10 @@
       "mode": "semantic",
       "dedupKey": "soft:36",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2290,7 +2706,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:yo-letter",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "yo-letter"
       },
@@ -2309,7 +2728,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:lexical-replacements",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "lexical-replacements"
       },
@@ -2326,7 +2748,10 @@
       "mode": "candidate",
       "dedupKey": "evaluative-language",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "overclaim"
       },
@@ -2347,7 +2772,10 @@
       "mode": "candidate",
       "dedupKey": "diminutive-language",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "diminutive"
       },
@@ -2368,7 +2796,10 @@
       "mode": "semantic",
       "dedupKey": "soft:41",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2390,7 +2821,10 @@
       "mode": "candidate",
       "dedupKey": "sentence-start",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "candidate",
         "candidateFamily": "sentence-start"
       },
@@ -2411,7 +2845,10 @@
       "mode": "semantic",
       "dedupKey": "soft:43",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2433,7 +2870,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:colon-and-to-est",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "colon-and-to-est"
       },
@@ -2452,7 +2892,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:above-written",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "above-written"
       },
@@ -2469,7 +2912,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:lexical-cliches",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "lexical-cliches"
       },
@@ -2486,7 +2932,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:jargon",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "jargon"
       },
@@ -2503,7 +2952,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:first-new",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "first-new"
       },
@@ -2520,7 +2972,13 @@
       "mode": "semantic",
       "dedupKey": "soft:49",
       "engine": {
-        "requiredFacts": ["document_text", "title", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "title",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2540,7 +2998,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:title-process",
       "engine": {
-        "requiredFacts": ["document_text", "title"],
+        "requiredFacts": [
+          "document_text",
+          "title"
+        ],
         "kind": "deterministic",
         "detectorId": "title-process"
       },
@@ -2559,7 +3020,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:title-length",
       "engine": {
-        "requiredFacts": ["document_text", "title"],
+        "requiredFacts": [
+          "document_text",
+          "title"
+        ],
         "kind": "deterministic",
         "detectorId": "title-length"
       },
@@ -2578,7 +3042,13 @@
       "mode": "semantic",
       "dedupKey": "soft:52",
       "engine": {
-        "requiredFacts": ["document_text", "title", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "title",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2598,7 +3068,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:goal-infinitive",
       "engine": {
-        "requiredFacts": ["document_text", "goal"],
+        "requiredFacts": [
+          "document_text",
+          "goal"
+        ],
         "kind": "deterministic",
         "detectorId": "goal-infinitive"
       },
@@ -2617,7 +3090,10 @@
       "mode": "semantic",
       "dedupKey": "soft:54",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2639,8 +3115,14 @@
       "mode": "structural",
       "dedupKey": "soft:55",
       "engine": {
-        "globalFactKeys": ["notations"],
-        "requiredFacts": ["document_text", "chapter", "title"],
+        "globalFactKeys": [
+          "notations"
+        ],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "title"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2659,8 +3141,13 @@
       "mode": "structural",
       "dedupKey": "soft:56",
       "engine": {
-        "globalFactKeys": ["notations"],
-        "requiredFacts": ["document_text", "main_text"],
+        "globalFactKeys": [
+          "notations"
+        ],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2679,7 +3166,9 @@
       "mode": "manual",
       "dedupKey": "soft:57",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2696,7 +3185,10 @@
       "mode": "semantic",
       "dedupKey": "soft:58",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -2718,7 +3210,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:python-capitalization",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "python-capitalization"
       },
@@ -2737,7 +3232,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:initials-order",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography"
+        ],
         "kind": "deterministic",
         "detectorId": "initials-order"
       },
@@ -2756,7 +3254,9 @@
       "mode": "manual",
       "dedupKey": "soft:61",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2773,7 +3273,10 @@
       "mode": "structural",
       "dedupKey": "soft:62",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2791,7 +3294,9 @@
       "mode": "manual",
       "dedupKey": "soft:63",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2808,7 +3313,10 @@
       "mode": "structural",
       "dedupKey": "soft:64",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2826,7 +3334,10 @@
       "mode": "structural",
       "dedupKey": "soft:65",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2844,7 +3355,10 @@
       "mode": "structural",
       "dedupKey": "soft:66",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2862,7 +3376,9 @@
       "mode": "manual",
       "dedupKey": "soft:67",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2879,7 +3395,9 @@
       "mode": "manual",
       "dedupKey": "soft:68",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2896,7 +3414,9 @@
       "mode": "manual",
       "dedupKey": "soft:69",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2913,7 +3433,10 @@
       "mode": "structural",
       "dedupKey": "soft:70",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2931,7 +3454,9 @@
       "mode": "manual",
       "dedupKey": "soft:71",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2948,7 +3473,10 @@
       "mode": "structural",
       "dedupKey": "soft:72",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -2966,7 +3494,9 @@
       "mode": "manual",
       "dedupKey": "soft:73",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -2983,7 +3513,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:decimal-comma",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "decimal-comma"
       },
@@ -3003,7 +3536,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:thousands-spacing",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "thousands-spacing"
       },
@@ -3023,7 +3559,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:percent-spacing",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "percent-spacing"
       },
@@ -3042,8 +3581,14 @@
       "mode": "structural",
       "dedupKey": "soft:77",
       "engine": {
-        "globalFactKeys": ["notations"],
-        "requiredFacts": ["document_text", "main_text", "chapter"],
+        "globalFactKeys": [
+          "notations"
+        ],
+        "requiredFacts": [
+          "document_text",
+          "main_text",
+          "chapter"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -3059,7 +3604,10 @@
       "mode": "semantic",
       "dedupKey": "soft:78",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3079,7 +3627,9 @@
       "mode": "manual",
       "dedupKey": "soft:79",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -3096,7 +3646,9 @@
       "mode": "manual",
       "dedupKey": "soft:80",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3113,7 +3665,9 @@
       "mode": "manual",
       "dedupKey": "soft:81",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3130,7 +3684,9 @@
       "mode": "manual",
       "dedupKey": "soft:82",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3147,7 +3703,9 @@
       "mode": "manual",
       "dedupKey": "soft:83",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3164,7 +3722,9 @@
       "mode": "manual",
       "dedupKey": "soft:84",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3181,7 +3741,9 @@
       "mode": "manual",
       "dedupKey": "soft:85",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3198,7 +3760,9 @@
       "mode": "manual",
       "dedupKey": "soft:86",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3215,7 +3779,9 @@
       "mode": "manual",
       "dedupKey": "soft:87",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3232,7 +3798,9 @@
       "mode": "manual",
       "dedupKey": "soft:88",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3249,7 +3817,9 @@
       "mode": "manual",
       "dedupKey": "soft:89",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3266,7 +3836,9 @@
       "mode": "manual",
       "dedupKey": "soft:90",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3283,7 +3855,9 @@
       "mode": "manual",
       "dedupKey": "soft:91",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3300,7 +3874,9 @@
       "mode": "manual",
       "dedupKey": "soft:92",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3317,7 +3893,9 @@
       "mode": "manual",
       "dedupKey": "soft:93",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3334,7 +3912,9 @@
       "mode": "manual",
       "dedupKey": "soft:94",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3351,7 +3931,10 @@
       "mode": "semantic",
       "dedupKey": "soft:95",
       "engine": {
-        "requiredFacts": ["document_text", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "chapter"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3371,7 +3954,10 @@
       "mode": "semantic",
       "dedupKey": "soft:96",
       "engine": {
-        "requiredFacts": ["document_text", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "chapter"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3391,7 +3977,11 @@
       "mode": "semantic",
       "dedupKey": "soft:97",
       "engine": {
-        "requiredFacts": ["document_text", "chapter", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3411,7 +4001,10 @@
       "mode": "semantic",
       "dedupKey": "soft:98",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3431,7 +4024,9 @@
       "mode": "manual",
       "dedupKey": "soft:99",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3448,7 +4043,12 @@
       "mode": "semantic",
       "dedupKey": "soft:100",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3470,7 +4070,12 @@
       "mode": "semantic",
       "dedupKey": "soft:101",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3492,7 +4097,12 @@
       "mode": "semantic",
       "dedupKey": "soft:102",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3514,7 +4124,10 @@
       "mode": "semantic",
       "dedupKey": "soft:103",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3534,7 +4147,9 @@
       "mode": "manual",
       "dedupKey": "soft:104",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3551,7 +4166,12 @@
       "mode": "semantic",
       "dedupKey": "soft:105",
       "engine": {
-        "requiredFacts": ["document_text", "introduction", "chapter", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "introduction",
+          "chapter",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3573,7 +4193,9 @@
       "mode": "manual",
       "dedupKey": "soft:106",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3590,7 +4212,9 @@
       "mode": "manual",
       "dedupKey": "soft:107",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3607,7 +4231,9 @@
       "mode": "manual",
       "dedupKey": "soft:108",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3624,7 +4250,9 @@
       "mode": "manual",
       "dedupKey": "soft:109",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3641,7 +4269,9 @@
       "mode": "manual",
       "dedupKey": "soft:110",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -3658,7 +4288,9 @@
       "mode": "manual",
       "dedupKey": "soft:111",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3675,7 +4307,9 @@
       "mode": "manual",
       "dedupKey": "soft:112",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3692,7 +4326,9 @@
       "mode": "manual",
       "dedupKey": "soft:113",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3709,7 +4345,10 @@
       "mode": "semantic",
       "dedupKey": "soft:114",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3731,7 +4370,9 @@
       "mode": "manual",
       "dedupKey": "soft:115",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3748,7 +4389,9 @@
       "mode": "manual",
       "dedupKey": "soft:116",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3765,7 +4408,9 @@
       "mode": "manual",
       "dedupKey": "soft:117",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3782,7 +4427,9 @@
       "mode": "manual",
       "dedupKey": "soft:118",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3799,7 +4446,9 @@
       "mode": "manual",
       "dedupKey": "soft:119",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -3816,7 +4465,10 @@
       "mode": "structural",
       "dedupKey": "soft:120",
       "engine": {
-        "requiredFacts": ["document_text", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "chapter"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -3832,7 +4484,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:specialty-dot",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "specialty-dot"
       },
@@ -3849,7 +4504,10 @@
       "mode": "semantic",
       "dedupKey": "soft:122",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3871,7 +4529,10 @@
       "mode": "semantic",
       "dedupKey": "soft:123",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -3893,7 +4554,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:method-tuning",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "method-tuning"
       },
@@ -3912,7 +4576,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:method-behavior",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "method-behavior"
       },
@@ -3929,7 +4596,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:performance-verb",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "performance-verb"
       },
@@ -3946,7 +4616,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:model-shows",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "model-shows"
       },
@@ -3966,7 +4639,9 @@
       "mode": "manual",
       "dedupKey": "soft:128",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -3983,7 +4658,9 @@
       "mode": "manual",
       "dedupKey": "soft:129",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -4000,7 +4677,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:tasks-solved",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "tasks-solved"
       },
@@ -4017,7 +4697,10 @@
       "mode": "semantic",
       "dedupKey": "soft:131",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4039,7 +4722,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:analogovye",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "analogovye"
       },
@@ -4056,7 +4742,10 @@
       "mode": "semantic",
       "dedupKey": "soft:133",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4078,7 +4767,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:roman-ending",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "roman-ending"
       },
@@ -4095,7 +4787,12 @@
       "mode": "semantic",
       "dedupKey": "soft:135",
       "engine": {
-        "requiredFacts": ["document_text", "chapter", "introduction", "conclusion"],
+        "requiredFacts": [
+          "document_text",
+          "chapter",
+          "introduction",
+          "conclusion"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4115,7 +4812,10 @@
       "mode": "semantic",
       "dedupKey": "soft:136",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4137,7 +4837,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:implemented-in-company",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "implemented-in-company"
       },
@@ -4154,7 +4857,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:yo-letter",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "yo-letter"
       },
@@ -4174,7 +4880,10 @@
       "mode": "structural",
       "dedupKey": "soft:139",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -4190,7 +4899,10 @@
       "mode": "semantic",
       "dedupKey": "soft:140",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4210,7 +4922,9 @@
       "mode": "manual",
       "dedupKey": "soft:141",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -4227,7 +4941,9 @@
       "mode": "manual",
       "dedupKey": "soft:142",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "unavailable"
       },
       "routing": {
@@ -4244,7 +4960,10 @@
       "mode": "semantic",
       "dedupKey": "soft:143",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4264,7 +4983,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:formula-wording",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "formula-wording"
       },
@@ -4281,7 +5003,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:next-respectively",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "next-respectively"
       },
@@ -4301,7 +5026,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:receiver-successor",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "receiver-successor"
       },
@@ -4321,7 +5049,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:colloquial-errors",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "colloquial-errors"
       },
@@ -4340,7 +5071,10 @@
       "mode": "semantic",
       "dedupKey": "soft:148",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4362,7 +5096,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:present-work",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "present-work"
       },
@@ -4379,7 +5116,10 @@
       "mode": "semantic",
       "dedupKey": "soft:150",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4401,8 +5141,13 @@
       "mode": "structural",
       "dedupKey": "soft:151",
       "engine": {
-        "globalFactKeys": ["notations"],
-        "requiredFacts": ["document_text", "main_text"],
+        "globalFactKeys": [
+          "notations"
+        ],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -4421,7 +5166,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:format-parent-word",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "format-parent-word"
       },
@@ -4440,7 +5188,10 @@
       "mode": "semantic",
       "dedupKey": "soft:153",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4462,7 +5213,10 @@
       "mode": "semantic",
       "dedupKey": "soft:154",
       "engine": {
-        "requiredFacts": ["document_text", "bibliography"],
+        "requiredFacts": [
+          "document_text",
+          "bibliography"
+        ],
         "kind": "semantic"
       },
       "routing": {
@@ -4482,7 +5236,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:document-garbage",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "document-garbage"
       },
@@ -4499,7 +5256,9 @@
       "mode": "manual",
       "dedupKey": "soft:156",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -4516,7 +5275,9 @@
       "mode": "manual",
       "dedupKey": "soft:157",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -4533,7 +5294,9 @@
       "mode": "manual",
       "dedupKey": "soft:158",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -4550,7 +5313,9 @@
       "mode": "manual",
       "dedupKey": "detector:transition-to-conclusions",
       "engine": {
-        "requiredFacts": ["document_text"],
+        "requiredFacts": [
+          "document_text"
+        ],
         "kind": "manual"
       },
       "routing": {
@@ -4567,7 +5332,11 @@
       "mode": "structural",
       "dedupKey": "soft:160",
       "engine": {
-        "requiredFacts": ["document_text", "main_text", "chapter"],
+        "requiredFacts": [
+          "document_text",
+          "main_text",
+          "chapter"
+        ],
         "kind": "structural"
       },
       "routing": {
@@ -4585,7 +5354,10 @@
       "mode": "deterministic",
       "dedupKey": "detector:results-word",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "deterministic",
         "detectorId": "results-word"
       },
@@ -4602,7 +5374,10 @@
       "mode": "semantic",
       "dedupKey": "soft:162",
       "engine": {
-        "requiredFacts": ["document_text", "main_text"],
+        "requiredFacts": [
+          "document_text",
+          "main_text"
+        ],
         "kind": "semantic"
       },
       "routing": {

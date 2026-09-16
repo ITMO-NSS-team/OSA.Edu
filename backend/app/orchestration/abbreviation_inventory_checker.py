@@ -21,6 +21,8 @@ Python enforces normative contracts.
 import asyncio
 import json
 import os
+
+import regex as re
 from functools import lru_cache
 from typing import Any
 
@@ -229,6 +231,60 @@ def _parse_rows(value: Any, allowed_ids: set[str]) -> dict[str, dict]:
     return _parse_fact_rows(value, allowed_ids)
 
 
+def _explicit_russian_expansion(text: str, token: str) -> bool:
+    """Return True only for a grounded ``русский термин (... TOKEN ...)`` form.
+
+    The LLM fact map occasionally misses an expansion that is literally visible
+    in the first-use quote (for example ``интервал наибольшей плотности
+    (ИНП; англ. Highest Density Interval, HDI)``).  A deterministic positive
+    observation is safe to use as a floor: it can upgrade ``no/uncertain`` to
+    ``yes`` but never manufactures a negative fact.
+    """
+    value = str(text or '').replace('\u00ad', '')
+    term = str(token or '').strip()
+    if not value or not term:
+        return False
+    for match in re.finditer(r'(?<![\p{L}\p{N}_])' + re.escape(term) + r'(?![\p{L}\p{N}_])', value, re.I):
+        left = value[:match.start()]
+        open_pos = left.rfind('(')
+        if open_pos < 0 or left.rfind(')') > open_pos:
+            continue
+        inside_before = value[open_pos + 1:match.start()].strip()
+        # The parenthesis must look like an abbreviation expansion, not just a
+        # long parenthetical remark that happens to contain the token. Valid
+        # forms include ``русский термин (ABC)``, ``русский термин (English
+        # Full Name, ABC)`` and ``русский термин (РУС; англ. ..., ABC)``.
+        expansion_parens = (
+            not inside_before
+            or bool(re.search(r'\bангл\.?\b', inside_before, re.I))
+            or len(re.findall(r'[A-Za-z]{2,}', inside_before)) >= 2
+        )
+        if not expansion_parens:
+            continue
+        before = value[max(0, open_pos - 140):open_pos].rstrip(' ,;:—–-')
+        words = re.findall(r'[А-ЯЁа-яё][А-ЯЁа-яё-]{1,}', before)
+        if not words:
+            continue
+        # Require a meaningful lexical phrase immediately before the brackets,
+        # not a distant Russian word elsewhere in the context window.
+        tail = re.search(r'(?:[А-ЯЁа-яё][А-ЯЁа-яё-]{1,}\s*){1,8}$', before)
+        if tail and len(re.findall(r'[А-ЯЁа-яё]{2,}', tail.group(0))) >= 1:
+            return True
+    return False
+
+
+def _grounded_expansion_facts(candidate: dict) -> tuple[bool, bool]:
+    token = str(candidate.get('term') or '')
+    first = dict(candidate.get('firstUse') or {})
+    first_has = _explicit_russian_expansion(str(first.get('quote') or ''), token)
+    any_has = first_has
+    for item in list(candidate.get('contextUses') or []) + list(candidate.get('listedDefinitions') or []):
+        if _explicit_russian_expansion(str((item or {}).get('quote') or ''), token):
+            any_has = True
+            break
+    return first_has, any_has
+
+
 def _candidate_facts(candidate: dict, mapped: dict | None, fact_store: dict | None = None) -> dict[str, str]:
     cached = (((fact_store or {}).get('notations') or {}).get('entities') or {}).get(str(candidate.get('candidateId')))
     if cached:
@@ -253,13 +309,25 @@ def _candidate_facts(candidate: dict, mapped: dict | None, fact_store: dict | No
     # explicit contrary classification remains visible as conflicting evidence.
     is_abbreviation = 'uncertain' if conflict else 'yes' if listed else direct
 
+    first_grounded, any_grounded = _grounded_expansion_facts(candidate)
+    first_use = str(row.get("firstUseHasRussianFullTermBefore") or "uncertain")
+    explanation = "yes" if listed and not conflict else str(row.get("hasExplanationAnywhere") or "uncertain")
+    russian_explanation = str(row.get("hasRussianExplanationAnywhere") or "uncertain")
+    if first_grounded:
+        first_use = "yes"
+        explanation = "yes"
+        russian_explanation = "yes"
+    elif any_grounded:
+        explanation = "yes"
+        russian_explanation = "yes"
+
     return {
         "isAbbreviation": is_abbreviation,
         "classificationConflict": "yes" if conflict else "no",
         "isForeignAbbreviation": str(row.get("isForeignAbbreviation") or "uncertain"),
-        "firstUseHasRussianFullTermBefore": str(row.get("firstUseHasRussianFullTermBefore") or "uncertain"),
-        "hasExplanationAnywhere": "yes" if listed and not conflict else str(row.get("hasExplanationAnywhere") or "uncertain"),
-        "hasRussianExplanationAnywhere": str(row.get("hasRussianExplanationAnywhere") or "uncertain"),
+        "firstUseHasRussianFullTermBefore": first_use,
+        "hasExplanationAnywhere": explanation,
+        "hasRussianExplanationAnywhere": russian_explanation,
         "hasHeadingUse": "yes" if candidate.get("headingUses") else "no",
         "contextLanguage": str(candidate.get("contextLanguage") or "unknown"),
         "listedInAbbreviationList": "yes" if listed else "no",

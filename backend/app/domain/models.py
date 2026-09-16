@@ -30,6 +30,7 @@ class RoutingSpecModel(BaseModel):
     onMissingPrerequisite: str | None = None
     candidateFamily: str | None = None
     detectorId: str | None = None
+    aggregationMode: str | None = None
 
 
 class RuleEngineModel(BaseModel):
@@ -50,6 +51,7 @@ class RuleEngineModel(BaseModel):
     requiredFacts: list[str] = Field(default_factory=list)
     conditionalEvidence: dict[str, Any] | None = None
     literalRequirement: dict[str, Any] | None = None
+    aggregationFacts: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RuleManifestEntryModel(BaseModel):
@@ -137,6 +139,7 @@ class RoutedRuleModel(BaseModel):
     explicit: bool = True
     candidateFamily: str | None = None
     detectorId: str | None = None
+    aggregationMode: str | None = None
 
 
 class RuleResultModel(BaseModel):

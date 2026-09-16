@@ -212,11 +212,16 @@ def _structural_facts(document: dict) -> tuple[dict, dict]:
     index = {str(b.get("id")): i for i, b in enumerate(blocks)}
     elements = list((document.get("map") or {}).get("elements") or [])
     by_type = {name: [] for name in STRUCTURAL_FACTS}
+    secondary_by_type = {name: [] for name in STRUCTURAL_FACTS}
+    heading_only_by_type = {name: [] for name in STRUCTURAL_FACTS}
     element_facts = {}
     for el in elements:
         name = el.get("type")
-        if name not in by_type or el.get("canonicalRole") == "secondary_copy":
+        if name not in by_type:
             continue
+        role = el.get("canonicalRole")
+        is_secondary = role == "secondary_copy"
+        is_heading_only = role == "main_heading_only"
         start, end = index.get(el.get("startBlockId")), index.get(el.get("endBlockId"))
         raw = blocks[start:end + 1] if start is not None and end is not None and start <= end else []
         selected = trim_blocks_for_element(name, raw)
@@ -248,8 +253,60 @@ def _structural_facts(document: dict) -> tuple[dict, dict]:
                 quote = normalized_quote(str(el["quote"]))
                 if quote in normalized_quote(joined) and normalized_quote(text) not in quote and quote not in normalized_quote(text):
                     row["status"] = "conflict"
-        by_type[name].append(row)
+        if is_heading_only:
+            # Preserve the mapped heading for diagnostics, but do not let a bare
+            # heading conflict with a substantive synopsis fallback.  If no
+            # fallback exists, it will be reintroduced below as ambiguous rather
+            # than mistaken for a real set of propositions.
+            row["status"] = "ambiguous"
+            heading_only_by_type[name].append(row)
+        elif is_secondary:
+            secondary_by_type[name].append(row)
+        else:
+            by_type[name].append(row)
         element_facts[str(el.get("id"))] = row
+
+    for name, rows in heading_only_by_type.items():
+        if not by_type[name] and rows:
+            by_type[name] = rows
+
+    def informative_goal(row: dict) -> bool:
+        text = " ".join(str(b.get("text") or "") for b in row.get("blocks") or [])
+        text = re.sub(
+            r'^\s*Цель(?:\s+(?:(?:диссертационной\s+)?работы|исследования))?\s*[.:]?\s*',
+            '',
+            text,
+            flags=re.I,
+        ).strip()
+        words = re.findall(r'[А-ЯЁа-яёA-Za-z]{2,}', text)
+        return len(words) >= 5 and len(text) >= 35
+
+    # A common thesis layout contains a substantive goal in the synopsis and a
+    # heading-only ``Цель работы.`` in the main introduction/template.  The
+    # canonical map may intentionally mark the first one as a secondary copy.
+    # A heading is not evidence of the goal itself, so recover one unique,
+    # confirmed substantive secondary goal instead of sending only the heading
+    # to semantic rules such as CORE-6-4.
+    primary_goals = by_type.get("goal") or []
+    if not any(row.get("status") == "found" and informative_goal(row) for row in primary_goals):
+        secondary_goals = [
+            row for row in secondary_by_type.get("goal") or []
+            if row.get("status") == "found" and informative_goal(row)
+        ]
+        distinct_secondary = {
+            normalized_quote(" ".join(str(b.get("text") or "") for b in row.get("blocks") or []))
+            for row in secondary_goals
+        }
+        if len(secondary_goals) == 1 or len(distinct_secondary) == 1:
+            fallback = dict(max(secondary_goals, key=lambda row: float(row.get("confidence") or 0)))
+            fallback["source"] = "document_map_secondary_fallback"
+            fallback["recoveredFromSecondary"] = True
+            fallback["primaryCandidates"] = primary_goals
+            by_type["goal"] = [fallback]
+        elif secondary_goals and primary_goals:
+            for row in primary_goals:
+                row["status"] = "ambiguous"
+                row["fallbackCandidates"] = secondary_goals
 
     facts = {}
     for name, candidates in by_type.items():

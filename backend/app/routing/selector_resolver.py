@@ -75,9 +75,9 @@ def expand_selectors(selectors: list[str], fragments: list[dict]) -> list[str]:
         if selector == 'primary_chapter_conclusions':
             result.extend(item['id'] for item in fragments if item.get('selector') == 'primary_chapter_conclusions')
             continue
-        virtual = next((item for item in fragments if item.get('selector') == selector and item.get('type') == 'virtual'), None)
-        if virtual:
-            result.append(virtual['id'])
+        virtuals = [item for item in fragments if item.get('selector') == selector and item.get('type') == 'virtual']
+        if virtuals:
+            result.extend(item['id'] for item in virtuals)
             continue
         if selector in DIRECT_SELECTORS:
             result.extend(item['id'] for item in fragments if item.get('type') == selector)
@@ -103,6 +103,7 @@ def route_rule(rule: dict, fragments: list[dict], spec: dict | None = None, *, e
         'allowPass': selected_spec.get('allowPass') is not False,
         'reason': selected_spec.get('reason'),
         'explicit': explicit,
+        'aggregationMode': selected_spec.get('aggregationMode'),
     }
     if strategy == 'candidate':
         routed['candidateFamily'] = selected_spec.get('candidateFamily') or rule.get('candidateFamily')

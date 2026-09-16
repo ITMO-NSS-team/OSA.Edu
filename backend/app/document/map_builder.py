@@ -171,7 +171,15 @@ def _parse_relations(value: Any, elements: list[dict[str, Any]]) -> list[dict[st
         for item in elements
         if item.get("type") == "chapter" and item.get("startBlockId")
     }
-    defense = [item for item in elements if item.get("type") == "defense_statements" and item.get("canonicalRole") != "secondary_copy"]
+    defense_candidates = [item for item in elements if item.get("type") == "defense_statements"]
+    defense = [item for item in defense_candidates if item.get("canonicalRole") == "canonical"]
+    if not defense:
+        defense = [item for item in defense_candidates if item.get("canonicalRole") == "fallback_canonical"]
+    if not defense:
+        defense = [
+            item for item in defense_candidates
+            if item.get("canonicalRole") not in {"secondary_copy", "main_heading_only", "conflicting_candidate"}
+        ]
     source_id = defense[0].get("id") if defense else None
     result: list[dict[str, Any]] = []
     seen: set[tuple[int, str]] = set()

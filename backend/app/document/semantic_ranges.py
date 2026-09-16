@@ -18,8 +18,17 @@ def trim_blocks_for_element(element_type: str, blocks: list[dict]) -> list[dict]
             re.compile(r'(?:^|\n|[.!?]\s+)(?:Научная\s+новизна(?:\s+работы)?|Достоверность(?:\s+научных\s+результатов)?|Степень\s+достоверности|Апробация\s+работы|Личный\s+вклад\s+автора|Методологическ\p{L}*\s+основ\p{L}*\s+работы|Практическая\s+значимость(?:\s+работы)?|Теоретическая\s+значимость(?:\s+работы)?|Публикации|Структура\s+и\s+объ[её]м)\s*\.?', re.I)
         ])
     if element_type == "goal":
-        return _trim_between(blocks, re.compile(r'(?:^|\n|[.!?]\s+)Цель\s+(?:диссертационной\s+)?работы\s*\.?', re.I), [
-            re.compile(r'(?:^|\n|[.!?]\s+)Задачи\s+(?:диссертационной\s+)?работы\s*\.?', re.I)
+        # Thesis templates use several equivalent headings: ``Цель``,
+        # ``Цель работы`` and ``Цель исследования``.  Treat the heading as a
+        # delimiter, not as the goal text itself.
+        return _trim_between(blocks, re.compile(
+            r'(?:^|\n|[.!?]\s+)Цель(?:\s+(?:(?:диссертационной\s+)?работы|исследования))?\s*\.?',
+            re.I,
+        ), [
+            re.compile(
+                r'(?:^|\n|[.!?]\s+)Задачи(?:\s+(?:(?:диссертационной\s+)?работы|исследования))?\s*\.?',
+                re.I,
+            )
         ])
     if element_type == "bibliography":
         return _trim_between(blocks, re.compile(r'(?:^|\n)Список\s+(?:использованных\s+)?(?:источников|литературы)\s*\.?', re.I), [

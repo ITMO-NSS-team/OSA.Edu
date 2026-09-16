@@ -56,6 +56,8 @@ def runtime_metadata(rule_id: str) -> dict:
         result['conditionalEvidence'] = dict(engine.conditionalEvidence)
     if engine.literalRequirement:
         result['literalRequirement'] = dict(engine.literalRequirement)
+    if engine.aggregationFacts:
+        result['aggregationFacts'] = [dict(value) for value in engine.aggregationFacts]
     if entry.applicability:
         result['applicability'] = dict(entry.applicability)
     return result

@@ -3,7 +3,7 @@ import regex as re
 from .common import (grounded_check, evidence, contextual, dedupe_evidence, narrative_blocks, result, is_actual_caption,
     is_code_or_prompt, formula_like_block, is_likely_table_context, looks_like_contents)
 from .bibliography import run_bibliography_rule
-from ..document.numbered_items import extract_numbered_items, collect_unique_defense_items
+from ..document.numbered_items import extract_numbered_items, collect_numbered_items, collect_unique_defense_items
 from ..scope import main_work_ids
 
 RULE_FALLBACK={'CORE-1-4':'defense-punctuation','CORE-1-5':'defense-symbols','SOFT-023':'defense-punctuation','SOFT-024':'defense-symbols'}
@@ -191,25 +191,145 @@ def _quote_consistency(rule,document):
     return result(rule,'violation','Обнаружено несколько типов кавычек: '+', '.join(variants)+'.',list(variants.values()),.99,'detector','Выбрать один тип кавычек.')
 
 
+def _starts_numbered_item(text: str) -> bool:
+    return bool(re.match(r'^\s*(?:\(\d{1,3}\)|\d{1,3}[.)])\s+', str(text or '')))
+
+
+def _list_groups(document: dict) -> list[list[dict]]:
+    """Return conservative contiguous numbered-list regions.
+
+    A PDF list item can continue in an ordinary paragraph block on the next
+    page.  Checking each block independently turns such continuations into
+    false punctuation violations.  Group only blocks that are explicitly
+    typed as lists, plus a paragraph continuation when the previous list block
+    visibly ends mid-sentence.  Headings/formulas/captions terminate a group.
+    """
+    scope_ids = main_work_ids(document)
+    # Preserve every source block as a potential boundary.  Do not reuse the
+    # Cyrillic-language filter from ``narrative_blocks`` here: a Russian list
+    # item may continue with an English title (for example a publication), and
+    # dropping that continuation falsely makes the previous block look like an
+    # unfinished item.
+    blocks = list(document.get('blocks') or [])
+    groups: list[list[dict]] = []
+    i = 0
+    while i < len(blocks):
+        block = blocks[i]
+        text = str(block.get('text') or '')
+        block_id = str(block.get('id'))
+        in_scope = scope_ids is None or block_id in scope_ids
+        if (not in_scope or block.get('type') != 'list' or not _starts_numbered_item(text)
+                or looks_like_contents(text) or is_code_or_prompt(text)):
+            i += 1
+            continue
+        group = [block]
+        j = i + 1
+        while j < len(blocks):
+            nxt = blocks[j]
+            nxt_text = str(nxt.get('text') or '')
+            nxt_id = str(nxt.get('id'))
+            if scope_ids is not None and nxt_id not in scope_ids:
+                break
+            if looks_like_contents(nxt_text) or is_code_or_prompt(nxt_text):
+                break
+            if nxt.get('type') == 'list' and _starts_numbered_item(nxt_text):
+                group.append(nxt)
+                j += 1
+                continue
+            prev_text = str(group[-1].get('text') or '').rstrip()
+            # PyMuPDF can split one list item at a page boundary.  A paragraph
+            # immediately after an unfinished list block is part of that item.
+            if (nxt.get('type') == 'paragraph'
+                    and prev_text
+                    and not re.search(r'[.!?;:]\s*$', prev_text)
+                    and not looks_like_contents(nxt_text)):
+                group.append(nxt)
+                j += 1
+                continue
+            break
+        groups.append(group)
+        i = max(j, i + 1)
+    return groups
+
+
+def _item_evidence(item: dict, *, ending: bool = False) -> dict:
+    source = item.get('endSource') if ending else item.get('source')
+    source = source or item.get('source') or item.get('block') or {}
+    source_blocks = item.get('sourceBlockIds') or []
+    full = str(item.get('full') or item.get('body') or '')
+    # A multi-block quote does not literally occur inside either source block.
+    # Keep evidence grounded by quoting the actual boundary block instead.
+    quote = full if len(source_blocks) <= 1 and full in str(source.get('text') or '') else str(source.get('text') or '')
+    return evidence(source, quote)
+
+
+def _math_property_item(item: dict) -> bool:
+    """Exclude numbered mathematical identities from prose-list punctuation rules."""
+    body = str(item.get('body') or '').strip()
+    head = body[:120]
+    return bool(
+        re.search(r'[=≈≤≥∈∉⊂∑∫√]', head)
+        and (re.match(r'^[^А-ЯЁа-яё]{0,8}[A-Za-zΑ-Ωα-ωΦφΘθΛλ𝒜-𝓏]', head) or len(re.findall(r'[=≈≤≥∈∉⊂∑∫√]', head)) >= 2)
+    )
+
+
+def _bibliographic_item(item: dict) -> bool:
+    body = str(item.get('body') or '')
+    return bool(re.search(r'\bdoi\s*:|https?://|\bISBN\b|\s//\s', body, re.I))
+
+
+_NON_SENTENCE_DOT_TAIL = re.compile(
+    r'(?:\b(?:т|т\s*е|т\s*к|т\s*ч|т\s*д|т\s*п|рис|табл|стр|гл|им|см|англ|лат|ред|др|проф|доц|акад|и\s*т\s*д|и\s*т\s*п)\.|'
+    r'\b[А-ЯЁA-ZА-ЯЁа-яё]\.|\b(?:п|г|гг|ст|науч|сотр|рис|табл|стр|гл|им|см|англ|лат|ред|др|проф|доц|акад)\.|\b(?:e\.g|i\.e)\.)\s*$', re.I
+)
+
+
+def _lowercase_after_sentence_dot(block: dict) -> list[dict]:
+    """Find only high-confidence sentence boundaries followed by lowercase.
+
+    We deliberately exclude abbreviations/initials.  This extends CORE-3-3 to
+    ordinary prose without bringing back the old false positive for ``1)``.
+    """
+    text=str(block.get('text') or '')
+    found=[]
+    for match in re.finditer(r'(?P<dot>[.!?])(?P<space>\s+)[«"“(]*?(?P<letter>[а-яё])', text):
+        prefix=text[max(0, match.start()-28):match.start()+1]
+        if match.group('dot') == '.' and _NON_SENTENCE_DOT_TAIL.search(prefix):
+            continue
+        right=text[match.end('space'):match.end('space')+24]
+        # A lowercase abbreviation such as ``п. 8`` immediately after a
+        # sentence-ending full stop is not itself a lowercase sentence start.
+        if re.match(r'[«"“(]*(?:п|г|гг|ст|рис|табл|стр|гл|им|см|англ|лат|ред|др|проф|доц|акад)\.(?:\s|\d)', right, re.I):
+            continue
+        # Decimal/version/citation punctuation is not a sentence boundary.
+        if re.search(r'\d\.\s*$', prefix) and re.search(r'\d', text[max(0,match.start()-4):match.start()]):
+            continue
+        quote=contextual(text, match.start(), len(match.group(0)), before=90, after=100)
+        if formula_like_block(quote) or is_likely_table_context(quote):
+            continue
+        found.append(evidence(block, quote))
+    return found
+
+
 def _list_cap(rule,document):
+    """CORE-3-3: check list-dot markers *and* all prose sentence boundaries."""
     ev=[]
-    for b in narrative_blocks(document):
-        text=b.get('text','')
-        if re.search(r'\bАлгоритм\s*:',text,re.I) or formula_like_block(text): continue
-        # PDF/DOCX lists occur as ``1.``, ``1)`` and ``(1)``.  The previous
-        # detector only handled the first form, which systematically missed
-        # lower-case list items in otherwise correctly extracted list blocks.
-        # Reuse the canonical numbered-item parser instead of maintaining a
-        # second, narrower marker grammar here.
-        for item in extract_numbered_items(text):
+    for group in _list_groups(document):
+        for item in collect_numbered_items(group):
+            if item.get('markerKind') != 'dot':
+                continue
             body=str(item.get('body') or '').lstrip(' «"“(').lstrip()
             if not body or not re.match(r'^[а-яё]',body):
                 continue
-            q=str(item.get('full') or item.get('body') or '')
-            if is_likely_table_context(q): continue
-            ev.append(evidence(b,q))
-    return result(rule,'violation','Нумерованный пункт начинается со строчной буквы.',dedupe_evidence(ev)[:12],1,'detector','Начать пункт с прописной буквы.') if ev else result(rule,'pass','Высокоуверенные случаи начала нумерованного пункта со строчной буквы не обнаружены.',confidence=1)
-
+            if _math_property_item(item) or _bibliographic_item(item):
+                continue
+            ev.append(_item_evidence(item))
+    for block in narrative_blocks(document):
+        ev.extend(_lowercase_after_sentence_dot(block))
+    ev=dedupe_evidence(ev)[:12]
+    if ev:
+        return result(rule,'violation','После точки/границы предложения обнаружено начало со строчной буквы.',ev,1,'detector','После точки начать новое предложение с прописной буквы.')
+    return result(rule,'pass','Во всей назначенной текстовой области не обнаружены высокоуверенные случаи строчной буквы после точки/границы предложения.',confidence=1)
 
 def _forbidden_abbreviations(rule,document):
     """Check CORE-11-3 without confusing ordinary word endings with ``т. е.``.
@@ -240,17 +360,29 @@ def _forbidden_abbreviations(rule,document):
 
 def _list_ending(rule,document,numbered=True):
     ev=[]
-    for b in narrative_blocks(document):
-        if re.search(r'\bАлгоритм\s*:',b.get('text',''),re.I) or formula_like_block(b.get('text','')): continue
-        if numbered:
-            for item in extract_numbered_items(b['text']):
-                if not item['body'].rstrip().endswith('.') or (rule['id']=='SOFT-030' and not re.match(r'^\p{Lu}', item['body'].lstrip())): ev.append(evidence(b,item['full']))
-        else:
+    if numbered:
+        # Parse a structural list as a region rather than treating every PDF
+        # block as a complete item. This keeps page-split items together.
+        for group in _list_groups(document):
+            if any(re.search(r'\bАлгоритм\s*:', str(b.get('text') or ''), re.I) for b in group):
+                continue
+            for item in collect_numbered_items(group):
+                if _math_property_item(item) or _bibliographic_item(item):
+                    continue
+                body=str(item.get('body') or '').rstrip()
+                bad_end = not body.endswith('.')
+                bad_cap = rule['id']=='SOFT-030' and not re.match(r'^\p{Lu}', body.lstrip())
+                if bad_end or bad_cap:
+                    ev.append(_item_evidence(item, ending=True))
+    else:
+        for b in narrative_blocks(document):
+            if re.search(r'\bАлгоритм\s*:',b.get('text',''),re.I) or formula_like_block(b.get('text','')):
+                continue
             for line in b['text'].splitlines():
                 line=line.strip()
-                if re.match(r'^(?:[-–—•]|\d+\))\s+',line) and not re.search(r'[.;]$',line): ev.append(evidence(b,line))
+                if re.match(r'^(?:[-–—•]|\d+\))\s+',line) and not re.search(r'[.;]$',line):
+                    ev.append(evidence(b,line))
     return result(rule,'violation','Обнаружено нарушение окончания пункта списка.',dedupe_evidence(ev)[:12],1,'detector','Исправить окончания пунктов.') if ev else result(rule,'pass','Явных нарушений окончания пунктов не обнаружено.',confidence=1)
-
 
 def _small_numerals(rule,document):
     patterns=[
@@ -287,14 +419,39 @@ def _defense(rule,document,punctuation=True):
     for item in items:
         text = item['text']
         symbols = bool(re.search(r'[=≈≤≥∑∫√±∞∈∉⊂]|\\(?:frac|sum|int)\b', text))
-        tokens = re.findall(r'(?<![\p{L}\p{N}_])[A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9@_-]+(?![\p{L}\p{N}_])', text)
+        raw_tokens = re.findall(r'(?<![\p{L}\p{N}_])[A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9@_-]+(?![\p{L}\p{N}_])', text)
+        tokens = [token for token in raw_tokens if token.isupper() or sum(ch.isupper() for ch in token) >= 2]
         listed = any(notation_classification(document.get('factStore'), token) == 'yes' for token in tokens)
         if symbols or listed:
             ev.append(evidence(item['source'], f"{item['number']}. {text}"))
     if ev:
         return result(rule, 'violation', 'В положениях найдены явные математические символы или сокращения из общей карты обозначений.',
                       dedupe_evidence(ev)[:12], .98, 'detector', 'Раскрыть обозначения словами.')
-    return result(rule, 'uncertain', 'Классификация всех обозначений в положениях не подтверждена; регистр букв и десятичные числа сами по себе не доказывают нарушение.')
+    # No symbolic candidate at all is itself exhaustive deterministic evidence.
+    # If candidates exist, only unresolved classifications keep the rule manual.
+    unresolved=[]
+    for item in items:
+        for token in re.findall(r'(?<![\p{L}\p{N}_])[A-ZА-ЯЁ][A-Za-zА-ЯЁа-яё0-9@_-]+(?![\p{L}\p{N}_])', item['text']):
+            if not (token.isupper() or sum(ch.isupper() for ch in token) >= 2):
+                continue
+            state=notation_classification(document.get('factStore'), token)
+            if state not in {'no', 'not_applicable'}:
+                unresolved.append(token)
+    if unresolved:
+        return result(rule, 'uncertain', 'В положениях остаются обозначения с неоднозначной классификацией: ' + ', '.join(sorted(set(unresolved))) + '.')
+    return result(rule, 'pass', f'Все {len(items)} положения полностью просмотрены: аббревиатуры, математические обозначения и формулы не обнаружены.', confidence=1)
+
+
+def _block_has_rich_pdf_layout(block: dict) -> bool:
+    lines=block.get('lines')
+    return bool(isinstance(lines,list) and any(isinstance(line,dict) and line.get('spans') for line in lines))
+
+
+def _rich_pdf_layout_coverage(document: dict) -> float:
+    blocks=narrative_blocks(document)
+    total=sum(max(1,len(str(b.get('text') or ''))) for b in blocks)
+    rich=sum(max(1,len(str(b.get('text') or ''))) for b in blocks if _block_has_rich_pdf_layout(b))
+    return rich / total if total else 0.0
 
 
 def _spacing(rule,document):
@@ -305,14 +462,19 @@ def _spacing(rule,document):
             q=contextual(b['text'],m.start(),len(m.group()))
             if not is_likely_table_context(q): percents.append(evidence(b,q))
     if initials: return result(rule,'violation','Обнаружено написание инициалов без пробела перед фамилией.',dedupe_evidence(initials)[:12],1,'detector','Добавить пробел.')
-    if percents and document.get('sourceFormat')=='pdf': return result(rule,'uncertain','В PDF знак процента местами прилегает к числу; текстовый слой может терять пробелы.',dedupe_evidence(percents)[:8],0,'detector')
-    if percents: return result(rule,'violation','Обнаружено число без пробела перед знаком процента.',dedupe_evidence(percents)[:12],1,'detector','Добавить неразрывный пробел.')
-    return _dash(rule, document)
+    if percents:
+        if document.get('sourceFormat')!='pdf' or _rich_pdf_layout_coverage(document) >= .85:
+            return result(rule,'violation','Обнаружено число без пробела перед знаком процента.',dedupe_evidence(percents)[:12],1,'detector','Добавить неразрывный пробел.')
+        return result(rule,'uncertain','В legacy PDF знак процента местами прилегает к числу, но геометрия пробелов недоступна.',dedupe_evidence(percents)[:8],0,'detector')
+    dash=_dash(rule, document)
+    if dash.get('status')=='pass' and document.get('sourceFormat')=='pdf' and _rich_pdf_layout_coverage(document) < .85:
+        return result(rule,'uncertain','Явных нарушений пробелов не найдено, но legacy PDF не содержит достаточно геометрии для полного подтверждения.',confidence=0)
+    return dash
 
 
 def _dash(rule,document):
     ev=[]
-    patterns=[r'(?<=\p{L})\s-\s(?=\p{L})',r'(?<=\p{L})[—–](?=\p{L})',r'(?<=\p{L})\s+[—–](?=\p{L})',r'(?<=\p{L})[—–]\s+(?=\p{L})',r'(?<=\p{L})--(?=\p{L})']
+    patterns=[r'(?<=\p{L})\s-\s(?=\p{L})',r'(?<=\p{L})\s+[—–](?=\p{L})',r'(?<=\p{L})[—–]\s+(?=\p{L})',r'(?<=\p{L})--(?=\p{L})']
     for b in narrative_blocks(document):
         for p in patterns:
             for m in re.finditer(p,b['text']):
@@ -321,8 +483,9 @@ def _dash(rule,document):
                 ev.append(evidence(b,q))
     ev=dedupe_evidence(ev)[:12]
     if not ev: return result(rule,'pass','Высокоуверенные нарушения различия тире и дефиса не обнаружены.',confidence=.98)
-    if document.get('sourceFormat')=='pdf': return result(rule,'uncertain','В PDF найдены возможные нарушения тире, но извлечение может терять пробелы.',ev,0,'detector')
-    return result(rule,'violation','В DOCX обнаружено тире без требуемых пробелов либо дефис вместо тире.',ev,1,'detector','Использовать среднее тире «–» с пробелами.')
+    if document.get('sourceFormat')=='pdf' and _rich_pdf_layout_coverage(document) < .85:
+        return result(rule,'uncertain','В legacy PDF найдены возможные нарушения тире, но геометрия пробелов недоступна.',ev,0,'detector')
+    return result(rule,'violation','Обнаружено тире без требуемых пробелов либо дефис вместо тире; пробелы подтверждены структурой исходного документа.',ev,1,'detector','Использовать среднее тире «–» с пробелами.')
 
 
 def _generic(rule,document,detector):

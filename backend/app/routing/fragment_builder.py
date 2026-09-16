@@ -8,6 +8,7 @@ rule metadata or normative decisions.
 
 import regex as re
 
+from ..config import env_int
 from ..document.chapter_linker import infer_result_kind
 from ..document.semantic_model import build_semantic_document, resolve_statement_chapter_roles
 from ..document.semantic_ranges import trim_blocks_for_element
@@ -24,6 +25,100 @@ def _unique_blocks(blocks: list[dict]) -> list[dict]:
     return result
 
 
+def _block_token_cost(block: dict) -> int:
+    """Cheap model-independent estimate used only for scope partitioning.
+
+    The actual LLM client still computes the final request estimate.  This helper
+    prevents one huge thesis fragment from being truncated while keeping every
+    source block in at least one chunk.
+    """
+    chars_per_token = max(1, env_int("LLM_CHARS_PER_TOKEN", 3))
+    text = str(block.get("text") or "")
+    # Reserve a little room for BLOCK id/page/type headers emitted by _message.
+    return max(1, (len(text) + chars_per_token - 1) // chars_per_token) + 18
+
+
+def _chunk_full_scope_blocks(blocks: list[dict]) -> list[list[dict]]:
+    """Partition a complete semantic scope without dropping blocks.
+
+    Unlike the old chapter summary sampler this is exhaustive.  A small overlap
+    preserves local continuity at chunk boundaries, while the union of chunk
+    block ids is guaranteed to equal the source scope.
+    """
+    source = _unique_blocks(blocks)
+    if not source:
+        return []
+    max_tokens = max(2_000, env_int("FULL_SCOPE_CHUNK_MAX_INPUT_TOKENS", 12_000))
+    overlap = max(0, min(4, env_int("FULL_SCOPE_CHUNK_OVERLAP_BLOCKS", 2)))
+    chunks: list[list[dict]] = []
+    current: list[dict] = []
+    current_tokens = 0
+
+    for block in source:
+        cost = _block_token_cost(block)
+        if current and current_tokens + cost > max_tokens:
+            chunks.append(current)
+            carry = current[-overlap:] if overlap else []
+            current = list(carry)
+            current_tokens = sum(_block_token_cost(item) for item in current)
+        current.append(block)
+        current_tokens += cost
+    if current:
+        chunks.append(current)
+
+    # Defensive invariant: exhaustive scope means every source block is present.
+    source_ids = {str(block.get("id")) for block in source if block.get("id")}
+    chunk_ids = {str(block.get("id")) for chunk in chunks for block in chunk if block.get("id")}
+    if source_ids != chunk_ids:
+        raise RuntimeError("Full-scope chunker lost source blocks.")
+    return chunks
+
+
+def _append_full_scope_chunks(
+    fragments: list[dict],
+    *,
+    selector: str,
+    label: str,
+    source: list[dict],
+    blocks: list[dict],
+    semantic_context: str,
+) -> None:
+    """Create multiple virtual fragments that collectively cover a scope.
+
+    ``complete`` on every chunk means the declared source scope itself is
+    confirmed by the Document Map; the final rule becomes exhaustive only after
+    every chunk has also returned a usable result.
+    """
+    unique = _unique_blocks(blocks)
+    if not unique:
+        return
+    scope_complete = bool(source) and all(bool(item.get("complete")) for item in source)
+    chunks = _chunk_full_scope_blocks(unique)
+    source_ids = {str(block.get("id")) for block in unique if block.get("id")}
+    for index, chunk in enumerate(chunks, start=1):
+        chunk_ids = {str(block.get("id")) for block in chunk if block.get("id")}
+        fragments.append({
+            "id": f"virtual-{selector}-{index}",
+            "type": "virtual",
+            "selector": selector,
+            "label": f"{label} — часть {index}/{len(chunks)}",
+            "blocks": chunk,
+            "complete": scope_complete,
+            "fullScopeChunk": True,
+            "scopeChunkIndex": index,
+            "scopeChunkCount": len(chunks),
+            "scopeBlockCount": len(source_ids),
+            "scopeChunkBlockCount": len(chunk_ids),
+            "semanticContext": (
+                f"{semantic_context}\n"
+                f"Это часть {index} из {len(chunks)} полного обязательного scope. "
+                "Все части вместе покрывают scope без выборочного sampling. "
+                "Не делай вывод об отсутствии факта во всём документе только по этой части; "
+                "собери точные evidence из BLOCK для финальной агрегации."
+            ),
+        })
+
+
 def build_fragments(document: dict, map_value: dict) -> list[dict]:
     blocks = document.get("blocks", [])
     semantic_document = build_semantic_document(document, map_value)
@@ -37,7 +132,7 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
         # Goal/tasks/defence can occur twice in combined synopsis+thesis PDFs.
         # The map keeps secondary copies visible for transparency, but routing
         # must use only the canonical main-work copy.
-        if element.get("type") in {"goal", "tasks", "defense_statements"} and element.get("canonicalRole") == "secondary_copy":
+        if element.get("type") in {"goal", "tasks", "defense_statements"} and element.get("canonicalRole") in {"secondary_copy", "main_heading_only"}:
             continue
         start = block_index.get(element.get("startBlockId"))
         end = block_index.get(element.get("endBlockId"))
@@ -57,6 +152,9 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
             "label": element.get("label") or element.get("type", "other"),
             "blocks": selected,
             "complete": element_fact.get('status') == 'found' if element_fact else element.get("state") == "confirmed",
+            "canonicalRole": element.get("canonicalRole"),
+            "documentUnit": element.get("documentUnit"),
+            "secondaryFallback": element.get("canonicalRole") == "fallback_canonical",
         })
 
     def by_type(element_type: str) -> list[dict]:
@@ -89,10 +187,14 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
         })
 
     title = by_type("title")
+    abstract = by_type("abstract")
     introduction = by_type("introduction")
     goal = by_type("goal")
     tasks = by_type("tasks")
     defense = by_type("defense_statements")
+    # A synopsis fallback is valid evidence for defence-specific rules, but it
+    # must not silently expand the broad scientific/main-text scope.
+    defense_main_scope = [item for item in defense if not item.get("secondaryFallback")]
     chapters = by_type("chapter")
     explicit_conclusions = by_type("chapter_conclusions")
     conclusion = by_type("conclusion")
@@ -136,7 +238,7 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
         complete=bool(title and goal and all(x.get('complete') for x in [*title, *goal])),
     )
 
-    scientific_source = [*title, *introduction, *goal, *tasks, *defense, *chapters, *conclusion]
+    scientific_source = [*title, *introduction, *goal, *tasks, *defense_main_scope, *chapters, *conclusion]
     scientific_blocks = [
         *_flatten_blocks(title),
         *_flatten_blocks(introduction),
@@ -150,6 +252,23 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
             and block.get("type") not in {"bibliography", "toc"}
         ]
     add_virtual("scientific_core", "Научное ядро работы", scientific_source, scientific_blocks, bool(scientific_blocks))
+
+    # Quality-first exhaustive scope for document-level semantic rules.  Keep the
+    # historical sampled scientific_core for other rules, but CORE-2-1/2-2/4-4
+    # route to these chunks so no chapter blocks are silently omitted.
+    scientific_full_source = [*title, *abstract, *introduction, *goal, *tasks, *defense_main_scope, *chapters, *conclusion]
+    scientific_full_blocks = _flatten_blocks(scientific_full_source)
+    _append_full_scope_chunks(
+        fragments,
+        selector="scientific_full_scope",
+        label="Полное научное содержание работы",
+        source=scientific_full_source,
+        blocks=scientific_full_blocks,
+        semantic_context=(
+            "Полная обязательная область для глобального смыслового правила: название, "
+            "аннотация/реферат (если размечены), введение, цель, задачи, положения, все главы и заключение."
+        ),
+    )
 
     defense_chapter_blocks = [
         *_flatten_blocks(defense),
@@ -307,6 +426,20 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
         semanticContext=(
             "Передан широкий структурный контекст введения, всех глав и заключения без "
             "лексического pre-filter. Наличие внедрения/использования определяет semantic engine."
+        ),
+    )
+
+    implementation_full_source = [*abstract, *introduction, *chapters, *conclusion]
+    _append_full_scope_chunks(
+        fragments,
+        selector="implementation_full_scope",
+        label="Полная область внедрения и практического использования",
+        source=implementation_full_source,
+        blocks=_flatten_blocks(implementation_full_source),
+        semantic_context=(
+            "Полный структурный scope для проверки внедрения/использования: аннотация/реферат "
+            "(если размечены), введение, все главы и заключение. Ищи конкретные организации, "
+            "сроки, реквизиты подтверждающих документов и адреса/идентификаторы открытого ПО."
         ),
     )
     return fragments

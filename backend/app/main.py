@@ -844,4 +844,10 @@ def _sanitize(value: str) -> str:
 
 
 def _error(status: int, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status, content={"error": message})
+    # Explicit charset keeps Cyrillic readable when an error endpoint is opened
+    # directly in a browser (for example when PDF generation fails).
+    return JSONResponse(
+        status_code=status,
+        content={"error": message},
+        media_type="application/json; charset=utf-8",
+    )

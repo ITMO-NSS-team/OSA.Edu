@@ -225,7 +225,13 @@ def _fragment_decision(rule_id: str, matrix: dict | None) -> tuple[str, list[str
             fact = str(step.get("fact") or "")
             if fact not in statuses or statuses.get(fact) != str(step.get("value") or ""):
                 continue
-            if fact in precision_ambiguous and str(step.get("value") or "") == "ambiguous":
+            value = str(step.get("value") or "")
+            requested_status = str(step.get("status") or "uncertain")
+            # ``ambiguous`` is epistemic uncertainty: the extractor could not
+            # establish the fact from the assigned scope. It is never proof of
+            # absence or of a normative defect. A violation needs a grounded
+            # document state such as ``not_found`` after complete coverage.
+            if value == "ambiguous" and (fact in precision_ambiguous or requested_status == "violation"):
                 return "uncertain", [fact]
             details = [fact]
             for dependent in step.get("includeIfNotFoundOrAmbiguous") or []:

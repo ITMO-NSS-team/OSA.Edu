@@ -46,13 +46,13 @@ def unique(items: Iterable[str]) -> list[str]:
 
 
 def empty_usage() -> dict[str, Any]:
-    return {'requests':0,'retries':0,'packets':0,'candidates':0,'estimatedInputTokens':0,'rateLimitWaitMs':0,'requestDurationMs':0,'diagnostics':[],'traces':[]}
+    return {'requests':0,'retries':0,'transportRetries':0,'structuredOutputRepairAttempts':0,'structuredOutputRepairs':0,'structuredOutputResends':0,'packets':0,'candidates':0,'estimatedInputTokens':0,'rateLimitWaitMs':0,'requestDurationMs':0,'diagnostics':[],'traces':[]}
 
 
 def merge_usage(target: dict[str, Any], value: dict[str, Any] | None) -> None:
     if not value:
         return
-    for key in ('requests','retries','packets','candidates','estimatedInputTokens','rateLimitWaitMs','requestDurationMs'):
+    for key in ('requests','retries','transportRetries','structuredOutputRepairAttempts','structuredOutputRepairs','structuredOutputResends','packets','candidates','estimatedInputTokens','rateLimitWaitMs','requestDurationMs'):
         target[key] = int(target.get(key, 0)) + int(value.get(key, 0))
     target.setdefault('diagnostics', []).extend(value.get('diagnostics') or [])
     target.setdefault('traces', []).extend(value.get('traces') or [])

@@ -232,7 +232,12 @@ def _structure_section(document_map: dict[str, Any] | None, styles: dict[str, Pa
             state = "; требует проверки" if item.get("state") == "ambiguous" else ""
             rows.append([
                 _p(str(item.get("type", "")), styles["table_cell"]),
-                _p(str(item.get("label", "")) + (" [вторичная копия]" if item.get("canonicalRole") == "secondary_copy" else ""), styles["table_cell"]),
+                _p(
+                    str(item.get("label", ""))
+                    + (" [вторичная копия]" if item.get("canonicalRole") == "secondary_copy" else "")
+                    + (" [использована копия из реферата]" if item.get("canonicalRole") == "fallback_canonical" else ""),
+                    styles["table_cell"],
+                ),
                 _p(f"{item.get('startBlockId', '')} - {item.get('endBlockId', '')}{pages_text}{state}", styles["table_cell"]),
             ])
         table = LongTable(rows, colWidths=[34 * mm, 88 * mm, 52 * mm], repeatRows=1)
@@ -315,7 +320,7 @@ def _rule_result(result: dict[str, Any], rule: dict[str, Any] | None, styles: di
     if matrix:
         rows = [[_p("Фрагмент", styles["table_head"]), _p("Блоки", styles["table_head"]), _p("Полнота", styles["table_head"]), _p("Элементы", styles["table_head"])]]
         for row in matrix:
-            elements = "; ".join(f"{item.get('name')}: {_MATRIX_LABELS.get(str(item.get('status')), str(item.get('status')))}" for item in row.get("items", []) or [])
+            elements = "; ".join(f"{item.get('label') or item.get('name')}: {_MATRIX_LABELS.get(str(item.get('status')), str(item.get('status')))}" for item in row.get("items", []) or [])
             rows.append([
                 _p(str(row.get("label", "")), styles["table_cell"]),
                 _p(f"{row.get('checkedBlocks', 0)}/{row.get('totalBlocks', 0)}", styles["table_cell"]),
@@ -378,7 +383,7 @@ def _rule_result(result: dict[str, Any], rule: dict[str, Any] | None, styles: di
 def _technical_section(report: dict[str, Any], profile: str | None, styles: dict[str, ParagraphStyle]) -> list[Any]:
     technical = report.get("technical", {}) or {}
     usage = report.get("llmUsage", {}) or {}
-    routing = report.get("routing", {}) or {}
+    routing = report.get("../../../../../Downloads/OSA.Edu-defense-secondary-fallback/backend/app/routing", {}) or {}
     rows = [
         ["Версия приложения", technical.get("appVersion", "")],
         ["Провайдер API", technical.get("provider", "")],
@@ -388,6 +393,8 @@ def _technical_section(report: dict[str, Any], profile: str | None, styles: dict
         ["Хеш промпта структуры", technical.get("mapPromptHash") or "-"],
         ["Физических запросов", usage.get("requests", 0)],
         ["Повторных попыток", usage.get("retries", 0)],
+        ["Transport retries", usage.get("transportRetries", 0)],
+        ["JSON repair", f"попыток {usage.get('structuredOutputRepairAttempts', 0)}; успешно {usage.get('structuredOutputRepairs', 0)}; полных resend {usage.get('structuredOutputResends', 0)}"],
         ["Оценочно входных токенов", usage.get("estimatedInputTokens", 0)],
         ["Ожидание rate limiter", f"{round(float(usage.get('rateLimitWaitMs', 0) or 0) / 1000)} с"],
         ["Время запросов к модели", f"{round(float(usage.get('requestDurationMs', 0) or 0) / 1000)} с"],

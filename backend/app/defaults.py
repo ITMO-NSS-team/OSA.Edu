@@ -23,6 +23,7 @@ MODELS = [
     {'id':'z-ai/glm-5.3-flash','label':'GLM 5.3 Flash · production','provider':'openrouter','tier':'production','contextTokens':1_310_720,'note':'Быстрый production-вариант с большим контекстом; подходит для проверки ВКР и литературы.'},
     {'id':'google/gemini-2.5-flash','label':'Gemini 2.5 Flash · production','provider':'openrouter','tier':'production','contextTokens':1_000_000,'note':'Экономичный production-вариант.'},
     {'id':'openai/gpt-5.5','label':'GPT-5.5 · premium production','provider':'openrouter','tier':'production','contextTokens':1_000_000,'note':''},
+{'id':'openai/gpt-5.6-luna','label':'GPT-5.6 Luna · production','provider':'openrouter','tier':'production','contextTokens':1_050_000,'note':'Экономичная модель OpenAI для проверки ВКР.'},
 ]
 
 

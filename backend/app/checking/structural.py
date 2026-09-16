@@ -78,8 +78,15 @@ def _positions_chapters(rule,document,routing_fragments=None):
 
 
 def _defense_section(rule,document):
-    element=next((x for x in (document.get('map') or {}).get('elements',[]) if x.get('type')=='defense_statements'),None)
+    elements=[x for x in (document.get('map') or {}).get('elements',[]) if x.get('type')=='defense_statements']
+    element=next((x for x in elements if x.get('canonicalRole')=='canonical'),None)
+    if element is None:
+        element=next((x for x in elements if x.get('canonicalRole')=='fallback_canonical'),None)
+    if element is None:
+        element=next((x for x in elements if x.get('canonicalRole') not in {'secondary_copy','main_heading_only','conflicting_candidate'}),None)
     if not element or not document.get('fields',{}).get('defenseStatements'): return _uncertain(rule, 'Раздел положений не извлечён надёжно; отсутствие диапазона не доказывает отсутствие раздела.')
+    if element.get('canonicalRole') == 'fallback_canonical':
+        return _uncertain(rule,'Содержательные положения взяты из подтверждённой копии в реферате, потому что в основном введении найден только заголовок раздела. Смысловое требование внутри каждого положения проверяется по этой копии.')
     return _uncertain(rule,'Отдельный раздел с положениями распознан, но указание научной новизны или практической значимости внутри каждого положения требует смысловой проверки.')
 
 
@@ -204,25 +211,108 @@ def _caption_format(rule,document):
     return _violation(rule,'Подпись рисунка или название таблицы заканчивается точкой.',ev[:15],'Убрать точку в конце подписи или названия.') if ev else _uncertain(rule,'Точки в конце подписей не обнаружены, но положение подписи относительно объекта по текстовому слою не проверяется.')
 
 
+_EQ_LABEL_RE = re.compile(r'\((?P<num>\d+(?:\.\d+)+)\)')
+_EQ_LABEL_ONLY_RE = re.compile(r'^\s*\(\d+(?:\.\d+)+\)\s*$')
+
+
+def _equation_labels(block: dict) -> list[re.Match]:
+    return list(_EQ_LABEL_RE.finditer(str(block.get('text') or '')))
+
+
+def _formula_label_nearby(blocks: list[dict], index: int) -> bool:
+    """Whether a formula extraction fragment belongs to a numbered equation.
+
+    PyMuPDF frequently splits a displayed system into numerator/denominator or
+    puts the right-aligned equation number in a neighbouring block.  A two-block
+    window on the same page joins those fragments without pretending every
+    mathematical glyph run is a separate formula.
+    """
+    page=blocks[index].get('page')
+    if _equation_labels(blocks[index]):
+        return True
+    for j in range(max(0,index-2), min(len(blocks),index+3)):
+        if j == index or blocks[j].get('page') != page:
+            continue
+        if _equation_labels(blocks[j]):
+            # Do not jump across a heading/caption/table boundary.
+            lo,hi=sorted((index,j))
+            between=blocks[lo+1:hi]
+            if not any(x.get('type') in {'heading','caption','table'} for x in between):
+                return True
+    return False
+
+
 def _formula_numbering(rule,document):
-    formulas=[b for b in _main_work_blocks(document) if b.get('type')=='formula']
+    blocks=_main_work_blocks(document)
+    formulas=[(i,b) for i,b in enumerate(blocks) if b.get('type')=='formula']
     if not formulas: return _na(rule,'Формулы в извлечённом тексте не распознаны.')
-    bad=[]; numbered=0
-    for b in formulas:
-        t=b.get('text','').strip()
-        # A formula number is a parenthesized integer/section number aligned at
-        # the end of the formula block. Parentheses inside expressions such as
-        # s(1), x(2) or {s(1), ..., s(N)} are indices/arguments, not numbering.
-        if re.search(r'\(\d+(?:\.\d+)*\)\s*$', t):
-            numbered += 1
-        if re.search(r'\(\d+(?:\.\d+)*\)\s*[.,;:]\s*$', t):
-            bad.append(evidence(b,t[:450]))
-    return _violation(rule,'В том же извлечённом блоке знак препинания расположен после номера формулы.',bad,'Перенести знак перед номером формулы.') if bad else _uncertain(rule,f'Распознано формул: {len(formulas)}; в тех же блоках найдено номеров: {numbered}. Отсутствие или расположение остальных номеров требует просмотра PDF.')
+    labels=[(b,m) for b in blocks for m in _equation_labels(b)]
+    if not labels:
+        return _uncertain(rule,'Формулы распознаны, но ни одного надёжного номера формулы в круглых скобках извлечь не удалось.')
+    bad=[]
+    for b,m in labels:
+        tail=str(b.get('text') or '')[m.end():]
+        # Punctuation belongs before an equation number. Whitespace followed by
+        # ``где`` or prose is allowed; a punctuation character immediately
+        # after the label is a direct violation.
+        if re.match(r'\s*[.,;:]', tail):
+            bad.append(evidence(b,contextual(str(b.get('text') or ''),m.start(),len(m.group()))))
+    if bad:
+        return _violation(rule,'Обнаружен знак препинания после номера формулы; по правилу он должен стоять до номера.',dedupe_evidence(bad)[:15],'Перенести знак препинания перед номером формулы.')
+
+    unlinked=[b for i,b in formulas if not _formula_label_nearby(blocks,i)]
+    # Short glyph-only fragments are usually a denominator/continuation split by
+    # PDF extraction, not independent displayed formulae.
+    meaningful=[]
+    for b in unlinked:
+        text=str(b.get('text') or '').strip()
+        if len(text) <= 45 and len(re.findall(r'[А-ЯЁа-яё]{3,}',text)) <= 1:
+            continue
+        # A flattened list definition can be misclassified as formula.
+        if re.match(r'^\s*[—–-]|^\s*\d+[.)]\s+',text):
+            continue
+        meaningful.append(b)
+    if meaningful:
+        return _uncertain(rule,f'Нумерация и положение знака подтверждены для {len(labels)} извлечённых номеров, но {len(meaningful)} формульных регион(а/ов) не удалось однозначно связать с номером.',)
+    return _pass(rule,f'Все надёжно распознанные формульные регионы связаны с номером в круглых скобках ({len(labels)} номеров); знаков препинания после номера не обнаружено.')
 
 
 def _formula_explanation(rule,document):
-    formulas=[b for b in _main_work_blocks(document) if b.get('type')=='formula']
-    return _na(rule,'Формулы в извлечённом тексте не распознаны.') if not formulas else _uncertain(rule,'Наличие слова «где», перенос строки и регистр после формул необходимо подтвердить визуально.')
+    blocks=_main_work_blocks(document)
+    labels=[(i,b,m) for i,b in enumerate(blocks) for m in _equation_labels(b)]
+    formulas=[b for b in blocks if b.get('type')=='formula']
+    if not formulas: return _na(rule,'Формулы в извлечённом тексте не распознаны.')
+    if not labels: return _uncertain(rule,'Не удалось надёжно связать формулы с их номерами для проверки пояснений «где».')
+    violations=[]; checked=0
+    for i,b,m in labels:
+        text=str(b.get('text') or '')
+        tail=text[m.end():].strip()
+        # Some extraction layouts put ``(2.30) где ...`` in one paragraph.
+        if re.match(r'^где\b',tail,re.I):
+            checked += 1
+            continue
+        next_text=''
+        for j in range(i+1,min(len(blocks),i+4)):
+            candidate=blocks[j]
+            ctext=str(candidate.get('text') or '').strip()
+            if not ctext or _EQ_LABEL_ONLY_RE.match(ctext):
+                continue
+            if candidate.get('type')=='formula':
+                continue
+            next_text=ctext
+            break
+        checked += 1
+        if re.match(r'^где\b',next_text,re.I):
+            continue
+        # Avoid treating a number that is embedded mid-prose (reference to an
+        # earlier equation) as the end of a newly displayed formula.
+        prefix=text[:m.start()].strip()
+        equation_like = b.get('type')=='formula' or _EQ_LABEL_ONLY_RE.match(text) or bool(re.search(r'[=≈≤≥∑∫√]',prefix))
+        if equation_like:
+            violations.append(evidence(b,contextual(text,m.start(),len(m.group()),before=180,after=120)))
+    if violations:
+        return _violation(rule,'После части пронумерованных формул не найдено пояснение, начинающееся словом «где» с новой строки.',dedupe_evidence(violations)[:15],'После формулы дать пояснение обозначений с новой строки, начиная со слова «где».')
+    return _pass(rule,f'Для всех {checked} надёжно распознанных пронумерованных формул пояснение «где» подтверждено структурой извлечённых блоков.')
 
 
 def _chapter_conclusions(rule,document):
