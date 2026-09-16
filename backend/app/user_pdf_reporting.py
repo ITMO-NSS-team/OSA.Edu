@@ -288,7 +288,11 @@ def _structure_section(document_map: dict[str, Any] | None, styles: dict[str, Pa
             pages_text = _pages_range(pages)
             rows.append([
                 _p(_TYPE_LABELS.get(str(item.get("type")), str(item.get("type", ""))), styles["table_cell"]),
-                _p(str(item.get("label", "")), styles["table_cell"]),
+                _p(
+                    str(item.get("label", ""))
+                    + (" [из реферата]" if item.get("canonicalRole") == "fallback_canonical" else ""),
+                    styles["table_cell"],
+                ),
                 _p(pages_text or "—", styles["table_cell_center"]),
             ])
         table = LongTable(rows, colWidths=[38 * mm, 112 * mm, 24 * mm], repeatRows=1)

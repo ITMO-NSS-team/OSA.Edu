@@ -102,3 +102,35 @@ export type LiteratureJobStatus = "queued" | "running" | "cancelling" | "done" |
 export interface LiteratureRow { number: string; status: LiteratureStatus; verdict?: LiteratureVerdict; source_type?: LiteratureSourceType; original_citation: string; checker_found_citation: string; evidence_url: string; google_scholar_url: string; notes: string; evidence_urls?: string[]; verification_stage?: string; }
 export interface LiteratureResult { filename: string; reference_count: number; rows: LiteratureRow[]; counts: Partial<Record<LiteratureStatus, number>>; verdict_counts?: Partial<Record<LiteratureVerdict, number>>; warnings?: string[]; web_stage?: { enabled: boolean; eligible: number; attempted: number; completed: number; failed: number; skipped_due_to_limit?: number; }; }
 export interface LiteratureJob { id: string; originalName: string; size: number; createdAt: string; updatedAt: string; startedAt?: string; finishedAt?: string; status: LiteratureJobStatus; model: string; progress: number; progressMessage?: string; result?: LiteratureResult | null; error?: string | null; }
+
+export type RepositoryQualityJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
+export interface RepositoryQualityJob {
+  id: string;
+  repository: string;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  status: RepositoryQualityJobStatus;
+  progress: number;
+  progressMessage?: string;
+  attempts?: number;
+  resultAvailable?: boolean;
+  logAvailable?: boolean;
+  error?: string | null;
+}
+export interface RepositoryQualityStatus {
+  ok: boolean;
+  osaInstalled: boolean;
+  osaVersion?: string | null;
+  llmConfigured: boolean;
+  model: string;
+  baseUrl?: string;
+  pythonVersion?: string;
+  gitInstalled?: boolean;
+  gitVersion?: string | null;
+}
+export interface RepositoryQualityPreflightCheck { id: string; label: string; ok: boolean; blocking: boolean; detail: string; }
+export interface RepositoryQualityPreflight { ok: boolean; checks: RepositoryQualityPreflightCheck[]; warnings: string[]; model: string; baseUrl: string; }
+export interface RepositoryQualityLog { text: string; available: boolean; size: number; truncated?: boolean; }

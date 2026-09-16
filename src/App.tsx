@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
+import { LanguageContext, type UiLanguage } from "./i18n";
 import { CheckPage } from "./components/CheckPage";
 import { LiteraturePage } from "./components/LiteraturePage";
 import { NormControlPage } from "./components/NormControlPage";
@@ -7,6 +8,7 @@ import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
 import { ReproducibilityPage } from "./components/ReproducibilityPage";
+import { RepositoryQualityPage } from "./components/RepositoryQualityPage";
 import type {
   CheckProfile,
   Health,
@@ -20,6 +22,7 @@ type Page =
   | "normcontrol"
   | "literature"
   | "reproducibility"
+  | "repository-quality"
   | "prompt"
   | "rules"
   | "reports";
@@ -34,6 +37,7 @@ const ACTIVE_NORMCONTROL: NormControlJob["status"][] = [
 ];
 
 export default function App() {
+  const [language, setLanguageState] = useState<UiLanguage>(() => localStorage.getItem("osaUiLanguage") === "en" ? "en" : "ru");
   const [page, setPage] = useState<Page>("check");
   const [health, setHealth] = useState<Health | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -49,6 +53,10 @@ export default function App() {
   const [error, setError] = useState("");
 
   useEffect(() => { void bootstrap(); }, []);
+  useEffect(() => {
+    localStorage.setItem("osaUiLanguage", language);
+    document.documentElement.lang = language;
+  }, [language]);
   useEffect(() => { const timer = window.setInterval(() => { void loadJobs(); void loadNormControlJobs(); }, 1800); return () => window.clearInterval(timer); }, []);
   useEffect(() => { if (page === "rules") void loadRules(rulesProfile); }, [page, rulesProfile]);
 
@@ -85,30 +93,71 @@ export default function App() {
     } catch (error) { setError((error as Error).message); }
   }
 
-  if (!health) return <main className="loading-screen">{error || "Загрузка…"}</main>;
+  const copy = language === "ru" ? {
+    loading: "Загрузка…",
+    checking: "Проверяется",
+    waiting: "ожидает",
+    normcontrol: "нормоконтроль",
+    queueFree: "Очередь свободна",
+    brand: "содержательная проверка ВКР",
+    check: "Формальная и смысловая проверка",
+    prompts: "Промпты",
+    rules: "Правила",
+    reports: "Отчёты",
+    norm: "Нормоконтроль",
+    literature: "Проверка литературы",
+    reproducibility: "Проверка воспроизводимости",
+    repositoryQuality: "Качество репозитория",
+  } : {
+    loading: "Loading…",
+    checking: "running",
+    waiting: "queued",
+    normcontrol: "formal review",
+    queueFree: "Queue is empty",
+    brand: "thesis quality checks",
+    check: "Thesis check",
+    prompts: "Prompts",
+    rules: "Rules",
+    reports: "Reports",
+    norm: "Formal review",
+    literature: "Literature check",
+    reproducibility: "Reproducibility",
+    repositoryQuality: "Repository quality",
+  };
+
+  function setLanguage(value: UiLanguage) { setLanguageState(value); }
+
+  if (!health) return <LanguageContext.Provider value={{ language, setLanguage }}><main className="loading-screen">{error || copy.loading}</main></LanguageContext.Provider>;
   const activeJobs = jobs.filter((job) => ["queued", "extracting", "mapping", "queued_check", "checking"].includes(job.status)).length;
   const runningJobs = jobs.filter((job) => ["extracting", "mapping", "checking"].includes(job.status)).length;
   const queuedJobs = jobs.filter((job) => ["queued", "queued_check"].includes(job.status)).length;
   const activeNormControl = normControlJobs.filter((job) => ACTIVE_NORMCONTROL.includes(job.status)).length;
-  const queueState = [activeJobs ? `${runningJobs ? `Проверяется: ${runningJobs}` : ""}${runningJobs && queuedJobs ? " · " : ""}${queuedJobs ? `ожидает: ${queuedJobs}` : ""}` : "", activeNormControl ? `нормоконтроль: ${activeNormControl}` : ""].filter(Boolean).join(" · ") || "Очередь свободна";
+  const queueState = [activeJobs ? `${runningJobs ? `${copy.checking}: ${runningJobs}` : ""}${runningJobs && queuedJobs ? " · " : ""}${queuedJobs ? `${copy.waiting}: ${queuedJobs}` : ""}` : "", activeNormControl ? `${copy.normcontrol}: ${activeNormControl}` : ""].filter(Boolean).join(" · ") || copy.queueFree;
 
-  return <main className="app-shell">
+  return <LanguageContext.Provider value={{ language, setLanguage }}><main className="app-shell">
     <header className="app-header">
-      <button className="brand" onClick={() => setPage("check")}><strong>OSA.Edu</strong><span>содержательная проверка ВКР</span></button>
+      <button className="brand" onClick={() => setPage("check")}><strong>OSA.Edu</strong><span>{copy.brand}</span></button>
       <nav>
         <div className="nav-group">
-          <NavButton active={page === "check"} onClick={() => setPage("check")}>Формальная и смысловая проверка</NavButton>
-          <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>Промпты</NavButton>
-          <NavButton active={page === "rules"} onClick={() => setPage("rules")}>Правила</NavButton>
-          <NavButton active={page === "reports"} onClick={() => setPage("reports")}>Отчёты{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
+          <NavButton active={page === "check"} onClick={() => setPage("check")}>{copy.check}</NavButton>
+          <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>{copy.prompts}</NavButton>
+          <NavButton active={page === "rules"} onClick={() => setPage("rules")}>{copy.rules}</NavButton>
+          <NavButton active={page === "reports"} onClick={() => setPage("reports")}>{copy.reports}{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
         </div>
         <div className="nav-group nav-group-secondary">
-          <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>Нормоконтроль{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
-          <NavButton active={page === "literature"} onClick={() => setPage("literature")}>Проверка литературы</NavButton>
-           <NavButton active={page === "reproducibility"} onClick={() => setPage("reproducibility")}>Проверка воспроизводимости</NavButton>
+          <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>{copy.norm}{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
+          <NavButton active={page === "literature"} onClick={() => setPage("literature")}>{copy.literature}</NavButton>
+          <NavButton active={page === "reproducibility"} onClick={() => setPage("reproducibility")}>{copy.reproducibility}</NavButton>
+          <NavButton active={page === "repository-quality"} onClick={() => setPage("repository-quality")}>{copy.repositoryQuality}</NavButton>
         </div>
       </nav>
-      <div className="queue-state">{queueState}</div>
+      <div className="header-tools">
+        <div className="language-toggle" role="group" aria-label="Interface language">
+          <button className={language === "ru" ? "active" : ""} onClick={() => setLanguage("ru")} type="button">RU</button>
+          <button className={language === "en" ? "active" : ""} onClick={() => setLanguage("en")} type="button">EN</button>
+        </div>
+        <div className="queue-state">{queueState}</div>
+      </div>
     </header>
 
     {error && <div className="global-error"><span>{error}</span><button onClick={() => setError("")}>×</button></div>}
@@ -118,6 +167,7 @@ export default function App() {
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
     <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
     {page === "reproducibility" && <ReproducibilityPage />}
+    {page === "repository-quality" && <RepositoryQualityPage />}
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}
@@ -127,7 +177,7 @@ export default function App() {
 
     {page === "rules" && <RulesPage profile={rulesProfile} rules={rules} loading={rulesLoading} onProfileChange={setRulesProfile} />}
     {page === "reports" && <ReportsPage jobs={jobs} onAction={jobAction} onChanged={loadJobs} />}
-  </main>;
+  </main></LanguageContext.Provider>;
 }
 
 function NavButton({ active, children, onClick }: { active: boolean; children: ReactNode; onClick: () => void }) {
