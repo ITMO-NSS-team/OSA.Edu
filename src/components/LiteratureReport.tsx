@@ -131,7 +131,7 @@ function ReferenceCard({ row }: { row: LiteratureRow }) {
         {evidence && <a className="literature-source-link" href={evidence} target="_blank" rel="noreferrer">Открыть источник ↗</a>}
       </div>
       <div className="literature-reference-body">
-        <div><span className="literature-field-label">В работе</span><p>{row.original_citation}</p></div>
+        <div><span className="literature-field-label">В списке литературы</span><p>{row.original_citation}</p></div>
         {found && <div className="literature-found-block"><span className="literature-field-label">Найдено</span><p>{row.checker_found_citation}</p></div>}
         {row.notes && <div className="literature-note"><span>Комментарий</span><p>{row.notes}</p></div>}
         {evidenceUrls.length > 0 && (

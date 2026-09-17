@@ -30,6 +30,15 @@ FOOTER_RE = re.compile(
 URL_SPLIT_RE = re.compile(r"(https?):\s+//")
 SPACE_RE = re.compile(r"[ \t]+")
 DOI_SPACING_RE = re.compile(r"\b(DOI:\s*)(10\s*\.\s*\d{4,9}\s*/\s*[-._;()/:A-Z0-9]+(?:\s+[-._;()/:]*(?:\d|[A-Z]+\d)[-._;()/:A-Z0-9]*)*)", re.I)
+YEAR_RE = re.compile(r"\b(?:18|19|20)\d{2}[a-z]?\b", re.I)
+AUTHOR_ENTRY_START_RE = re.compile(
+    r"^[A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’.-]{0,60},\s*"
+    r"[A-ZА-ЯЁ]\.(?:\s*[A-ZА-ЯЁ]\.)?"
+)
+CORPORATE_ENTRY_START_RE = re.compile(
+    r"^(?:[A-ZА-ЯЁ]\.){2,}\s*[A-ZА-ЯЁ]?[A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’.-]*.*"
+    r"\b(?:18|19|20)\d{2}[a-z]?\."
+)
 
 
 def clean_line(line: str) -> str | None:
@@ -127,15 +136,30 @@ def normalize_unnumbered_text(text: str) -> list[dict[str, object]]:
     """
     refs: list[dict[str, object]] = []
     current = ""
+    raw_lines = text.splitlines()
+    content_lines = [raw for raw in raw_lines if raw.strip() and clean_line(raw) not in (None, "")]
+    has_hanging_indent = any(raw[:1].isspace() for raw in content_lines) and any(
+        not raw[:1].isspace() for raw in content_lines
+    )
 
-    for raw in text.splitlines():
+    for raw in raw_lines:
         line = clean_line(raw)
         if line is None:
             continue
         if line == "":
             continue
 
-        starts_new = bool(raw.strip()) and not raw[:1].isspace()
+        if has_hanging_indent:
+            starts_new = bool(raw.strip()) and not raw[:1].isspace()
+        else:
+            # PyMuPDF often drops hanging indentation entirely. In author-year
+            # bibliographies every visual line then appears to start at column 0,
+            # which previously turned one wrapped citation into many fragments.
+            # Split only after the current entry has acquired a year and the next
+            # line looks like a personal or corporate author heading.
+            starts_new = bool(current) and bool(YEAR_RE.search(current)) and bool(
+                AUTHOR_ENTRY_START_RE.match(line) or CORPORATE_ENTRY_START_RE.match(line)
+            )
         if starts_new and current:
             refs.append({"number": str(len(refs) + 1), "reference": final_clean(current)})
             current = line.strip()
