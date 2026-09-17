@@ -9,6 +9,10 @@ import type {
   ReproducibilityLog,
   ReproducibilityPreflight,
   ReproducibilityStatus,
+  RepositoryQualityJob,
+  RepositoryQualityLog,
+  RepositoryQualityPreflight,
+  RepositoryQualityStatus,
   Rule,
   StructureDetails,
 } from "./types";
@@ -47,6 +51,30 @@ export const api = {
     request<ReproducibilityLog>(`/api/reproducibility/jobs/${id}/log`),
   reproducibilityLogDownloadUrl: (id: string) =>
     `${API}/api/reproducibility/jobs/${id}/log.txt`,
+  repositoryQualityStatus: () =>
+    request<RepositoryQualityStatus>("/api/repository-quality/status"),
+  repositoryQualityJobs: () =>
+    request<RepositoryQualityJob[]>("/api/repository-quality/jobs"),
+  repositoryQualityPreflight: (repository: string) =>
+    request<RepositoryQualityPreflight>(`/api/repository-quality/preflight?repository=${encodeURIComponent(repository)}`),
+  createRepositoryQualityJob: (body: FormData) =>
+    request<RepositoryQualityJob>("/api/repository-quality/jobs", { method: "POST", body }),
+  repositoryQualityJob: (id: string) =>
+    request<RepositoryQualityJob>(`/api/repository-quality/jobs/${id}`),
+  repositoryQualityResult: (id: string) =>
+    request<unknown>(`/api/repository-quality/jobs/${id}/result`),
+  repositoryQualityResultJsonUrl: (id: string) =>
+    `${API}/api/repository-quality/jobs/${id}/result.json`,
+  repositoryQualityLog: (id: string) =>
+    request<RepositoryQualityLog>(`/api/repository-quality/jobs/${id}/log`),
+  repositoryQualityLogDownloadUrl: (id: string) =>
+    `${API}/api/repository-quality/jobs/${id}/log.txt`,
+  cancelRepositoryQualityJob: (id: string) =>
+    request<RepositoryQualityJob>(`/api/repository-quality/jobs/${id}/cancel`, { method: "POST" }),
+  retryRepositoryQualityJob: (id: string) =>
+    request<RepositoryQualityJob>(`/api/repository-quality/jobs/${id}/retry`, { method: "POST" }),
+  deleteRepositoryQualityJob: (id: string) =>
+    request<void>(`/api/repository-quality/jobs/${id}`, { method: "DELETE" }),
   cancelReproducibilityJob: (id: string) =>
     request<ReproducibilityJob>(`/api/reproducibility/jobs/${id}/cancel`, { method: "POST" }),
   retryReproducibilityJob: (id: string) =>
