@@ -23,6 +23,7 @@ export function CheckPage(props: Props) {
   const [developerMode, setDeveloperMode] = useState(() => localStorage.getItem("osaDeveloperMode") === "1");
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedModel = props.health.models.find((item) => item.id === props.model);
+  const selectedProviderConfigured = selectedModel ? props.health.configured[selectedModel.provider] : false;
   const freeModels = props.health.models.filter((item) => item.tier === "free");
   const productionModels = props.health.models.filter((item) => item.tier === "production");
 
@@ -58,13 +59,13 @@ export function CheckPage(props: Props) {
 
   return <section className="page narrow">
     <div className="page-title"><div><h1>Проверка</h1><p>{developerMode ? "Режим разработчика: карта будет принята автоматически, затем все работы последовательно пройдут полную проверку без вашего участия." : "Сначала выбранная модель выделит крупные смысловые фрагменты. Проверка правил начнётся только после вашего подтверждения структуры."}</p></div></div>
-    {!props.health.configured.openrouter && <div className="inline-error">OpenRouter не настроен: добавьте OPENROUTER_API_KEY в файл .env и перезапустите сервер.</div>}
+    {!selectedProviderConfigured && <div className="inline-error">{selectedModel?.provider === "host" ? `Host LLM не готов: ${props.health.host?.detail || "провайдер не авторизован."}` : "OpenRouter не настроен: добавьте OPENROUTER_API_KEY в файл .env и перезапустите сервер."}</div>}
 
     <div className="panel form-grid">
       <label><span>Набор правил</span><select value={props.profile} onChange={(event) => props.onProfileChange(event.target.value as CheckProfile)}>
         <option value="core">Ядро · {props.health.knowledge.coreCount}</option><option value="full">Полный набор · {props.health.knowledge.fullCount}</option>
       </select><small>{props.profile === "core" ? "Основные строгие правила." : "Ядро и расширенные рекомендации."}</small></label>
-      <label><span>Модель OpenRouter</span><select value={props.model} onChange={(event) => props.onModelChange(event.target.value)}>
+      <label><span>Модель</span><select value={props.model} onChange={(event) => props.onModelChange(event.target.value)}>
         <optgroup label="Бесплатные модели">{freeModels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
         <optgroup label="Для production">{productionModels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
       </select><small>{selectedModel?.note}</small>{selectedModel?.tier === "free"}</label>

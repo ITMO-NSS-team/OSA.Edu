@@ -40,9 +40,9 @@ def _env_number(name: str, fallback: int) -> int:
 
 
 def configured_rate_limits(provider: str) -> dict:
-    prefix = "OPENROUTER" if provider == "openrouter" else "GEMINI"
-    default_rpm = 18 if provider == "openrouter" else 6
-    default_tpm = 0 if provider == "openrouter" else 180_000
+    prefix = {"openrouter": "OPENROUTER", "host": "HOST_LLM"}.get(provider, "GEMINI")
+    default_rpm = 18 if provider == "openrouter" else 0 if provider == "host" else 6
+    default_tpm = 0 if provider in {"openrouter", "host"} else 180_000
     rpm = _env_number(f"{prefix}_MAX_REQUESTS_PER_MINUTE", default_rpm)
     explicit_interval = os.getenv(f"{prefix}_MIN_REQUEST_INTERVAL_MS")
     if explicit_interval is not None:

@@ -10,7 +10,9 @@ from collections import Counter
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from ..defaults import model_definition
 from ..llm.client import ask_structured_json
+from ..llm.host_llm import host_provider_status
 from .extractor import extract_reference_records
 from .metadata import candidate_has_metadata, verdict_from_status
 from .metadata_compare import compare_candidate, deterministic_decision
@@ -164,7 +166,7 @@ async def _classify_batch(rows: list[dict[str, Any]], model: str) -> tuple[dict[
             }
         )
     response = await ask_structured_json(
-        provider="openrouter",
+        provider=str((model_definition(model) or {}).get("provider") or "openrouter"),
         model=model,
         system_prompt=SYSTEM_PROMPT,
         user_message=json.dumps({"references": payload}, ensure_ascii=False),
@@ -310,7 +312,8 @@ async def _run_web_stage(
     if not web_search_enabled():
         warnings.append("Углублённый веб-поиск литературы отключён переменной LITERATURE_WEB_SEARCH_ENABLED.")
         return stats
-    if not os.getenv("OPENROUTER_API_KEY", "").strip():
+    provider = str((model_definition(model) or {}).get("provider") or "openrouter")
+    if provider != "host" and not os.getenv("OPENROUTER_API_KEY", "").strip():
         warnings.append("OPENROUTER_API_KEY не задан: углублённый веб-поиск литературы не выполнен.")
         return stats
 
@@ -412,8 +415,14 @@ async def check_literature(
     checked = await asyncio.gather(*(precheck(row) for row in records))
     checked_by_number = {str(row["number"]): row for row in checked}
 
-    selected_model = (model or os.getenv("LITERATURE_REVIEW_MODEL") or "z-ai/glm-5.3-flash").strip()
-    llm_available = bool(os.getenv("OPENROUTER_API_KEY", "").strip())
+    selected_model = (model or os.getenv("LITERATURE_REVIEW_MODEL") or "gpt-5.6-luna").strip()
+    selected_definition = model_definition(selected_model) or {}
+    selected_provider = str(selected_definition.get("provider") or "openrouter")
+    llm_available = (
+        bool(host_provider_status().get("authenticated"))
+        if selected_provider == "host"
+        else bool(os.getenv("OPENROUTER_API_KEY", "").strip())
+    )
     llm_results: dict[str, dict[str, Any]] = {}
     usage: dict[str, Any] = {
         "requests": 0,
@@ -459,7 +468,7 @@ async def check_literature(
                 f"Сверяем метаданные: {batch_index} из {len(batches)} пакетов.",
             )
     else:
-        warnings.append("OPENROUTER_API_KEY не задан: выполнен только консервативный Crossref/arXiv precheck без LLM-сравнения метаданных.")
+        warnings.append("Выбранный LLM-провайдер не настроен: выполнен только консервативный Crossref/arXiv precheck без LLM-сравнения метаданных.")
 
     output_rows = [
         _initial_output_row(

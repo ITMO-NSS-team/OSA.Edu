@@ -37,6 +37,7 @@ from .extraction import read_extracted, save_extracted
 from .literature.queue import start_literature_queue
 from .literature.router import router as literature_router
 from .literature.store import recover_literature_jobs
+from .llm.host_llm import host_provider_status
 from .llm.rate_limiter import configured_rate_limits
 from .normcontrol.client import inspect_server as inspect_normcontrol_server
 from .normcontrol.queue import start_normcontrol_queue
@@ -47,6 +48,7 @@ from .normcontrol.store import (
     get_normcontrol_job,
     list_normcontrol_jobs,
     recover_interrupted_normcontrol_jobs,
+    update_normcontrol_job,
 )
 from .reproducibility.job_queue import start_reproducibility_queue
 from .reproducibility.router import router as reproducibility_router
@@ -105,6 +107,7 @@ async def validation_error(_request: Request, exc: RequestValidationError):
 @app.get("/api/health")
 async def health():
     registry = load_rule_registry()
+    host_status = host_provider_status()
     return {
         "ok": True,
         "models": MODELS,
@@ -115,7 +118,9 @@ async def health():
                 ).strip()
             ),
             "openrouter": bool(os.getenv("OPENROUTER_API_KEY", "").strip()),
+            "host": bool(host_status.get("authenticated")),
         },
+        "host": host_status,
         "defaults": {
             "prompt": DEFAULT_PROMPT,
             "mapPrompt": DEFAULT_MAP_PROMPT,
@@ -125,6 +130,7 @@ async def health():
         "rateLimits": {
             "gemini": configured_rate_limits("gemini"),
             "openrouter": configured_rate_limits("openrouter"),
+            "host": configured_rate_limits("host"),
         },
         "knowledge": {
             "coreCount": len(registry["core"]),
@@ -315,13 +321,16 @@ async def create_job_endpoint(
         return _error(400, "Добавьте хотя бы один PDF или DOCX файл.")
     if len(files) > 30:
         return _error(400, "За один запуск можно загрузить не более 30 файлов.")
-    if not os.getenv("OPENROUTER_API_KEY", "").strip():
-        return _error(400, "Для OpenRouter не найден OPENROUTER_API_KEY в .env.")
-
     requested_model = model or MODELS[0]["id"]
     selected = model_definition(requested_model)
     if not selected:
-        return _error(400, "Выбрана неизвестная модель OpenRouter.")
+        return _error(400, "Выбрана неизвестная модель.")
+    if selected["provider"] == "openrouter" and not os.getenv("OPENROUTER_API_KEY", "").strip():
+        return _error(400, "Для OpenRouter не найден OPENROUTER_API_KEY в .env.")
+    if selected["provider"] == "host":
+        host_status = host_provider_status(force=True)
+        if not host_status.get("authenticated"):
+            return _error(400, f"Host LLM не готов: {host_status.get('detail') or 'провайдер не авторизован.'}")
     selected_profile = "full" if profile == "full" else "core"
     semantic_prompt = (prompt or DEFAULT_PROMPT).strip()
     map_prompt = (mapPrompt or DEFAULT_MAP_PROMPT).strip()

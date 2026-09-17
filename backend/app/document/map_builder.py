@@ -60,7 +60,11 @@ async def build_document_map(document: dict[str, Any], *, provider: str, model: 
     definition = model_definition(model)
     chars_per_token = _positive_float(os.getenv("LLM_CHARS_PER_TOKEN"), 3.0)
     estimated_tokens = int((len(prompt) + len(user_message) + chars_per_token - 1) // chars_per_token)
-    if definition and estimated_tokens > int(definition["contextTokens"] * 0.85):
+    safety_ratio = min(
+        0.95,
+        max(0.5, _positive_float(os.getenv("STRUCTURE_CONTEXT_SAFETY_RATIO"), 0.85)),
+    )
+    if definition and estimated_tokens > int(definition["contextTokens"] * safety_ratio):
         raise ValueError(
             f"Оценочный объём запроса — {estimated_tokens:,} токенов, что слишком близко к контекстному лимиту "
             f"модели {definition['label']} ({definition['contextTokens']:,}). Выберите модель с большим контекстом."

@@ -9,7 +9,9 @@ from typing import Any
 
 import httpx
 
+from ..defaults import model_definition
 from ..llm.client import parse_json, salvage_json_objects
+from ..llm.host_llm import host_provider_name, run_host_llm
 
 ALLOWED_WEB_STATUSES = {
     "OK",
@@ -224,11 +226,63 @@ async def verify_reference_on_web(
     precheck_candidates: list[dict[str, Any]] | None = None,
     model: str | None = None,
 ) -> dict[str, Any]:
+    model = (model or os.getenv("LITERATURE_WEB_MODEL") or os.getenv("LITERATURE_REVIEW_MODEL") or "gpt-5.6-luna").strip()
+    if str((model_definition(model) or {}).get("provider") or "openrouter") == "host":
+        compact_candidates = []
+        for candidate in (precheck_candidates or [])[:3]:
+            if not isinstance(candidate, dict):
+                continue
+            compact_candidates.append(
+                {
+                    "authors": candidate.get("authors", ""),
+                    "title": candidate.get("title", ""),
+                    "venue": candidate.get("venue", ""),
+                    "year": candidate.get("year", ""),
+                    "pages": candidate.get("pages", ""),
+                    "doi": candidate.get("doi", ""),
+                    "arxiv_id": candidate.get("arxiv_id", ""),
+                    "url": candidate.get("url", ""),
+                    "source": candidate.get("source", ""),
+                    "score": candidate.get("score", ""),
+                }
+            )
+        user_payload = {
+            "number": number,
+            "original_citation": original_citation,
+            "cited_title_guess": cited_title,
+            "source_type": source_type,
+            "precheck_candidates": compact_candidates,
+            "instruction": "Выполни независимую веб-проверку. Precheck — только подсказка, а не доказательство.",
+        }
+        started = time.monotonic()
+        raw = await run_host_llm(
+            model=model,
+            system_prompt=WEB_SYSTEM_PROMPT,
+            user_message=json.dumps(user_payload, ensure_ascii=False),
+            timeout_seconds=_env_int("LITERATURE_WEB_TIMEOUT_MS", 600000, minimum=10000, maximum=1800000) // 1000,
+            allow_web_search=True,
+        )
+        try:
+            value = parse_json(raw)
+        except Exception:
+            recovered = salvage_json_objects(raw, required_key="status")
+            if not recovered:
+                raise
+            value = recovered[-1]
+        decision = apply_hallucination_guard(normalize_web_decision(value))
+        decision["matched_citation"] = _matched_citation(decision)
+        decision["model"] = model
+        decision["provider"] = host_provider_name()
+        decision["request_id"] = ""
+        decision["attempts"] = 1
+        decision["web_mode"] = "host_web_search"
+        decision["duration_seconds"] = round(time.monotonic() - started, 2)
+        return decision
+
     key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not key:
         raise RuntimeError("OPENROUTER_API_KEY не задан для веб-проверки литературы.")
 
-    model = (model or os.getenv("LITERATURE_WEB_MODEL") or os.getenv("LITERATURE_REVIEW_MODEL") or "z-ai/glm-5.3-flash").strip()
     base = os.getenv("OPENROUTER_API_BASE_URL", "https://openrouter.ai").rstrip("/")
     headers = {
         "Authorization": f"Bearer {key}",

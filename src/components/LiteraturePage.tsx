@@ -54,7 +54,8 @@ const JOB_COPY: Record<LiteratureJob["status"], string> = {
 export function LiteraturePage({ models }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const productionModels = models.filter((item) => item.tier === "production");
-  const defaultModel = productionModels.find((item) => item.id === "z-ai/glm-5.3-flash")?.id
+  const defaultModel = productionModels.find((item) => item.recommended)?.id
+    ?? productionModels.find((item) => item.id === "z-ai/glm-5.3-flash")?.id
     ?? productionModels[0]?.id
     ?? models[0]?.id
     ?? "";
