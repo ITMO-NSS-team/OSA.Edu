@@ -58,6 +58,25 @@ def extract_references(text: str) -> tuple[str, str]:
     return "fallback_tail", "\n".join(lines[start:]).strip() + "\n"
 
 
+def _has_reference_heading(text: str) -> bool:
+    return any(REF_HEADING_RE.match(line) for line in text.splitlines())
+
+
+def _select_page_text(sorted_text: str, native_text: str, prefer_native_order: bool) -> tuple[str, bool]:
+    """Keep a multi-column bibliography in the PDF's native reading order.
+
+    PyMuPDF's coordinate sorting can place a short continuation block from the
+    right column beside the ``References`` heading.  The heading then stops
+    being a standalone line, extraction falls back to the last 20% of the
+    document, and the bibliography loses both its beginning and its final
+    column continuation.  When native order preserves the heading and sorted
+    order does not, use native order for that page and the remaining pages.
+    """
+    if not prefer_native_order and _has_reference_heading(native_text) and not _has_reference_heading(sorted_text):
+        prefer_native_order = True
+    return (native_text if prefer_native_order else sorted_text), prefer_native_order
+
+
 def pdf_text(pdf_bytes: bytes) -> tuple[str, list[str]]:
     import pymupdf
 
@@ -68,8 +87,11 @@ def pdf_text(pdf_bytes: bytes) -> tuple[str, list[str]]:
             raise RuntimeError("PDF защищён паролем и не может быть прочитан без пароля.")
         page_texts: list[str] = []
         empty_pages: list[int] = []
+        prefer_native_order = False
         for index, page in enumerate(document):
-            text = page.get_text("text", sort=True) or ""
+            sorted_text = page.get_text("text", sort=True) or ""
+            native_text = page.get_text("text", sort=False) or ""
+            text, prefer_native_order = _select_page_text(sorted_text, native_text, prefer_native_order)
             if not text.strip():
                 empty_pages.append(index + 1)
             page_texts.append(text)

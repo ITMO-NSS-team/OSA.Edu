@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from backend.app.literature.extractor import _select_page_text
 from backend.app.literature.normalize_references import normalize_text
 from backend.app.literature.web_verifier import (
     _assert_web_search_performed,
@@ -10,6 +11,15 @@ from backend.app.literature.web_verifier import (
 
 
 class LiteratureExtractionRegressionTests(unittest.TestCase):
+    def test_native_order_wins_when_column_sort_corrupts_references_heading(self) -> None:
+        sorted_text = "                 References                 likova, J.; Polev, K.\nCemri, M.; Pan, M. Z."
+        native_text = "References\nCemri, M.; Pan, M. Z.\nZhidkovskaya, A.; Be-\nlikova, J.; Polev, K."
+
+        selected, prefer_native_order = _select_page_text(sorted_text, native_text, False)
+
+        self.assertTrue(prefer_native_order)
+        self.assertEqual(native_text, selected)
+
     def test_author_year_references_without_hanging_indent_stay_whole(self) -> None:
         text = """References
 Bloor, M.; Torraca, J.; Sandoval, I. O.; Ahmed, A.; White,
