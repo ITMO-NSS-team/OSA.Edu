@@ -1,46 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import type { LiteratureJob, LiteratureRow, LiteratureSourceType, LiteratureStatus, ModelInfo } from "../types";
+import type { LiteratureJob, ModelInfo } from "../types";
+import { ATTENTION_STATUSES, LiteratureReport, literatureResultCounts } from "./LiteratureReport";
 
 type Filter = "attention" | "all" | "confirmed";
 
 interface Props {
   models: ModelInfo[];
 }
-
-const ATTENTION = new Set<LiteratureStatus>([
-  "OK_MINOR_MISMATCH",
-  "METADATA_MISMATCH",
-  "SUSPICIOUS",
-  "LIKELY_HALLUCINATED",
-  "UNVERIFIED",
-  "ERROR",
-]);
-
-const STATUS_COPY: Record<LiteratureStatus, { label: string; tone: string }> = {
-  OK: { label: "Подтверждено", tone: "ok" },
-  OK_MINOR_MISMATCH: { label: "Небольшая неточность", tone: "minor" },
-  METADATA_MISMATCH: { label: "Есть ошибка", tone: "mismatch" },
-  SUSPICIOUS: { label: "Нужно проверить", tone: "review" },
-  LIKELY_HALLUCINATED: { label: "Источник не подтверждён", tone: "danger" },
-  UNVERIFIED: { label: "Не удалось подтвердить", tone: "review" },
-  ERROR: { label: "Ошибка проверки", tone: "neutral" },
-  NOT_A_PAPER: { label: "Другой тип источника", tone: "neutral" },
-};
-
-const SOURCE_TYPE_COPY: Record<LiteratureSourceType, string> = {
-  PAPER: "Статья",
-  PREPRINT: "Препринт",
-  BOOK: "Книга",
-  STANDARD: "Стандарт",
-  REPORT: "Отчёт",
-  DATASET: "Набор данных",
-  DOCUMENTATION: "Документация",
-  REPOSITORY: "Репозиторий",
-  WEB: "Веб-источник",
-  OTHER: "Другой источник",
-  UNKNOWN: "Тип не определён",
-};
 
 const JOB_COPY: Record<LiteratureJob["status"], string> = {
   queued: "В очереди",
@@ -96,11 +63,12 @@ export function LiteraturePage({ models }: Props) {
   const runningCount = jobs.filter((item) => item.status === "running" || item.status === "cancelling").length;
   const queuedCount = jobs.filter((item) => item.status === "queued").length;
 
-  const attentionCount = result?.rows.filter((row) => ATTENTION.has(row.status)).length ?? 0;
-  const confirmedCount = result?.rows.filter((row) => row.status === "OK").length ?? 0;
+  const resultCounts = result ? literatureResultCounts(result) : { attention: 0, confirmed: 0 };
+  const attentionCount = resultCounts.attention;
+  const confirmedCount = resultCounts.confirmed;
   const visibleRows = useMemo(() => {
     if (!result) return [];
-    if (filter === "attention") return result.rows.filter((row) => ATTENTION.has(row.status));
+    if (filter === "attention") return result.rows.filter((row) => ATTENTION_STATUSES.has(row.status));
     if (filter === "confirmed") return result.rows.filter((row) => row.status === "OK");
     return result.rows;
   }, [filter, result]);
@@ -169,7 +137,7 @@ export function LiteraturePage({ models }: Props) {
   function chooseJob(job: LiteratureJob) {
     setSelectedId(job.id);
     const nextResult = job.result;
-    if (nextResult) setFilter(nextResult.rows.some((row) => ATTENTION.has(row.status)) ? "attention" : "all");
+    if (nextResult) setFilter(nextResult.rows.some((row) => ATTENTION_STATUSES.has(row.status)) ? "attention" : "all");
   }
 
   function downloadTsv() {
@@ -189,9 +157,33 @@ export function LiteraturePage({ models }: Props) {
     URL.revokeObjectURL(url);
   }
 
-  const selectedModel = models.find((item) => item.id === model);
-  const incomplete = Boolean(result?.web_stage && result.web_stage.failed > 0);
+  async function downloadHtml() {
+    if (!result) return;
+    try {
+      const { downloadLiteratureReportHtml } = await import("../literatureReportExport");
+      downloadLiteratureReportHtml(result);
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
 
+  async function printPdf() {
+    if (!result) return;
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setError("Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu.");
+      return;
+    }
+    try {
+      const { printLiteratureReport } = await import("../literatureReportExport");
+      printLiteratureReport(result, popup);
+    } catch (reason) {
+      popup.close();
+      setError((reason as Error).message);
+    }
+  }
+
+  const selectedModel = models.find((item) => item.id === model);
   return (
     <section className="page literature-page polished-literature-page">
       <div className="literature-hero">
@@ -294,60 +286,27 @@ export function LiteraturePage({ models }: Props) {
 
       {result && (
         <>
-          <section className="literature-result-head">
-            <div><span className="literature-result-kicker">Результат</span><h2>{result.filename}</h2></div>
-            <button className="button secondary" onClick={downloadTsv}>Скачать TSV</button>
-          </section>
-
-          <div className="literature-summary-simple">
-            <Summary value={result.reference_count} label="Источников" />
-            <Summary value={confirmedCount} label="Подтверждено" tone="ok" />
-            <Summary value={attentionCount} label="Требуют внимания" tone="attention" />
-          </div>
-
-          {incomplete && <div className="literature-soft-notice">Несколько источников не удалось перепроверить полностью. Они оставлены в разделе «Требуют внимания».</div>}
-
-          <div className="literature-result-toolbar">
-            <div className="literature-segmented" role="tablist" aria-label="Фильтр результатов">
+          <LiteratureReport
+            result={result}
+            rows={visibleRows}
+            actions={(
+              <>
+                <button className="button secondary" onClick={downloadTsv}>TSV</button>
+                <button className="button secondary" onClick={() => void downloadHtml()}>HTML</button>
+                <button className="button primary" onClick={() => void printPdf()}>PDF</button>
+              </>
+            )}
+            controls={(
+              <div className="literature-segmented" role="tablist" aria-label="Фильтр результатов">
               <button className={filter === "attention" ? "active" : ""} onClick={() => setFilter("attention")}>Требуют внимания · {attentionCount}</button>
               <button className={filter === "confirmed" ? "active" : ""} onClick={() => setFilter("confirmed")}>Подтверждено · {confirmedCount}</button>
               <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Все · {result.reference_count}</button>
-            </div>
-          </div>
-
-          {visibleRows.length > 0 ? (
-            <div className="literature-review-list">{visibleRows.map((row) => <ReferenceCard key={`${row.number}-${row.original_citation}`} row={row} />)}</div>
-          ) : (
-            <div className="panel literature-empty-state"><strong>Здесь всё чисто</strong><span>В выбранной категории источников нет.</span></div>
-          )}
+              </div>
+            )}
+          />
         </>
       )}
     </section>
-  );
-}
-
-function Summary({ value, label, tone = "" }: { value: number; label: string; tone?: string }) {
-  return <div className={`literature-summary-card ${tone}`}><strong>{value}</strong><span>{label}</span></div>;
-}
-
-function ReferenceCard({ row }: { row: LiteratureRow }) {
-  const status = STATUS_COPY[row.status];
-  const evidence = row.evidence_url || row.evidence_urls?.[0] || "";
-  const found = row.checker_found_citation && row.checker_found_citation !== "No confirmed source found";
-  return (
-    <article className="panel literature-reference-card">
-      <div className="literature-reference-top">
-        <span className="literature-reference-number">{row.number}</span>
-        <span className={`literature-user-status ${status.tone}`}>{status.label}</span>
-        {row.source_type && <span className="literature-source-type">{SOURCE_TYPE_COPY[row.source_type]}</span>}
-        {evidence && <a className="literature-source-link" href={evidence} target="_blank" rel="noreferrer">Открыть источник ↗</a>}
-      </div>
-      <div className="literature-reference-body">
-        <div><span className="literature-field-label">В работе</span><p>{row.original_citation}</p></div>
-        {found && <div className="literature-found-block"><span className="literature-field-label">Найдено</span><p>{row.checker_found_citation}</p></div>}
-        {row.notes && <div className="literature-note"><span>Комментарий</span><p>{row.notes}</p></div>}
-      </div>
-    </article>
   );
 }
 
