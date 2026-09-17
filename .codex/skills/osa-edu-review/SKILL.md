@@ -27,8 +27,9 @@ For an unspecified general check, use `full`. For a requested complete pipeline,
    python scripts/osa_edu_client.py health --base-url http://127.0.0.1:8787
    ```
 
-3. If a local OSA.Edu checkout is in scope and the server is unavailable, start its backend with the repository's documented command. Otherwise report that the server is required; do not substitute an agent-only review.
-4. Submit the requested checks and wait for their terminal states:
+3. For `full` or `literature`, confirm that `configured` is true for the provider of the requested model, or for the first/default model when none was requested. If it is false, report the provider configuration problem; do not silently switch models or pretend that OSA.Edu ran.
+4. If a local OSA.Edu checkout is in scope and the server is unavailable, start its backend with the repository's documented command. Otherwise report that the server is required; do not substitute an agent-only review.
+5. Submit the requested checks and wait for their terminal states:
 
    ```powershell
    python scripts/osa_edu_client.py run path/to/work.pdf --checks full,literature --output-dir path/to/results
