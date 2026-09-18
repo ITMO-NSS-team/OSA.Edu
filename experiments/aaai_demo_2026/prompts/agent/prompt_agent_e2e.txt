@@ -1,0 +1,135 @@
+You are not allowed to look into past memory or look into other files outside of supplied pdf and repository.
+
+
+
+You are given:
+
+1. a student's thesis in PDF format; \`/home/ilya/Desktop/dataset/thesis\_009/thesis.pdf\`
+2. the corresponding offline source-code repository. \`/home/ilya/Desktop/dataset/thesis\_009/repository\`
+
+Evaluate whether the implementation described in the thesis is supported by the repository.
+
+Do this in two stages and create exactly two files:
+
+- `agent_claims.json`
+- `agent_verification.json`
+
+Do not use the Internet.
+
+Do not run, build, test, install, train, or execute the project. Repository analysis must be static and read-only.
+
+The output should be stored in `/home/ilya/Desktop/dataset/thesis_009/agent_e2e` directory.
+
+# Stage 1 — Extract claims from the thesis
+
+Read the thesis before inspecting the repository.
+
+Identify concrete claims made by the thesis about the developed software or technical system that could reasonably be checked against the repository.
+
+Focus on implementation-related facts such as:
+
+- components and architecture;
+- algorithms and models used;
+- technologies and dependencies;
+- data processing;
+- APIs and integrations;
+- storage;
+- configuration;
+- deployment and infrastructure;
+- security;
+- tests;
+- other statically observable implementation properties.
+
+Ignore general background, related work, definitions, motivations, future work, and claims that fundamentally require executing the project or reproducing experiments.
+
+Represent each distinct implementation fact as a separate claim when reasonable.
+
+Preserve the complete thesis sentence supporting each claim in `original_text`.
+
+Create `agent_claims.json`:
+
+{
+"claims": [
+{
+"claim\_id": "c0001",
+"claim": "Self-contained implementation claim.",
+"original\_text": "Supporting sentence from the thesis.",
+"category": "architecture | component | algorithm | data\_processing | api | integration | storage | dependency | configuration | deployment | security | testing | behavior | other",
+"value": null,
+"verifiability": "high | medium | low",
+"verification\_scope": "static\_repository",
+"section\_id": "section identifier",
+"section\_name": "section name",
+"section\_heading\_raw": "section heading",
+"contradiction": false
+}
+]
+}
+
+Once `agent_claims.json` has been written, do not modify its claims based on repository contents.
+
+# Stage 2 — Verify the extracted claims
+
+Inspect the offline repository and verify every claim from `agent_claims.json`.
+
+You may inspect files, search code, follow references, and examine configuration, dependencies, tests, schemas, Docker files, and other repository artifacts.
+
+Do not:
+
+- execute project code;
+- run tests;
+- build the project;
+- install dependencies;
+- start containers or services;
+- make network requests;
+- modify repository contents.
+
+For each claim use one status:
+
+- `IMPLEMENTED` — static repository evidence supports the claim;
+- `PARTIALLY_IMPLEMENTED` — a meaningful part is supported but the complete claim is not;
+- `NOT_IMPLEMENTED` — adequate implementation evidence was not found or repository evidence contradicts the claim;
+- `NOT_STATICALLY_VERIFIABLE` — the claim cannot reasonably be resolved through static inspection.
+
+Provide concrete repository evidence for positive findings.
+
+Create `agent_verification.json`:
+
+{
+
+"claim\_verification":&#x20;
+
+{
+"claims": [
+{
+"claim\_id": "c0001",
+"claim": "The exact claim from agent\_claims.json.",
+"status": "IMPLEMENTED",
+"confidence": 0.95,
+"evidence": [
+{
+"file": "repository/path/file.py",
+"symbol": "Relevant symbol if available",
+"line\_start": 10,
+"line\_end": 25,
+"reason": "Why this repository evidence supports the claim."
+}
+],
+"search\_summary": "Brief summary of the repository areas inspected.",
+"explanation": "Reason for the final status."
+}
+]
+}
+
+}
+
+Every claim from `agent_claims.json` must appear exactly once in `agent_verification.json`.
+
+Do not add new claims during verification.
+
+Do not modify the wording or IDs of extracted claims during verification.
+
+The final output of the task is exactly:
+
+- `agent_claims.json`
+- `agent_verification.json`

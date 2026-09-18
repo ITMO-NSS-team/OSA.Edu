@@ -1,0 +1,11 @@
+metric_key,metric,direction,osa_edu,agent
+source_precision,Source Precision,higher,0.48278999999999994,0.89862
+source_recall,Source Recall,higher,0.95312,0.59094
+source_f1,Source F1,higher,0.6371399999999999,0.69363
+decomposition_precision,Decomposition Precision,higher,0.52222,0.32028
+decomposition_recall,Decomposition Recall,higher,0.58857,0.21989999999999998
+decomposition_f1,Decomposition F1,higher,0.55143,0.25351
+gold_full_semantic_coverage,Full semantic coverage,higher,0.75903,0.8181499999999999
+gold_partial_or_better_coverage,Partial-or-better coverage,higher,0.95448,0.9433199999999999
+over_decomposition_rate,Over-decomposition rate,lower,0.11444195229982453,0.013174244822301385
+under_decomposition_rate,Under-decomposition rate,lower,0.11100625044210885,0.4847154387887903
