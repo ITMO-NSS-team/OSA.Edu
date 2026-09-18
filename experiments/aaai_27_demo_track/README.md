@@ -1,6 +1,6 @@
-# AAAI 2026 Demo Experiments
+# AAAI 27 Demo Track Experiments
 
-This folder contains the AAAI 2026 demo experiments for OSA.Edu reproducibility checking.
+This folder contains the AAAI 27 Demo Track experiments for OSA.Edu reproducibility checking.
 The experiments were built from the existing OSA claim extraction and claim-code verification pipeline, with specialized prompts and local scripts for the demo evaluation.
 
 The dataset is a closed thesis/repository dataset and was anonymized as much as possible before preparing the public experiment artifacts.
