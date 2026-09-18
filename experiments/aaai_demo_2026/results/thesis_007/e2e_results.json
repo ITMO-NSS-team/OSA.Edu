@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "experiment": "paper_claims_e2e_implementation_rate",
+  "thesis_id": "thesis_007",
+  "meta": {
+    "status_values": [
+      "IMPLEMENTED",
+      "PARTIALLY_IMPLEMENTED",
+      "NOT_IMPLEMENTED",
+      "NOT_STATICALLY_VERIFIABLE"
+    ],
+    "primary_metric": "absolute_implementation_rate_error_pp",
+    "partial_weight": 0.5,
+    "not_statically_verifiable": "excluded_from_denominator",
+    "inputs": {
+      "gold": {
+        "claims_file": "/home/ilya/Desktop/dataset/thesis_007/gold_claims.json",
+        "verification_file": "/home/ilya/Desktop/dataset/thesis_007/gold_verification.json",
+        "claims_format": "claims",
+        "verification_format": "claim_verification.claims"
+      },
+      "osa": {
+        "claims_file": "/home/ilya/Desktop/dataset/thesis_007/new/osa_claims.json",
+        "verification_file": "/home/ilya/Desktop/dataset/thesis_007/new/osa_on_osa_claims_verification/claim_verification/report.json",
+        "claims_format": "claims",
+        "verification_format": "result.claims"
+      },
+      "agent": {
+        "claims_file": "/home/ilya/Desktop/dataset/thesis_007/new/agent_e2e/agent_claims.json",
+        "verification_file": "/home/ilya/Desktop/dataset/thesis_007/new/agent_e2e/agent_verification.json",
+        "claims_format": "claims",
+        "verification_format": "claim_verification.claims"
+      }
+    }
+  },
+  "gold": {
+    "claims_total": 183,
+    "evaluable": 183,
+    "implemented": 85,
+    "partially_implemented": 18,
+    "not_implemented": 80,
+    "not_statically_verifiable": 0,
+    "implementation_rate": 0.4645,
+    "weighted_score": 0.5137
+  },
+  "osa": {
+    "claims_total": 316,
+    "evaluable": 316,
+    "implemented": 200,
+    "partially_implemented": 0,
+    "not_implemented": 116,
+    "not_statically_verifiable": 0,
+    "implementation_rate": 0.6329,
+    "weighted_score": 0.6329,
+    "absolute_error": 0.1684,
+    "absolute_error_pp": 16.84,
+    "weighted_absolute_error": 0.1192,
+    "weighted_absolute_error_pp": 11.92,
+    "claim_count_deviation": 0.7268
+  },
+  "agent": {
+    "claims_total": 49,
+    "evaluable": 49,
+    "implemented": 10,
+    "partially_implemented": 25,
+    "not_implemented": 14,
+    "not_statically_verifiable": 0,
+    "implementation_rate": 0.2041,
+    "weighted_score": 0.4592,
+    "absolute_error": 0.2604,
+    "absolute_error_pp": 26.04,
+    "weighted_absolute_error": 0.0545,
+    "weighted_absolute_error_pp": 5.45,
+    "claim_count_deviation": 0.7322
+  },
+  "comparison": {
+    "primary_metric": "absolute_implementation_rate_error_pp",
+    "gold_implementation_rate": 0.4645,
+    "gold_weighted_score": 0.5137,
+    "osa_absolute_error_pp": 16.84,
+    "agent_absolute_error_pp": 26.04,
+    "osa_weighted_absolute_error_pp": 11.92,
+    "agent_weighted_absolute_error_pp": 5.45,
+    "osa_claim_count_deviation": 0.7268,
+    "agent_claim_count_deviation": 0.7322
+  }
+}

@@ -1,0 +1,8 @@
+metric_key,metric,direction,osa_edu,agent
+implementation_rate_mae_pp,"Implementation-rate MAE, pp",lower,10.763000000000002,12.251
+median_absolute_error_pp,"Median absolute error, pp",lower,10.84,10.239999999999993
+mean_signed_error_pp,"Mean signed error, pp",signed,0.7469999999999983,-6.675000000000002
+weighted_score_mae_pp,"Weighted-score MAE, pp",lower,12.092,6.9159999999999995
+spearman_rho,Spearman rho,higher,0.793939393939394,0.8666666666666667
+mean_claim_count_deviation,Mean claim-count deviation,lower,1.3119741276943582,0.6652140384925498
+mean_extracted_claims,Mean extracted claims,neutral,345.1,44.3

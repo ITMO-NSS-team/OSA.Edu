@@ -1,0 +1,8 @@
+metric_key,metric,direction,osa_edu
+accuracy,Accuracy,higher,0.85605
+macro_f1,Macro-F1,higher,0.72771
+balanced_accuracy,Balanced Accuracy,higher,0.74267
+precision_implemented,IMPLEMENTED Precision,higher,0.9509000000000001
+recall_implemented,IMPLEMENTED Recall,higher,0.87569
+f1_implemented,IMPLEMENTED F1,higher,0.90798
+false_implementation_rate,False Implementation Rate,lower,0.29035
