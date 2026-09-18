@@ -9,7 +9,7 @@ A separate "Нормоконтроль" mode sends a PDF to the external "Авт
 
 A separate "Проверка литературы" mode checks bibliographic references from a PDF: it extracts the source list, classifies source types, searches for DOI, arXiv, URL, and Crossref confirmations, compares metadata, and moves doubtful records into a separate list for manual review.
 
-Experiments for the AAAI 2026 demo are located in `experiments/aaai_demo_2026`: this directory contains scripts, prompts, configs, and aggregated result tables for three evaluation experiments.
+Experiments for the AAAI 27 Demo Track are located in `experiments/aaai_27_demo_track`: this directory contains scripts, prompts, configs, and aggregated result tables for three evaluation experiments.
 
 ## What OSA.Edu Can Do
 
@@ -524,7 +524,7 @@ OSA.Edu/
 |   `-- document-map-prompt.txt
 |
 |-- experiments/
-|   `-- aaai_demo_2026/  # AAAI 2026 demo experiments
+|   `-- aaai_27_demo_track/  # AAAI 27 Demo Track experiments
 |
 |-- rules-data/
 |   `-- source rule data
