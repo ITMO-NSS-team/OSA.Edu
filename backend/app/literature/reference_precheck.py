@@ -6,10 +6,10 @@ but a human/agent must still open evidence links and verify metadata before assi
 final statuses in reference_checks/<thesis>.md.
 
 Usage:
-  python scripts/reference_precheck.py references_normalized/ГорностаевНЮ_.refs.jsonl
-  python scripts/reference_precheck.py --checkable-only references_normalized/Some.refs.jsonl
-  python scripts/reference_precheck.py --paper-only references_normalized/Some.refs.jsonl
-  python scripts/reference_precheck.py --fresh references_normalized/Some.refs.jsonl
+  python -m backend.app.literature.reference_precheck references_normalized/Some.refs.jsonl
+  python -m backend.app.literature.reference_precheck --checkable-only references_normalized/Some.refs.jsonl
+  python -m backend.app.literature.reference_precheck --paper-only references_normalized/Some.refs.jsonl
+  python -m backend.app.literature.reference_precheck --fresh references_normalized/Some.refs.jsonl
 """
 
 from __future__ import annotations
@@ -155,7 +155,6 @@ def extract_title(ref: str) -> str:
             if not title:
                 title = parts[start_index] if start_index < len(parts) else first
 
-    # Strip trailing bibliographic fields that sometimes remain after title extraction.
     title = re.sub(r",\s*(?:19|20)\d{2}\b.*$", "", title)
     title = re.split(r"\s+[—–]\s+(?=(?:19|20)\d{2}\b|Vol\.|Т\.|URL:)", title, maxsplit=1, flags=re.I)[0]
     title = re.sub(r"^et\s+al\.\s+", "", title, flags=re.I).strip()
@@ -393,7 +392,6 @@ def direct_url_candidate(url: str, cited_title: str, timeout: int = 20) -> dict[
         parser.meta,
         "citation_title", "dc.title", "dcterms.title", "og:title", "twitter:title", "headline",
     ) or SPACE_RE.sub(" ", " ".join(parser.title_parts)).strip()
-    # Remove common site suffixes without assuming a particular provider.
     if title and cited_title:
         for sep in (" | ", " — ", " - ", " · "):
             parts = [part.strip() for part in title.split(sep) if part.strip()]

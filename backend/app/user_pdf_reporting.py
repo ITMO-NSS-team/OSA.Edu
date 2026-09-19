@@ -611,7 +611,6 @@ def _word_safe_window(text: str, start: int, end: int, limit: int) -> tuple[str,
         if m:
             left += m.end()
     if right < len(text):
-        # Move back to the previous complete word.
         m = re.search(r"\s+\S*$", text[max(left, right - 90):right])
         if m:
             right = max(left, right - 90) + m.start()
@@ -665,8 +664,7 @@ def _author_quote(value: str, *, anchor: str = "", context: str = "") -> tuple[s
         excerpt, shortened = _word_safe_window(source, local_start, local_end, _MAX_USER_QUOTE)
         return excerpt, True if shortened or display_adjusted or source != raw else False
 
-    # No explicit anchor is available. Keep the quality-4.1 behaviour that
-    # avoids visibly starting/ending in the middle of a word.
+    # Without an explicit anchor, use whole-word boundaries to keep the excerpt readable.
     protected_start = bool(re.match(r"^(?:[–—•▪◦]|\(?\d+[.)])\s*", text))
     starts_midword = bool(re.match(r"^[а-яёa-z]", text)) and not protected_start
     if starts_midword:

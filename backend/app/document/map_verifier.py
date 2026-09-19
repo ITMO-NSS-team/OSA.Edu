@@ -153,8 +153,8 @@ async def verify_document_map(
             "warnings": parsed.get("warnings") or [],
             "usage": combined_usage,
         }
-        # Final validator is authoritative for block IDs, ranges and normalized
-        # relations. This is deliberately a fresh validation, not old warnings.
+        # Revalidate block IDs, ranges and relations after the critic's changes;
+        # warnings from the first pass may no longer describe this map.
         candidate = refresh_map(document, candidate)
         fatal_codes = {"empty_structure", "invalid_boundaries", "invalid_boundary"}
         if any(item.get("code") in fatal_codes for item in candidate.get("issues") or []):

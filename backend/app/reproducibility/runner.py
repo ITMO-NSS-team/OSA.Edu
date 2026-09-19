@@ -65,7 +65,7 @@ def configured_base_url() -> str:
 
 
 def build_osa_command(repository: str, paper_path: Path, output_dir: Path, *, mode: str = "full", claims_path: Path | None = None) -> list[str]:
-    """Run OSA's canonical paper-analysis CLI from feat/thesis-repository-analysis.
+    """Run OSA's canonical paper-analysis CLI.
 
     OSA.Edu owns only job lifecycle and presentation. PDF parsing, claim extraction,
     filtering, batching and repository verification stay inside OSA.

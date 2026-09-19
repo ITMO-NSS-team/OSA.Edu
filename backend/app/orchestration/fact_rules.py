@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Fact-first normalization and deterministic verdicts for semantic rule pilots."""
+# The LLM supplies semantic facts; Python normalizes them and determines verdicts.
 
 from typing import Any
 import regex as re

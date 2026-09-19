@@ -274,7 +274,6 @@ def _join_spans(spans: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]
         mapped.append({**span, "logicalStart": start, "logicalEnd": end})
         previous = span
     result = re.sub(r"[ \t]+", " ", result).strip()
-    # Recalculate offsets after whitespace normalisation only when it changed.
     if mapped and result != "".join(str(span.get("text") or "") for span in spans).strip():
         cursor = 0
         remapped: list[dict[str, Any]] = []

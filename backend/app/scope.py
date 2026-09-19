@@ -1,13 +1,7 @@
 from __future__ import annotations
 
-"""Central document-scope policy.
-
-3.8 introduces one authoritative place for deciding which extracted blocks belong
-to the main dissertation and which content role a checker is allowed to inspect.
-The goal is precision: synopsis/front matter, bibliography, appendices and attached
-publication reprints must not silently become evidence for ordinary language or
-layout rules of the main work.
-"""
+# A shared scope policy keeps synopsis/front matter, bibliography, appendices and
+# publication reprints out of ordinary language and layout checks of the main work.
 
 from collections.abc import Iterable
 import regex as re

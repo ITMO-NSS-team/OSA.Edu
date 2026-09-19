@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 
 def _patch_sourcecraft_metadata_loader() -> bool:
-    """Inject the SourceCraft loader that the current OSA branch forgot to import."""
+    """Supply the SourceCraft metadata loader when OSA does not expose it."""
     import osa_tool.core.git.git_agent as git_agent
 
     if hasattr(git_agent, "SourceCraftMetadataLoader"):
@@ -19,16 +19,15 @@ def _patch_sourcecraft_metadata_loader() -> bool:
 def _patch_sourcecraft_public_clone_url() -> bool:
     """Use SourceCraft's git host for unauthenticated/public clones.
 
-    The current feature branch inherits GitAgent._get_unauth_url(), which merely
-    appends `.git` to the web URL. SourceCraft's own authenticated URL builder
-    already targets git.sourcecraft.dev. Until upstream provides a
-    SourceCraft-specific public URL builder, mirror that host without a PAT.
+    When SourceCraftAgent inherits the generic public URL builder, it targets
+    the web host instead of git.sourcecraft.dev. Use the git host without a PAT,
+    while preserving any SourceCraft-specific public URL implementation.
     """
     import osa_tool.core.git.git_agent as git_agent
 
     sourcecraft_agent = git_agent.SourceCraftAgent
     if "_get_unauth_url" in sourcecraft_agent.__dict__:
-        # A newer upstream version has its own implementation; do not override it.
+        # Preserve an explicit SourceCraft implementation supplied by OSA.
         return False
 
     def _get_unauth_url(self, url: str | None = None) -> str:

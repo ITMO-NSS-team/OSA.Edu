@@ -214,7 +214,8 @@ def _initial_output_row(row: dict[str, Any], decision: dict[str, Any] | None) ->
         notes = "Найден кандидат, но совпадение недостаточно уверенное; запись передана в веб-проверку."
 
     if status == "NOT_A_PAPER":
-        # Backward-compatible guard: source type and verdict are independent now.
+        # Normalize compatibility responses that use a source type as a verdict:
+        # source type alone does not establish a verification outcome.
         status = "UNVERIFIED"
         notes = "Тип источника определён отдельно; требуется проверка существования и метаданных."
 
@@ -434,9 +435,9 @@ async def check_literature(
             decision["deterministic"] = True
             deterministic_results[str(row["number"])] = decision
 
-    # GLM 5.3 Flash is used only for ambiguous candidate comparisons. Strong
-    # identifier/title matches are decided deterministically; missing evidence
-    # goes straight to the web stage instead of asking the model to guess.
+    # Use the comparison model only for ambiguous candidates. Strong matches
+    # are deterministic; missing evidence goes to web verification so the
+    # model is not asked to guess.
     to_classify = [
         row for row in checked
         if str(row["number"]) not in deterministic_results

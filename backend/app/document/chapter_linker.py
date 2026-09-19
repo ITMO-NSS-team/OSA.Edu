@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-"""Fallback linker for legacy/incomplete Document Maps.
-
-New maps obtain statement→chapter relations from the existing structure LLM call.
-This module preserves the proven local matcher only as a no-extra-request fallback;
-it must not become the primary semantic source for new runs.
-"""
+# Local statement-to-chapter matching is a fallback for maps without LLM relations.
+# It must not replace the structure model's semantic relations or add model calls.
 
 import regex as re
 
@@ -101,9 +97,8 @@ def _statement_chapter_score(statement: str, chapter: dict) -> float:
         ],
     ]).lower().replace("ё", "е")
     anchor_ratio = weighted_ratio(_semantic_tokens(anchor_text))
-    # Chapter/section headings are much more discriminative than incidental
-    # mentions in prose. This fixes cases where a review or application chapter
-    # happens to repeat most terms from a position.
+    # Headings are more discriminative than prose: review and application
+    # chapters can repeat a statement's terms without developing its result.
     score = full_ratio * 0.38 + anchor_ratio * 0.82
 
     # Morphological wording can hide an otherwise near-exact result/title match
@@ -315,7 +310,7 @@ def _statement_chapter_roles(statement: str, chapters: list[dict]) -> list[tuple
         return []
     primary, primary_score = matches[0]
     if primary_score <= 0:
-        # No semantic signal: preserve the conservative full-chapter fallback.
+        # Keep all chapters in scope when there is no evidence for a narrower assignment.
         return [(chapter, 0.0, "primary") for chapter in chapters]
 
     number_match = re.match(r"\s*(\d+)\.", statement)
@@ -356,6 +351,5 @@ def _infer_result_kind(text: str) -> str:
         return "method"
     return "other"
 
-# Public aliases used by the semantic document layer.
 statement_chapter_roles = _statement_chapter_roles
 infer_result_kind = _infer_result_kind

@@ -1,21 +1,8 @@
 from __future__ import annotations
 
-"""High-recall abbreviation-like candidate enumeration.
-
-3.9.3-rc2 intentionally keeps semantic judgement out of Python.  Python only
-builds a broad, grounded inventory and annotates where each token was seen.
-The LLM later decides whether the token is actually an abbreviation and whether
-it violates CORE-4-1 / CORE-4-2 / CORE-4-3 / CORE-12.
-
-The collector therefore prefers recall over precision:
-- all-caps Cyrillic/Latin tokens;
-- mixed-case technical tokens with multiple capitals (LoRA, IoU, eGFR, PyTorch);
-- acronym/version/metric-like tokens containing digits, hyphens, slashes or @;
-- obvious metric notation such as pass3 / pass@k / Recall@10.
-
-Only typographic noise that cannot reasonably be a normative abbreviation is
-removed here (section words, long all-caps Russian heading words, Roman numerals).
-"""
+# Candidate discovery favors recall so unknown domain-specific terms reach the LLM.
+# Python records grounded occurrences and removes only clear typographic noise;
+# semantic classification and rule evaluation belong to downstream stages.
 
 from typing import Any
 import regex as re
@@ -190,12 +177,10 @@ def _looks_abbreviation_like(value: str) -> bool:
     lowers = re.findall(r"[a-zа-яё]", value)
     digits = re.findall(r"\d", value)
 
-    # Classic all-caps acronym / Cyrillic abbreviation.
     if len(uppers) >= 2 and not lowers:
         return True
 
-    # Mixed-case technical names/abbreviations such as LoRA, IoU, eGFR, PyTorch.
-    # Requiring at least two capitals avoids ordinary TitleCase words.
+    # Require at least two capitals to avoid treating ordinary TitleCase words as candidates.
     if len(uppers) >= 2 and lowers:
         return True
 
@@ -206,7 +191,6 @@ def _looks_abbreviation_like(value: str) -> bool:
     if len(uppers) >= 1 and digits and len(value) <= 12:
         return True
 
-    # Acronym-like compounds such as REST-API, AUC-IOU, USDL/OEWS.
     if len(uppers) >= 2 and re.search(r"[-/]", value):
         return True
 
@@ -327,11 +311,9 @@ def _canonical_heading_scope(document: dict[str, Any], definitions: dict[str, li
             continue
         kind = str(block.get("type") or "").lower()
         if kind == "toc":
-            # Extractors also assign ``toc`` to lists of figures/tables far from
-            # the actual contents. CORE-4-2 names the work title and contents,
-            # not every navigation-like appendix. When the contents span is
-            # structurally known, it is authoritative; retain the old cautious
-            # fallback only when extraction cannot establish that span at all.
+            # Extractors can label distant figure/table lists as TOC. A known contents
+            # span is authoritative for CORE-4-2; use the extraction fallback only
+            # when the document structure cannot establish that span.
             if not toc_pages or block.get("page") in toc_pages:
                 scope.setdefault(bid, "toc")
             continue
@@ -444,8 +426,8 @@ def collect_abbreviation_tokens(document: dict[str, Any]) -> list[dict[str, Any]
         if not bid or bid in excluded or str(block.get("type") or "").lower() == "bibliography":
             continue
 
-        # With a usable map, inspect the canonical main work plus title/TOC.
-        # Without a map, preserve permissive legacy behaviour.
+        # Without a usable map, retain permissive scope so missing structure
+        # does not silently suppress candidates.
         in_scope = main_ids is None or bid in main_ids or bid in title_ids or block.get("page") in toc_pages
         if not in_scope:
             continue

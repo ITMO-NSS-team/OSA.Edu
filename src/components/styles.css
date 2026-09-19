@@ -217,7 +217,7 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
 .map-edit-row .actions { justify-content: flex-end; }
 @media (max-width: 700px) { .map-edit-row { grid-template-columns: 1fr; } .map-edit-row .actions { justify-content: flex-start; } }
 
-/* v3: user-reviewed one-shot structure */
+/* Structure review */
 .structure-review { min-width: 0; }
 .review-intro { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 12px; }
 .review-intro p { margin: 6px 0 0; color: #666d74; line-height: 1.5; max-width: 720px; }
@@ -281,7 +281,7 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
 .report-health.review_required { background: #fff8e8; border-color: #e2c980; }
 .report-health.technical_incomplete { background: #fff0f0; border-color: #e1b4b4; }
 
-/* quality-4: report readability and user-facing polish */
+/* Report presentation */
 .result-card summary { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; }
 .result-card summary .rule-title { white-space: normal; overflow-wrap: anywhere; word-break: normal; line-height: 1.35; }
 .result-card summary .rule-id { align-self: center; }
@@ -591,7 +591,7 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
   .repro-artifact-grid { grid-template-columns: 1fr; }
 }
 
-/* Reproducibility P2: keep the original simple flow, hide operational detail by default. */
+/* Hide operational details until requested to keep the main flow focused. */
 .repro-start-card { margin-bottom: 16px; display: grid; gap: 16px; }
 .repro-start-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 14px; align-items: end; }
 .repro-field { display: grid; gap: 7px; }

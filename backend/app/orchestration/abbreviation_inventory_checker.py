@@ -1,22 +1,10 @@
 from __future__ import annotations
 
-"""Fact-first abbreviation map over a high-recall Python inventory.
-
-3.9.5-rc2 policy:
-- Python enumerates abbreviation-like lexical candidates and owns document scope,
-  content roles and grounded evidence.
-- The LLM does *not* decide CORE-4/CORE-12 verdicts. It builds one factual map for
-  every candidate: semantic entity kind, normative class, first-use expansion
-  facts and document-local explanation facts.
-- Python validates that map and applies declarative rule contracts from the
-  canonical ``config/rule-manifest.json``.
-- The logical map may be built in bounded packets for reliability. Missing rows
-  receive targeted recovery only; unresolved facts become ``uncertain`` rather
-  than false violations or false passes.
-
-This mirrors the Document Map architecture: LLM identifies grounded facts;
-Python enforces normative contracts.
-"""
+# Python owns candidate discovery, scope and grounded evidence. The LLM supplies
+# entity classifications and expansion facts; Python validates them and applies
+# the declarative contracts in config/rule-manifest.json to determine verdicts.
+# Bounded packets and targeted recovery preserve successful rows. Unresolved facts
+# remain uncertain rather than becoming false violations or false passes.
 
 import asyncio
 import json
@@ -154,8 +142,8 @@ CANDIDATES:
 '''
 
 
-# Backward-compatible name for callers/tests outside this archive. The function
-# now builds a fact-map prompt and intentionally ignores rule verdicts.
+# Retain the callable signature for compatibility; the prompt requests
+# facts only, so rule verdicts are intentionally absent.
 def build_abbreviation_llm_message(rules: list[dict], inventory: list[dict], *, recovery: bool = False) -> str:
     return build_abbreviation_fact_map_message(inventory, recovery=recovery)
 
@@ -181,8 +169,8 @@ def _parse_fact_rows(value: Any, allowed_ids: set[str]) -> dict[str, dict]:
             "normativeClass": normative_class,
         }
         direct_is_abbreviation = str(raw.get("isAbbreviation") or "").strip().lower()
-        # Backward compatibility for cached/test rows produced before this field
-        # existed. New runtime prompts always request the explicit property.
+        # Cached rows may lack isAbbreviation. Derive it from normativeClass
+        # when absent or invalid; runtime prompts request the explicit property.
         if direct_is_abbreviation not in {"yes", "no", "uncertain"}:
             if normative_class == "abbreviation":
                 direct_is_abbreviation = "yes"
@@ -224,7 +212,7 @@ def _parse_fact_rows(value: Any, allowed_ids: set[str]) -> dict[str, dict]:
     return out
 
 
-# Kept as a compatibility alias for internal regression imports from 3.9.3.
+# Compatibility alias for callers importing the verdict-row parser name.
 def _parse_rows(value: Any, allowed_ids: set[str]) -> dict[str, dict]:
     return _parse_fact_rows(value, allowed_ids)
 

@@ -59,9 +59,9 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             notation_dependent.append(routed)
             continue
         if rule.get('engineKind') == 'abbreviation_fact_map':
-            # Abbreviation rules are intercepted by the shared fact-map stage
-            # before ordinary semantic routing. Python owns candidate discovery/scope;
-            # one compact LLM inventory audit owns the CORE-4 verdicts.
+            # Abbreviation rules share one fact map before semantic routing.
+            # The LLM supplies facts; Python owns scope and applies rule contracts
+            # to determine CORE-4/CORE-12 verdicts.
             abbreviation_routed.append(routed)
         elif st=='deterministic':
             detector_rule = {**rule, **({'detectorId': routed.get('detectorId')} if routed.get('detectorId') else {})}

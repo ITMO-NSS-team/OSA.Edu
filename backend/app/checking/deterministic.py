@@ -148,9 +148,8 @@ def _personal(rule,document):
 
 
 def _yo(rule,document):
-    # Keep this detector deliberately high-precision. In particular, short passive
-    # forms such as «проведено/проведены» and nouns such as «проведение» contain
-    # е, not ё; the old broad stems produced systematic false positives.
+    # Short passive forms such as «проведено/проведены» and nouns such as
+    # «проведение» contain е, not ё. Broad stems would create false positives.
     candidates=[
         (r'\bза\s+счет\b','за счёт'),
         (r'\bвсе\s+еще\b','всё ещё'),
@@ -196,11 +195,8 @@ def _list_cap(rule,document):
     for b in narrative_blocks(document):
         text=b.get('text','')
         if re.search(r'\bАлгоритм\s*:',text,re.I) or formula_like_block(text): continue
-        # PDF/DOCX lists occur as ``1.``, ``1)`` and ``(1)``.  The previous
-        # detector only handled the first form, which systematically missed
-        # lower-case list items in otherwise correctly extracted list blocks.
-        # Reuse the canonical numbered-item parser instead of maintaining a
-        # second, narrower marker grammar here.
+        # Use the canonical numbered-item parser so PDF/DOCX markers ``1.``,
+        # ``1)`` and ``(1)`` receive the same lower-case item checks.
         for item in extract_numbered_items(text):
             body=str(item.get('body') or '').lstrip(' «"“(').lstrip()
             if not body or not re.match(r'^[а-яё]',body):
@@ -214,10 +210,9 @@ def _list_cap(rule,document):
 def _forbidden_abbreviations(rule,document):
     """Check CORE-11-3 without confusing ordinary word endings with ``т. е.``.
 
-    The old pattern made the dot after ``т`` optional, so a PDF word such as
-    ``спли-те.`` could expose the substring ``те.`` and become a false positive.
-    The normative forms always contain the first full stop, therefore requiring
-    it is both stricter and more faithful to the rule.
+    Require the full stop after ``т`` because it is part of the normative
+    form. Otherwise a PDF word such as ``спли-те.`` could expose ``те.`` and
+    become a false positive.
     """
     forbidden=re.compile(r'(?<![\p{L}\p{N}_])т\.\s*(?:е|к|ч)\.(?!\p{L})',re.I)
     bad_spacing=re.compile(r'(?<![\p{L}\p{N}_])т\.[дп]\.(?!\p{L})',re.I)

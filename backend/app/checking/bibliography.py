@@ -201,7 +201,6 @@ def run_bibliography_rule(rule:dict,document:dict)->dict:
         if ev:
             return result(rule,'violation','Обнаружены авторы, у которых инициалы стоят перед фамилией.',dedupe_evidence(ev)[:15],1,'detector','Оформить имена авторов единообразно: «Фамилия И. О.».')
         return result(rule,'pass','Высокоуверенных случаев расположения инициалов перед фамилией в распознанных библиографических записях не обнаружено.',confidence=1)
-    # deterministic bibliographic formatting patterns
     ev=[]
     patterns=[]
     if rid=='CORE-9-2': patterns=[r'\bISBN\b',r'\bed\.\s+by\b',r'\s&\s',r'\b[A-ZА-ЯЁ][\p{L}-]+,\s+[A-ZА-ЯЁ]\.']

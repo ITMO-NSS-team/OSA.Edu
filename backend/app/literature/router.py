@@ -178,7 +178,7 @@ async def delete_literature_job_endpoint(job_id: str):
     return Response(status_code=204)
 
 
-# Legacy one-shot endpoint kept for scripts that used the earlier MVP.
+# Keep the one-shot endpoint for clients that do not use the job queue.
 @router.post("/check")
 async def check_literature_endpoint(
     file: UploadFile = File(...),

@@ -277,8 +277,8 @@ def apply_consistency_checks(results: list[dict], document: dict | None = None) 
             replacement = _append_note(replacement, "Нарушение CORE-1-3 понижено до UNCERTAIN: условие наличия прототипа не подтверждено матрицей фактов.")
             by["CORE-1-3"] = replacement
         elif any(status not in eligible_statuses for status in prototype_statuses):
-            # Some other position has a prototype, but the evidence cannot be tied
-            # to it. Global leakage was the main 3.7 false-positive mode.
+            # A prototype for another statement cannot establish this statement's
+            # precondition without evidence linking them.
             replacement = _replace_status(
                 core_13,
                 "uncertain",
@@ -297,9 +297,8 @@ def apply_consistency_checks(results: list[dict], document: dict | None = None) 
             core_13, document=document, core23=core_23, contract=contract
         )
 
-    # Reconcile CORE-1-1 after the entity-level CORE-1-3 decision. In 3.7 the
-    # earlier invariant could make CORE-1-1 red and then CORE-1-3 was downgraded,
-    # leaving a stale contradiction.
+    # Reconcile CORE-1-1 after the entity-level CORE-1-3 decision to avoid
+    # stale contradictions between the parent and component verdicts.
     core_11 = by.get("CORE-1-1")
     core_12 = by.get("CORE-1-2")
     core_13 = by.get("CORE-1-3")
