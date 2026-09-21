@@ -28,6 +28,7 @@ For an unspecified general check, use `full`. For a requested complete pipeline,
    ```
 
 3. For `full` or `literature`, confirm that `configured` is true for the provider of the requested model, or for the first/default model when none was requested. If it is false, report the provider configuration problem; do not silently switch models or pretend that OSA.Edu ran.
+   For `reproducibility`, the client runs `/api/reproducibility/preflight`; accept either the OpenRouter/API-backed path or the Host LLM path reported there. Do not require `OPENROUTER_API_KEY` when `REPRODUCIBILITY_USE_HOST_LLM=true` and Host LLM is ready.
 4. If a local OSA.Edu checkout is in scope and the server is unavailable, start its backend with the repository's documented command. Otherwise report that the server is required; do not substitute an agent-only review.
 5. Submit the requested checks and wait for their terminal states:
 

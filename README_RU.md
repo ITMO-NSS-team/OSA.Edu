@@ -2,7 +2,7 @@
 
 OSA.Edu — система автоматической проверки выпускных квалификационных работ и диссертаций.
 
-Система анализирует структуру документа, находит ключевые разделы работы и проверяет текст по набору формальных и смысловых правил. Для простых проверок используется Python-код, для смысловых проверок — LLM через OpenRouter.
+Система анализирует структуру документа, находит ключевые разделы работы и проверяет текст по набору формальных и смысловых правил. Для простых проверок используется Python-код, для смысловых проверок — LLM через OpenRouter или Host LLM provider с доступом через подписку.
 
 Отдельный режим «Проверка воспроизводимости» сопоставляет технические утверждения из PDF-файла ВКР с программным кодом указанного репозитория: находит подтверждения в коде, показывает результат проверки каждого утверждения, уровень уверенности и объяснение. Результаты можно сохранить в JSON или сформировать PDF-отчёт на русском или английском языке.
 Отдельный режим «Нормоконтроль» отправляет PDF на внешний MCP-сервер «Автонормоконтроль», отслеживает попытки выполнения и скачивает готовый PDF-отчёт.
@@ -22,7 +22,7 @@ OSA.Edu позволяет:
 - проверять сокращения, оформление, библиографию, структуру положений и другие элементы;
 - отправлять PDF на внешний MCP-сервер нормоконтроля и скачивать итоговый PDF-отчёт;
 - отдельно проверять литературу и ссылки на источники: существование источника, совпадение названия, авторов, года, DOI/arXiv/URL и других метаданных;
-- вести очередь проверки литературы для нескольких PDF и выгружать результат в TSV;
+- вести очередь проверки литературы для нескольких PDF и выгружать результат в TSV, HTML или PDF;
 - показывать доказательства найденных нарушений с привязкой к тексту документа;
 - отмечать неоднозначные проверки для ручного просмотра;
 - формировать пользовательский и технический отчёты.
@@ -40,7 +40,7 @@ OSA.Edu позволяет:
 - npm
 - Git
 
-Также необходим API-ключ OpenRouter.
+Также нужен хотя бы один LLM-провайдер: API-ключ OpenRouter или настроенный Host LLM provider.
 
 ---
 
@@ -98,7 +98,7 @@ npm install
 
 ---
 
-## 5. Настройка OpenRouter
+## 5. Настройка LLM-провайдера
 
 Создайте `.env` из примера:
 
@@ -114,11 +114,35 @@ Copy-Item .env.example .env
 cp .env.example .env
 ```
 
-Добавьте API-ключ:
+Выберите один из вариантов провайдера.
+
+### OpenRouter
+
+Добавьте API-ключ и оставьте проверку воспроизводимости на API-пути:
 
 ```env
 OPENROUTER_API_KEY=your_api_key
+REPRODUCIBILITY_USE_HOST_LLM=false
 ```
+
+### Host LLM subscription
+
+Используйте этот режим, если backend может вызвать локальную CLI-сессию, совместимую с Codex, с выполненной авторизацией:
+
+```env
+HOST_LLM_COMMAND=codex
+REPRODUCIBILITY_USE_HOST_LLM=true
+REPRODUCIBILITY_MODEL=gpt-5.6-luna
+```
+
+Если backend запущен в Docker, а subscription CLI доступна на host, используйте bridge mode:
+
+```env
+HOST_LLM_BRIDGE_DIR=/absolute/path/to/osa-edu-host-bridge
+REPRODUCIBILITY_USE_HOST_LLM=true
+```
+
+Достаточно одного из параметров: `HOST_LLM_COMMAND` или `HOST_LLM_BRIDGE_DIR`. `REPRODUCIBILITY_OSA_COMMAND` — расширенная настройка для операторов, которым нужен собственный runner OSA.
 
 ---
 
@@ -148,7 +172,7 @@ Docker-режим запускает frontend и backend в отдельных �
 - FastAPI backend — `http://127.0.0.1:8787`
 - React frontend — `http://127.0.0.1:5173`
 
-Dev Compose использует host network mode, чтобы backend видел VPN-маршруты хоста и host-local ссылки внешнего нормоконтроля. Сначала создайте `.env` и добавьте `OPENROUTER_API_KEY`, как описано выше. Затем запустите:
+Dev Compose использует host network mode, чтобы backend видел VPN-маршруты хоста и host-local ссылки внешнего нормоконтроля. Сначала создайте `.env` и настройте OpenRouter или Host LLM, как описано выше. Затем запустите:
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
@@ -197,11 +221,11 @@ MCP-вызовы во вкладке «Нормоконтроль» ограни
 Для отдельной проверки библиографического списка:
 
 1. Откройте вкладку «Проверка литературы».
-2. Выберите production-модель OpenRouter.
+2. Выберите production-модель или provider.
 3. Загрузите один или несколько PDF-файлов.
 4. Добавьте файлы в очередь и дождитесь завершения проверки.
 5. Просмотрите источники во вкладках «Требуют внимания», «Подтверждено» и «Все».
-6. Откройте найденные доказательные ссылки и скачайте TSV, если нужен табличный протокол.
+6. Откройте найденные доказательные ссылки и скачайте TSV, HTML или PDF, если нужен экспорт.
 
 Проверка литературы работает консервативно: отсутствие надёжного найденного кандидата помечается как `UNVERIFIED`, а не как доказанная фабрикация источника. Статус `LIKELY_HALLUCINATED` выставляется только при повышенной уверенности и наличии независимых веб-доказательств.
 
@@ -214,6 +238,32 @@ MCP-вызовы во вкладке «Нормоконтроль» ограни
 5. Дождитесь извлечения технических утверждений и их проверки по коду.
 6. Просмотрите статистику, результат каждого утверждения, уверенность и найденные доказательства.
 7. При необходимости скачайте JSON или PDF-отчёт.
+
+Проверка воспроизводимости оставляет извлечение claims и проверку репозитория внутри канонического OSA `--paper-analysis` pipeline. OSA.Edu отвечает за загрузку, очередь, прогресс, отображение и подключение провайдера. Когда `REPRODUCIBILITY_USE_HOST_LLM=true`, OSA.Edu запускает OSA через wrapper, который патчит вызовы моделей OSA на Host LLM provider, поэтому `/api/reproducibility/status`, `/api/reproducibility/preflight` и создание задач не требуют `OPENROUTER_API_KEY`, если готов `HOST_LLM_COMMAND` или `HOST_LLM_BRIDGE_DIR`.
+
+## Использование OSA.Edu как Codex skill
+
+В репозитории есть `.codex/skills/osa-edu-review`. В Codex попросите использовать `$osa-edu-review` после запуска backend OSA.Edu.
+
+Проверить сервер:
+
+```bash
+python .codex/skills/osa-edu-review/scripts/osa_edu_client.py health --base-url http://127.0.0.1:8787
+```
+
+Запустить проверку правил и литературы:
+
+```bash
+python .codex/skills/osa-edu-review/scripts/osa_edu_client.py run path/to/work.pdf --checks full,literature --output-dir osa-edu-results
+```
+
+Запустить проверку воспроизводимости по репозиторию:
+
+```bash
+python .codex/skills/osa-edu-review/scripts/osa_edu_client.py run path/to/work.pdf --checks reproducibility --repository https://github.com/owner/repository --output-dir osa-edu-results
+```
+
+Клиент сохраняет `osa-edu-manifest.json`, исходные payload задач и отчёты в output directory. Он возвращает результаты OSA.Edu без переписывания verdict-ов сервера.
 
 ---
 
@@ -478,9 +528,9 @@ LLM-сравнение неоднозначных кандидатов
 
 Текстовая версия технического протокола.
 
-### TSV проверки литературы
+### TSV/HTML/PDF проверки литературы
 
-На странице «Проверка литературы» результат можно скачать как TSV: номер источника, тип источника, verdict/status, исходная запись, найденная запись, evidence URL и комментарий.
+На странице «Проверка литературы» результат можно скачать как TSV, HTML или распечатать в PDF. TSV содержит номер источника, тип источника, verdict/status, исходную запись, найденную запись, evidence URL и комментарий.
 
 ### PDF-отчёт нормоконтроля
 
@@ -673,10 +723,15 @@ data/reproducibility/jobs.json
 
 Основные настройки передаются через `.env`.
 
-Минимально для запуска необходим:
+Минимально нужен один из вариантов LLM-провайдера:
 
 ```env
 OPENROUTER_API_KEY=
+
+# или
+HOST_LLM_COMMAND=codex
+# или
+HOST_LLM_BRIDGE_DIR=/absolute/path/to/bridge
 
 ```
 
@@ -686,12 +741,13 @@ OPENROUTER_API_KEY=
 - rate limits;
 - количества повторов;
 - размеров LLM batch;
+- Host LLM transport с доступом через подписку: `HOST_LLM_COMMAND`, `HOST_LLM_BRIDGE_DIR`, `HOST_LLM_REQUEST_TIMEOUT_SECONDS`;
 - восстановления кандидатов;
 - обработки сокращений;
 - MCP endpoint, DAG, количества попыток и timeouts для вкладки «Нормоконтроль»: `NORMCONTROL_MCP_URL`, `NORMCONTROL_DAG_ID`, `NORMCONTROL_MCP_ATTEMPTS`, `NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS`, `NORMCONTROL_HTTP_TIMEOUT_SECONDS`;
 - модели и веб-этапа проверки литературы: `LITERATURE_REVIEW_MODEL`, `LITERATURE_WEB_SEARCH_ENABLED`, `LITERATURE_WEB_FALLBACK_TO_PLUGIN`, `LITERATURE_WEB_SEARCH_ENGINE`, `LITERATURE_WEB_PROVIDER_ORDER`;
 - опционального контакта для polite pool Crossref: `CROSSREF_MAILTO`.
-- параметры проверки воспроизводимости: модель OSA, timeout, context window, max tokens и количество повторов (`REPRODUCIBILITY_*`);
+- параметры проверки воспроизводимости: модель OSA, Host LLM routing, timeout, context window, max tokens и количество повторов (`REPRODUCIBILITY_MODEL`, `REPRODUCIBILITY_USE_HOST_LLM`, `REPRODUCIBILITY_TIMEOUT_SECONDS`, `REPRODUCIBILITY_CONTEXT_WINDOW`, `REPRODUCIBILITY_MAX_TOKENS`, `REPRODUCIBILITY_LLM_MAX_RETRIES`);
 Обычно значения по умолчанию менять не требуется.
 
 ---
@@ -749,6 +805,8 @@ OSA.Edu является автоматическим помощником но�
 - PDF-файл ВКР.
 
 После этого OSA.Edu анализирует текст работы, выделяет проверяемые технические утверждения (claims) и сопоставляет их с содержимым репозитория.
+
+Сам анализ репозитория остаётся в OSA. Если `REPRODUCIBILITY_USE_HOST_LLM=true`, OSA.Edu передаёт OSA Host LLM adapter для model calls; иначе OSA использует настроенный OpenRouter/API-compatible ключ. Опциональный `REPRODUCIBILITY_OSA_COMMAND` override обходит встроенный wrapper и предназначен для операторов, которые предоставляют собственный runner.
 
 Например, если в работе утверждается, что реализован определённый алгоритм, используется конкретная модель или предусмотрен механизм резервного переключения, система пытается найти подтверждение этому в коде проекта.
 
