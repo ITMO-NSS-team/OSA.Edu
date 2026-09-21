@@ -31,39 +31,80 @@ def _prompt_hash(prompt: str) -> str:
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
 
 
-def _structure_message(blocks: list[dict[str, Any]]) -> str:
+def _structure_message(blocks: list[dict[str, Any]], *, text_limit: int | None = None) -> str:
+    def block_text(block: dict[str, Any]) -> str:
+        value = str(block.get("text", ""))
+        if text_limit is None or len(value) <= text_limit:
+            return value
+        head = max(1, round(text_limit * 0.72))
+        tail = max(1, text_limit - head - 1)
+        return f"{value[:head]}…{value[-tail:]}"
+
     content = "\n\n".join(
         f"BLOCK {b['id']} | {b.get('location','')}"
         + (f" | page={b['page']}" if b.get("page") else "")
-        + f" | type={b.get('type','paragraph')}\n{b.get('text','')}"
+        + f" | type={b.get('type','paragraph')}\n{block_text(b)}"
         for b in blocks
     )
     return f"DOCUMENT_BLOCKS ({len(blocks)}):\n\n{content}"
+
+
+def _fit_structure_message(blocks: list[dict[str, Any]], max_chars: int) -> tuple[str, int | None]:
+    """Fit every block id into the structure request while compacting long text.
+
+    Structure mapping needs the complete ordered block skeleton, but it does not
+    need every long paragraph or formula verbatim. Keeping both ends of compacted
+    blocks preserves headings, lead sentences and trailing conclusions without
+    dropping any boundary ids from large dissertations.
+    """
+    full = _structure_message(blocks)
+    if len(full) <= max_chars:
+        return full, None
+
+    minimum_limit = 160
+    compact = _structure_message(blocks, text_limit=minimum_limit)
+    if len(compact) > max_chars:
+        raise ValueError(
+            f"Даже компактный каркас структуры занимает {len(compact):,} символов при лимите {max_chars:,}. "
+            "Сократите документ или служебные приложения."
+        )
+
+    longest = max((len(str(block.get("text", ""))) for block in blocks), default=minimum_limit)
+    low, high = minimum_limit, max(minimum_limit, longest)
+    best_message, best_limit = compact, minimum_limit
+    while low <= high:
+        candidate_limit = (low + high) // 2
+        candidate = _structure_message(blocks, text_limit=candidate_limit)
+        if len(candidate) <= max_chars:
+            best_message, best_limit = candidate, candidate_limit
+            low = candidate_limit + 1
+        else:
+            high = candidate_limit - 1
+    return best_message, best_limit
 
 
 async def build_document_map(document: dict[str, Any], *, provider: str, model: str, prompt: str) -> dict[str, Any]:
     blocks = document.get("blocks", [])
     if not blocks:
         raise ValueError("Документ не содержит блоков для построения структуры.")
-    user_message = _structure_message(blocks)
     try:
         max_chars = int(os.getenv("STRUCTURE_MAX_INPUT_CHARS", "2500000") or 2_500_000)
     except ValueError:
         max_chars = 2_500_000
     if max_chars <= 0:
         max_chars = 2_500_000
-    if len(user_message) > max_chars:
-        raise ValueError(
-            f"Документ слишком большой для одношагового построения структуры: {len(user_message):,} символов "
-            f"при лимите {max_chars:,}. Увеличьте STRUCTURE_MAX_INPUT_CHARS или сократите служебные приложения."
-        )
     definition = model_definition(model)
     chars_per_token = _positive_float(os.getenv("LLM_CHARS_PER_TOKEN"), 3.0)
-    estimated_tokens = int((len(prompt) + len(user_message) + chars_per_token - 1) // chars_per_token)
     safety_ratio = min(
         0.95,
         max(0.5, _positive_float(os.getenv("STRUCTURE_CONTEXT_SAFETY_RATIO"), 0.85)),
     )
+    request_char_limit = max_chars
+    if definition:
+        safe_chars = int(definition["contextTokens"] * safety_ratio * chars_per_token) - len(prompt)
+        request_char_limit = min(request_char_limit, max(1, safe_chars))
+    user_message, text_limit = _fit_structure_message(blocks, request_char_limit)
+    estimated_tokens = int((len(prompt) + len(user_message) + chars_per_token - 1) // chars_per_token)
     if definition and estimated_tokens > int(definition["contextTokens"] * safety_ratio):
         raise ValueError(
             f"Оценочный объём запроса — {estimated_tokens:,} токенов, что слишком близко к контекстному лимиту "
@@ -86,7 +127,13 @@ async def build_document_map(document: dict[str, Any], *, provider: str, model: 
         "issues": parsed["issues"],
         "warnings": parsed["warnings"],
         "usage": response["usage"],
-        "extraction": {"totalBlocks": len(blocks), "processedBlocks": len(blocks), "totalBatches": 1, "processedBatches": 1},
+        "extraction": {
+            "totalBlocks": len(blocks), "processedBlocks": len(blocks),
+            "totalBatches": 1, "processedBatches": 1,
+            "inputMode": "compact" if text_limit is not None else "full",
+            "blockTextLimit": text_limit,
+            "inputCharacters": len(user_message),
+        },
         "review": {"required": True, "confirmedByUser": False},
     }
 

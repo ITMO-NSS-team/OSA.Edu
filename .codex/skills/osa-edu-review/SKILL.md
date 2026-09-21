@@ -36,6 +36,7 @@ For an unspecified general check, use `full`. For a requested complete pipeline,
    ```
 
    Add `--repository https://host/owner/repository` for reproducibility. Use `--model` or `--profile full` only when requested or needed for the task.
+   Add `--exclude-appendices` when the user explicitly asks not to inspect trailing appendices. The client creates a preserved working PDF copy ending before the first real appendix heading found after the dissertation bibliography, records the detected boundary in the manifest, and submits that same copy to every selected check. If the boundary cannot be found reliably, the run stops instead of silently submitting the entire PDF.
 
 The client runs selected modes sequentially, prints progress to stderr, writes an `osa-edu-manifest.json`, and prints that manifest to stdout. A nonzero exit means at least one requested mode failed; keep the saved job payload and expose the actual OSA.Edu error.
 
