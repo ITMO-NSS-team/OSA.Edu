@@ -14,9 +14,12 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from ..llm.host_llm import DEFAULT_HOST_LLM_MODEL
+
 ProgressCallback = Callable[[int, str], Awaitable[None]]
 LogCallback = Callable[[str], Awaitable[None]]
 PROGRESS_PREFIX = "OSA_EDU_PROGRESS "
+_TRUTHY = {"1", "true", "yes", "on"}
 
 # OSA uses Rich for CLI output. In a real terminal these sequences are interpreted
 # as colors, cursor movement and clickable file links. OSA.Edu captures stdout and
@@ -44,11 +47,28 @@ def osa_installed() -> bool:
     return importlib.util.find_spec("osa_tool") is not None
 
 
+def use_host_llm() -> bool:
+    return os.getenv("REPRODUCIBILITY_USE_HOST_LLM", "").strip().lower() in _TRUTHY
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    root = str(_project_root())
+    pythonpath = env.get("PYTHONPATH", "").strip()
+    env["PYTHONPATH"] = root if not pythonpath else os.pathsep.join([root, pythonpath])
+    return env
+
+
 def configured_model() -> str:
+    fallback = DEFAULT_HOST_LLM_MODEL if use_host_llm() else "z-ai/glm-5.3-flash"
     return (
         os.getenv("REPRODUCIBILITY_MODEL", "").strip()
         or os.getenv("LITERATURE_REVIEW_MODEL", "").strip()
-        or "z-ai/glm-5.3-flash"
+        or fallback
     )
 
 
@@ -64,31 +84,9 @@ def configured_base_url() -> str:
     return base
 
 
-def build_osa_command(repository: str, paper_path: Path, output_dir: Path, *, mode: str = "full", claims_path: Path | None = None) -> list[str]:
-    """Run OSA's canonical paper-analysis CLI.
-
-    OSA.Edu owns only job lifecycle and presentation. PDF parsing, claim extraction,
-    filtering, batching and repository verification stay inside OSA.
-    """
+def _osa_cli_args(repository: str, paper_path: Path, output_dir: Path, *, mode: str = "full", claims_path: Path | None = None) -> list[str]:
     model = configured_model()
-    template = os.getenv("REPRODUCIBILITY_OSA_COMMAND", "").strip()
-    if template:
-        values = {
-            "repository": repository,
-            "paper": str(paper_path),
-            "output": str(output_dir),
-            "model": model,
-            "base_url": configured_base_url(),
-            "mode": mode,
-            "claims": str(claims_path) if claims_path else "",
-        }
-        return [part.format(**values) for part in shlex.split(template)]
-
-    python = os.getenv("REPRODUCIBILITY_OSA_PYTHON", "").strip() or sys.executable
-    command = [
-        python,
-        "-m",
-        "osa_tool.run",
+    args = [
         "--paper-analysis",
         "--repository",
         repository,
@@ -114,10 +112,35 @@ def build_osa_command(repository: str, paper_path: Path, output_dir: Path, *, mo
     if mode == "verification-only":
         if not claims_path:
             raise OsaRunError("Для возобновления проверки не найден claims.json.")
-        command.extend(["--claims-json", str(claims_path)])
+        args.extend(["--claims-json", str(claims_path)])
     else:
-        command.extend(["--paper", str(paper_path)])
-    return command
+        args.extend(["--paper", str(paper_path)])
+    return args
+
+
+def build_osa_command(repository: str, paper_path: Path, output_dir: Path, *, mode: str = "full", claims_path: Path | None = None) -> list[str]:
+    """Run OSA's canonical paper-analysis CLI.
+
+    OSA.Edu owns only job lifecycle and presentation. PDF parsing, claim extraction,
+    filtering, batching and repository verification stay inside OSA.
+    """
+    model = configured_model()
+    template = os.getenv("REPRODUCIBILITY_OSA_COMMAND", "").strip()
+    if template:
+        values = {
+            "repository": repository,
+            "paper": str(paper_path),
+            "output": str(output_dir),
+            "model": model,
+            "base_url": configured_base_url(),
+            "mode": mode,
+            "claims": str(claims_path) if claims_path else "",
+        }
+        return [part.format(**values) for part in shlex.split(template)]
+
+    python = os.getenv("REPRODUCIBILITY_OSA_PYTHON", "").strip() or sys.executable
+    module = "backend.app.reproducibility.osa_host_runner" if use_host_llm() else "osa_tool.run"
+    return [python, "-m", module, *_osa_cli_args(repository, paper_path, output_dir, mode=mode, claims_path=claims_path)]
 
 
 def _tail(text: str, limit: int = 12000) -> str:
@@ -323,9 +346,9 @@ async def run_osa_analysis(
         else:
             await on_progress(10, "Запускаем штатный OSA paper-analysis: PDF → claims → проверка по репозиторию.")
 
-    env = os.environ.copy()
+    env = _subprocess_env()
     openrouter_key = env.get("OPENROUTER_API_KEY", "").strip()
-    if openrouter_key and not env.get("OPENAI_API_KEY", "").strip():
+    if not use_host_llm() and openrouter_key and not env.get("OPENAI_API_KEY", "").strip():
         env["OPENAI_API_KEY"] = openrouter_key
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
@@ -375,6 +398,7 @@ async def run_osa_analysis(
             f"[OSA.Edu] PID: {process.pid}",
             f"[OSA.Edu] Python: {command[0]}",
             f"[OSA.Edu] Model: {configured_model()}",
+            f"[OSA.Edu] LLM provider: {'Host LLM' if use_host_llm() else 'OpenRouter / API-compatible'}",
             f"[OSA.Edu] Base URL: {configured_base_url()}",
             f"[OSA.Edu] Repository: {repository}",
             f"[OSA.Edu] Repository display URL: {repository_for_display}",

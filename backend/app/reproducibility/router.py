@@ -14,10 +14,11 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from ..config import MAX_FILE_SIZE_MB, REPRODUCIBILITY_RUNS_DIR, REPRODUCIBILITY_UPLOADS_DIR
+from ..llm.host_llm import host_provider_status
 from ..util import now_iso
 from .diagnostics import llm_access, repository_access, runtime_status
 from .job_queue import cancel_reproducibility_job, start_reproducibility_queue
-from .runner import configured_base_url, configured_model, osa_installed
+from .runner import configured_base_url, configured_model, osa_installed, use_host_llm
 from .store import (
     create_reproducibility_job,
     delete_reproducibility_job,
@@ -43,6 +44,13 @@ def _allowed_repository_hosts() -> set[str]:
         "github.com,gitlab.com,gitverse.ru,sourcecraft.dev,git.sourcecraft.dev",
     )
     return {item.strip().lower() for item in raw.split(",") if item.strip()}
+
+
+async def _llm_ready_status(*, force: bool = False) -> tuple[bool, dict[str, object] | None]:
+    if use_host_llm():
+        status = await asyncio.to_thread(host_provider_status, force=force)
+        return bool(status.get("authenticated")), status
+    return bool(os.getenv("OPENROUTER_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip()), None
 
 
 def _validate_repository(value: str) -> str | None:
@@ -213,13 +221,16 @@ def _job_view(job: dict[str, object]) -> dict[str, object]:
 
 @router.get("/status")
 async def reproducibility_status():
-    has_key = bool(os.getenv("OPENROUTER_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip())
+    host_mode = use_host_llm()
+    llm_configured, host_status = await _llm_ready_status()
     runtime = await asyncio.to_thread(runtime_status, include_cuda=False)
     return {
-        "ok": osa_installed() and has_key and bool(runtime.get("pythonSupportedForPaperClaims")) and bool(runtime.get("git", {}).get("installed")),
+        "ok": osa_installed() and llm_configured and bool(runtime.get("pythonSupportedForPaperClaims")) and bool(runtime.get("git", {}).get("installed")),
         "osaInstalled": osa_installed(),
         "osaVersion": runtime.get("osaVersion"),
-        "llmConfigured": has_key,
+        "llmConfigured": llm_configured,
+        "llmProvider": "host" if host_mode else "openrouter",
+        "host": host_status,
         "model": configured_model(),
         "baseUrl": configured_base_url(),
         "pythonVersion": runtime.get("pythonVersion"),
@@ -239,7 +250,8 @@ async def reproducibility_preflight(repository: str):
 
     runtime_task = asyncio.to_thread(runtime_status, include_cuda=True)
     repository_task = asyncio.to_thread(repository_access, repository)
-    llm_task = llm_access(configured_base_url(), configured_model())
+    host_mode = use_host_llm()
+    llm_task = llm_access(configured_base_url(), configured_model(), use_host_llm=host_mode)
     runtime, repo, llm = await asyncio.gather(runtime_task, repository_task, llm_task)
 
     git = runtime.get("git", {})
@@ -275,10 +287,10 @@ async def reproducibility_preflight(repository: str):
         },
         {
             "id": "llm",
-            "label": "OpenRouter / LLM",
+            "label": "Host LLM" if host_mode else "OpenRouter / LLM",
             "ok": bool(llm.get("ok")),
             "blocking": True,
-            "detail": str(llm.get("detail") or "Не удалось проверить API key."),
+            "detail": str(llm.get("detail") or ("Не удалось проверить Host LLM." if host_mode else "Не удалось проверить API key.")),
         },
         {
             "id": "cuda",
@@ -321,6 +333,7 @@ async def reproducibility_preflight(repository: str):
         "ok": blocking_ok,
         "checks": checks,
         "warnings": warnings,
+        "llmProvider": "host" if host_mode else "openrouter",
         "model": configured_model(),
         "baseUrl": configured_base_url(),
     }
@@ -395,7 +408,13 @@ async def create_reproducibility_job_endpoint(
             503,
             'OSA не установлена в backend. Установите `osa_tool[paper-claims]` или настройте REPRODUCIBILITY_OSA_COMMAND.',
         )
-    if not (os.getenv("OPENROUTER_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip()):
+
+    llm_configured, host_status = await _llm_ready_status(force=True)
+    if not llm_configured and use_host_llm():
+        await file.close()
+        detail = host_status.get("detail") if isinstance(host_status, dict) else None
+        return _error(400, f"Host LLM не готов: {detail or 'провайдер не авторизован.'}")
+    if not llm_configured:
         await file.close()
         return _error(400, "Для OSA не найден OPENROUTER_API_KEY/OPENAI_API_KEY в .env.")
 
