@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, Response
 
 from ..config import MAX_FILE_SIZE_MB, UPLOADS_DIR
 from ..defaults import MODELS, model_definition
+from ..llm.host_llm import host_provider_status
 from ..util import now_iso
 from .queue import cancel_literature_job, start_literature_queue
 from .service import check_literature
@@ -69,13 +70,16 @@ async def create_literature_job_endpoint(
         return _error(400, "Добавьте хотя бы один PDF.")
     if len(files) > 30:
         return _error(400, "За один раз можно добавить не более 30 PDF.")
-    if not os.getenv("OPENROUTER_API_KEY", "").strip():
-        return _error(400, "Для проверки литературы не найден OPENROUTER_API_KEY в .env.")
-
     requested_model = model or next((item["id"] for item in MODELS if item.get("tier") == "production"), MODELS[0]["id"])
     selected = model_definition(requested_model)
     if not selected:
-        return _error(400, "Выбрана неизвестная модель OpenRouter.")
+        return _error(400, "Выбрана неизвестная модель.")
+    if selected["provider"] == "openrouter" and not os.getenv("OPENROUTER_API_KEY", "").strip():
+        return _error(400, "Для проверки литературы не найден OPENROUTER_API_KEY в .env.")
+    if selected["provider"] == "host":
+        status = host_provider_status(force=True)
+        if not status.get("authenticated"):
+            return _error(400, f"Host LLM не готов: {status.get('detail') or 'провайдер не авторизован.'}")
 
     validated: list[tuple[UploadFile, str]] = []
     for upload in files:
@@ -198,7 +202,7 @@ async def check_literature_endpoint(
         return _error(413, f"Файл больше {MAX_FILE_SIZE_MB} МБ.")
     selected_model = model or None
     if selected_model and not model_definition(selected_model):
-        return _error(400, "Выбрана неизвестная модель OpenRouter.")
+        return _error(400, "Выбрана неизвестная модель.")
     try:
         return await check_literature(content, filename, model=selected_model)
     except Exception as exc:

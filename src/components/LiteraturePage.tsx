@@ -1,36 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { useLanguage, type UiLanguage } from "../i18n";
-import type { LiteratureJob, LiteratureRow, LiteratureSourceType, LiteratureStatus, ModelInfo } from "../types";
+import { useLanguage } from "../i18n";
+import type { LiteratureJob, ModelInfo } from "../types";
+import { ATTENTION_STATUSES, LiteratureReport, literatureResultCounts } from "./LiteratureReport";
 
 type Filter = "attention" | "all" | "confirmed";
 
 interface Props {
   models: ModelInfo[];
 }
-
-const ATTENTION = new Set<LiteratureStatus>([
-  "OK_MINOR_MISMATCH",
-  "METADATA_MISMATCH",
-  "SUSPICIOUS",
-  "LIKELY_HALLUCINATED",
-  "UNVERIFIED",
-  "ERROR",
-]);
-
-const STATUS_COPY = {
-  ru: {
-    OK: { label: "Подтверждено", tone: "ok" }, OK_MINOR_MISMATCH: { label: "Небольшая неточность", tone: "minor" }, METADATA_MISMATCH: { label: "Есть ошибка", tone: "mismatch" }, SUSPICIOUS: { label: "Нужно проверить", tone: "review" }, LIKELY_HALLUCINATED: { label: "Источник не подтверждён", tone: "danger" }, UNVERIFIED: { label: "Не удалось подтвердить", tone: "review" }, ERROR: { label: "Ошибка проверки", tone: "neutral" }, NOT_A_PAPER: { label: "Другой тип источника", tone: "neutral" },
-  } as Record<LiteratureStatus, { label: string; tone: string }>,
-  en: {
-    OK: { label: "Confirmed", tone: "ok" }, OK_MINOR_MISMATCH: { label: "Minor mismatch", tone: "minor" }, METADATA_MISMATCH: { label: "Metadata mismatch", tone: "mismatch" }, SUSPICIOUS: { label: "Needs review", tone: "review" }, LIKELY_HALLUCINATED: { label: "Source not confirmed", tone: "danger" }, UNVERIFIED: { label: "Could not verify", tone: "review" }, ERROR: { label: "Check error", tone: "neutral" }, NOT_A_PAPER: { label: "Other source type", tone: "neutral" },
-  } as Record<LiteratureStatus, { label: string; tone: string }>,
-};
-
-const SOURCE_TYPE_COPY = {
-  ru: { PAPER: "Статья", PREPRINT: "Препринт", BOOK: "Книга", STANDARD: "Стандарт", REPORT: "Отчёт", DATASET: "Набор данных", DOCUMENTATION: "Документация", REPOSITORY: "Репозиторий", WEB: "Веб-источник", OTHER: "Другой источник", UNKNOWN: "Тип не определён" } as Record<LiteratureSourceType, string>,
-  en: { PAPER: "Paper", PREPRINT: "Preprint", BOOK: "Book", STANDARD: "Standard", REPORT: "Report", DATASET: "Dataset", DOCUMENTATION: "Documentation", REPOSITORY: "Repository", WEB: "Web source", OTHER: "Other source", UNKNOWN: "Unknown type" } as Record<LiteratureSourceType, string>,
-};
 
 const JOB_COPY = {
   ru: { queued: "В очереди", running: "Проверяется", cancelling: "Останавливается", done: "Готово", failed: "Ошибка", cancelled: "Остановлено" } as Record<LiteratureJob["status"], string>,
@@ -40,13 +18,14 @@ const JOB_COPY = {
 export function LiteraturePage({ models }: Props) {
   const { language } = useLanguage();
   const t = language === "ru" ? {
-    onlyPdf: "Для проверки литературы поддерживаются только PDF.", eyebrow: "Проверка источников", title: "Проверка литературы", subtitle: "Загрузите PDF. Работы проверяются по очереди, а сомнительные источники дополнительно перепроверяются в сети.", model: "Модель", modelHint: "Модель используется для сопоставления источников и углублённой веб-проверки.", selected: "Выбрано", choosePdf: "Выберите PDF", queuedHint: "Файлы будут добавлены в общую очередь", multiHint: "Можно выбрать несколько работ сразу", adding: "Добавляем…", addQueue: "Добавить в очередь", clear: "Очистить", running: "Проверка выполняется", waiting: "Работы ожидают запуска", now: "Сейчас", inQueue: "в очереди", queue: "Очередь работ", cancel: "Отменить", stop: "Остановить", retry: "Повторить", remove: "Удалить", failed: "Проверка не завершилась.", result: "Результат", download: "Скачать TSV", sources: "Источников", confirmed: "Подтверждено", attention: "Требуют внимания", incomplete: "Несколько источников не удалось перепроверить полностью. Они оставлены в разделе «Требуют внимания».", filter: "Фильтр результатов", all: "Все", clean: "Здесь всё чисто", empty: "В выбранной категории источников нет.", openSource: "Открыть источник ↗", inWork: "В работе", found: "Найдено", comment: "Комментарий"
+    onlyPdf: "Для проверки литературы поддерживаются только PDF.", eyebrow: "Проверка источников", title: "Проверка литературы", subtitle: "Загрузите PDF. Работы проверяются по очереди, а сомнительные источники дополнительно перепроверяются в сети.", model: "Модель", modelHint: "Модель используется для сопоставления источников и углублённой веб-проверки.", selected: "Выбрано", choosePdf: "Выберите PDF", queuedHint: "Файлы будут добавлены в общую очередь", multiHint: "Можно выбрать несколько работ сразу", adding: "Добавляем…", addQueue: "Добавить в очередь", clear: "Очистить", running: "Проверка выполняется", waiting: "Работы ожидают запуска", now: "Сейчас", inQueue: "в очереди", queue: "Очередь работ", cancel: "Отменить", stop: "Остановить", retry: "Повторить", remove: "Удалить", failed: "Проверка не завершилась.", attention: "Требуют внимания", confirmed: "Подтверждено", all: "Все", filter: "Фильтр результатов", empty: "В выбранной категории источников нет.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu."
   } : {
-    onlyPdf: "Only PDF files are supported for literature checking.", eyebrow: "Source verification", title: "Literature check", subtitle: "Upload PDFs. Documents are processed in a queue, and suspicious references are additionally checked online.", model: "Model", modelHint: "The model is used for citation matching and deeper web verification.", selected: "Selected", choosePdf: "Choose PDF", queuedHint: "Files will be added to the shared queue", multiHint: "You can select multiple documents", adding: "Adding…", addQueue: "Add to queue", clear: "Clear", running: "Check in progress", waiting: "Waiting to start", now: "Running", inQueue: "queued", queue: "Document queue", cancel: "Cancel", stop: "Stop", retry: "Retry", remove: "Remove", failed: "The check did not complete.", result: "Result", download: "Download TSV", sources: "Sources", confirmed: "Confirmed", attention: "Needs attention", incomplete: "Some sources could not be fully rechecked and remain in “Needs attention”.", filter: "Result filter", all: "All", clean: "All clear", empty: "There are no sources in this category.", openSource: "Open source ↗", inWork: "In thesis", found: "Found", comment: "Comment"
+    onlyPdf: "Only PDF files are supported for literature checking.", eyebrow: "Source verification", title: "Literature check", subtitle: "Upload PDFs. Documents are processed in a queue, and suspicious references are additionally checked online.", model: "Model", modelHint: "The model is used for citation matching and deeper web verification.", selected: "Selected", choosePdf: "Choose PDF", queuedHint: "Files will be added to the shared queue", multiHint: "You can select multiple documents", adding: "Adding…", addQueue: "Add to queue", clear: "Clear", running: "Check in progress", waiting: "Waiting to start", now: "Running", inQueue: "queued", queue: "Document queue", cancel: "Cancel", stop: "Stop", retry: "Retry", remove: "Remove", failed: "The check did not complete.", attention: "Needs attention", confirmed: "Confirmed", all: "All", filter: "Result filter", empty: "There are no sources in this category.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "The browser blocked the print window. Allow pop-ups for OSA.Edu."
   };
   const inputRef = useRef<HTMLInputElement | null>(null);
   const productionModels = models.filter((item) => item.tier === "production");
-  const defaultModel = productionModels.find((item) => item.id === "z-ai/glm-5.3-flash")?.id
+  const defaultModel = productionModels.find((item) => item.recommended)?.id
+    ?? productionModels.find((item) => item.id === "z-ai/glm-5.3-flash")?.id
     ?? productionModels[0]?.id
     ?? models[0]?.id
     ?? "";
@@ -87,11 +66,12 @@ export function LiteraturePage({ models }: Props) {
   const runningCount = jobs.filter((item) => item.status === "running" || item.status === "cancelling").length;
   const queuedCount = jobs.filter((item) => item.status === "queued").length;
 
-  const attentionCount = result?.rows.filter((row) => ATTENTION.has(row.status)).length ?? 0;
-  const confirmedCount = result?.rows.filter((row) => row.status === "OK").length ?? 0;
+  const resultCounts = result ? literatureResultCounts(result) : { attention: 0, confirmed: 0 };
+  const attentionCount = resultCounts.attention;
+  const confirmedCount = resultCounts.confirmed;
   const visibleRows = useMemo(() => {
     if (!result) return [];
-    if (filter === "attention") return result.rows.filter((row) => ATTENTION.has(row.status));
+    if (filter === "attention") return result.rows.filter((row) => ATTENTION_STATUSES.has(row.status));
     if (filter === "confirmed") return result.rows.filter((row) => row.status === "OK");
     return result.rows;
   }, [filter, result]);
@@ -160,7 +140,7 @@ export function LiteraturePage({ models }: Props) {
   function chooseJob(job: LiteratureJob) {
     setSelectedId(job.id);
     const nextResult = job.result;
-    if (nextResult) setFilter(nextResult.rows.some((row) => ATTENTION.has(row.status)) ? "attention" : "all");
+    if (nextResult) setFilter(nextResult.rows.some((row) => ATTENTION_STATUSES.has(row.status)) ? "attention" : "all");
   }
 
   function downloadTsv() {
@@ -180,9 +160,33 @@ export function LiteraturePage({ models }: Props) {
     URL.revokeObjectURL(url);
   }
 
-  const selectedModel = models.find((item) => item.id === model);
-  const incomplete = Boolean(result?.web_stage && result.web_stage.failed > 0);
+  async function downloadHtml() {
+    if (!result) return;
+    try {
+      const { downloadLiteratureReportHtml } = await import("../literatureReportExport");
+      downloadLiteratureReportHtml(result, language);
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
 
+  async function printPdf() {
+    if (!result) return;
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setError(t.popupBlocked);
+      return;
+    }
+    try {
+      const { printLiteratureReport } = await import("../literatureReportExport");
+      printLiteratureReport(result, language, popup);
+    } catch (reason) {
+      popup.close();
+      setError((reason as Error).message);
+    }
+  }
+
+  const selectedModel = models.find((item) => item.id === model);
   return (
     <section className="page literature-page polished-literature-page">
       <div className="literature-hero">
@@ -284,62 +288,28 @@ export function LiteraturePage({ models }: Props) {
       )}
 
       {result && (
-        <>
-          <section className="literature-result-head">
-            <div><span className="literature-result-kicker">{t.result}</span><h2>{result.filename}</h2></div>
-            <button className="button secondary" onClick={downloadTsv}>{t.download}</button>
-          </section>
-
-          <div className="literature-summary-simple">
-            <Summary value={result.reference_count} label={t.sources} />
-            <Summary value={confirmedCount} label={t.confirmed} tone="ok" />
-            <Summary value={attentionCount} label={t.attention} tone="attention" />
-          </div>
-
-          {incomplete && <div className="literature-soft-notice">{t.incomplete}</div>}
-
-          <div className="literature-result-toolbar">
+        <LiteratureReport
+          result={result}
+          rows={visibleRows}
+          language={language}
+          emptyMessage={t.empty}
+          actions={(
+            <>
+              <button className="button secondary" onClick={downloadTsv}>{t.downloadTsv}</button>
+              <button className="button secondary" onClick={() => void downloadHtml()}>{t.downloadHtml}</button>
+              <button className="button primary" onClick={() => void printPdf()}>{t.printPdf}</button>
+            </>
+          )}
+          controls={(
             <div className="literature-segmented" role="tablist" aria-label={t.filter}>
               <button className={filter === "attention" ? "active" : ""} onClick={() => setFilter("attention")}>{t.attention} · {attentionCount}</button>
               <button className={filter === "confirmed" ? "active" : ""} onClick={() => setFilter("confirmed")}>{t.confirmed} · {confirmedCount}</button>
               <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>{t.all} · {result.reference_count}</button>
             </div>
-          </div>
-
-          {visibleRows.length > 0 ? (
-            <div className="literature-review-list">{visibleRows.map((row) => <ReferenceCard key={`${row.number}-${row.original_citation}`} row={row} language={language} />)}</div>
-          ) : (
-            <div className="panel literature-empty-state"><strong>{t.clean}</strong><span>{t.empty}</span></div>
           )}
-        </>
+        />
       )}
     </section>
-  );
-}
-
-function Summary({ value, label, tone = "" }: { value: number; label: string; tone?: string }) {
-  return <div className={`literature-summary-card ${tone}`}><strong>{value}</strong><span>{label}</span></div>;
-}
-
-function ReferenceCard({ row, language }: { row: LiteratureRow; language: UiLanguage }) {
-  const t = language === "ru" ? { openSource: "Открыть источник ↗", inWork: "В работе", found: "Найдено", comment: "Комментарий" } : { openSource: "Open source ↗", inWork: "In thesis", found: "Found", comment: "Comment" };
-  const status = STATUS_COPY[language][row.status];
-  const evidence = row.evidence_url || row.evidence_urls?.[0] || "";
-  const found = row.checker_found_citation && row.checker_found_citation !== "No confirmed source found";
-  return (
-    <article className="panel literature-reference-card">
-      <div className="literature-reference-top">
-        <span className="literature-reference-number">{row.number}</span>
-        <span className={`literature-user-status ${status.tone}`}>{status.label}</span>
-        {row.source_type && <span className="literature-source-type">{SOURCE_TYPE_COPY[language][row.source_type]}</span>}
-        {evidence && <a className="literature-source-link" href={evidence} target="_blank" rel="noreferrer">{t.openSource}</a>}
-      </div>
-      <div className="literature-reference-body">
-        <div><span className="literature-field-label">{t.inWork}</span><p>{row.original_citation}</p></div>
-        {found && <div className="literature-found-block"><span className="literature-field-label">{t.found}</span><p>{row.checker_found_citation}</p></div>}
-        {row.notes && <div className="literature-note"><span>{t.comment}</span><p>{row.notes}</p></div>}
-      </div>
-    </article>
   );
 }
 

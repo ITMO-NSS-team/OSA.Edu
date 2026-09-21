@@ -11,6 +11,8 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
+from ..llm.host_llm import host_provider_status
+
 
 def _run(command: list[str], *, timeout: int = 20, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -188,7 +190,28 @@ def _openrouter_key() -> tuple[str | None, str | None]:
     return None, None
 
 
-async def llm_access(base_url: str, model: str | None = None) -> dict[str, Any]:
+def _host_key_source(status: dict[str, Any]) -> str:
+    return "HOST_LLM_BRIDGE_DIR" if status.get("transport") == "host_bridge" else "HOST_LLM_COMMAND"
+
+
+def _host_llm_access_from_status(status: dict[str, Any]) -> dict[str, Any]:
+    ok = bool(status.get("authenticated"))
+    source = _host_key_source(status)
+    return {
+        "ok": ok,
+        "checked": True,
+        "keySource": source,
+        "detail": str(status.get("detail") or ("Host LLM готов." if ok else "Host LLM не готов.")),
+        "transport": status.get("transport") or ("host_command" if status.get("installed") else None),
+        "path": status.get("path"),
+    }
+
+
+async def llm_access(base_url: str, model: str | None = None, *, use_host_llm: bool = False) -> dict[str, Any]:
+    if use_host_llm:
+        status = host_provider_status(force=True)
+        return _host_llm_access_from_status(status)
+
     key, source = _openrouter_key()
     if not key:
         return {"ok": False, "checked": True, "keySource": None, "detail": "API key не найден."}

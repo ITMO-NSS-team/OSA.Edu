@@ -1,0 +1,4 @@
+interface:
+  display_name: "OSA.Edu Review"
+  short_description: "Run academic-work checks through OSA.Edu"
+  default_prompt: "Use $osa-edu-review to check this academic work with OSA.Edu and save the produced reports."

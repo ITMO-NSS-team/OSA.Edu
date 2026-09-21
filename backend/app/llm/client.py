@@ -13,6 +13,7 @@ import httpx
 
 from ..config import env_bool, env_int
 from ..util import empty_usage, now_iso
+from .host_llm import host_provider_name, normalize_host_model, run_host_llm
 from .rate_limiter import penalize_model_capacity, reserve_model_capacity
 
 class ModelHttpError(RuntimeError):
@@ -124,7 +125,7 @@ def adaptive_attempt_limit(provider: str, estimated_input_tokens: int) -> int:
     packets are capped so a bad API window cannot multiply the same 100k-token
     request four times before a smaller recovery strategy gets control.
     """
-    prefix = 'OPENROUTER' if provider == 'openrouter' else 'GEMINI'
+    prefix = {'openrouter': 'OPENROUTER', 'host': 'HOST_LLM'}.get(provider, 'GEMINI')
     configured = max(1, env_int(f'{prefix}_MAX_ATTEMPTS', 4))
     compact = max(1, env_int('LLM_COMPACT_RETRY_MAX_INPUT_TOKENS', 15_000))
     large = max(compact + 1, env_int('LLM_LARGE_RETRY_INPUT_TOKENS', 50_000))
@@ -181,6 +182,7 @@ async def ask_structured_json(*,provider:str,model:str,system_prompt:str,user_me
         started=time.monotonic()
         try:
             if provider=='openrouter': raw,trace=await _openrouter(model,system_prompt,user_message,operation,False,usage,max_completion_tokens)
+            elif provider=='host': raw,trace=await _host(model,system_prompt,user_message,operation)
             else: raw,trace=await _gemini(model,system_prompt,user_message,operation)
             usage['traces'].append(trace)
             try:
@@ -259,6 +261,25 @@ async def _openrouter(model:str,system:str,user:str,operation:str,compat:bool,us
         if not content: raise ModelHttpError('OpenRouter вернул пустой ответ.',502,provider_name='OpenRouter')
         trace={'at':now_iso(),'operation':operation,'provider':'openrouter','model':model,'providerName':str(payload.get('provider') or (payload.get('metadata') or {}).get('provider_name') or '') or None,'requestId':response.headers.get('x-request-id') or response.headers.get('cf-ray') or None,'compatibilityMode':compat,'httpStatus':response.status_code}
         return content,trace
+
+
+async def _host(model: str, system: str, user: str, operation: str) -> tuple[str, dict]:
+    selected_model = normalize_host_model(model)
+    content = await run_host_llm(
+        model=selected_model,
+        system_prompt=system,
+        user_message=user,
+    )
+    return content, {
+        'at': now_iso(),
+        'operation': operation,
+        'provider': 'host',
+        'model': selected_model,
+        'providerName': host_provider_name(),
+        'requestId': None,
+        'compatibilityMode': False,
+        'httpStatus': 200,
+    }
 
 
 async def _gemini(model:str,system:str,user:str,operation:str) -> tuple[str,dict]:
