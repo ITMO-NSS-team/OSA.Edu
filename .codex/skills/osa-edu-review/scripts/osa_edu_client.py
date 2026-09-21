@@ -7,6 +7,7 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import sys
 import time
 import uuid
@@ -26,6 +27,15 @@ if hasattr(sys.stderr, "reconfigure"):
 
 DEFAULT_BASE_URL = os.getenv("OSA_EDU_BASE_URL", "http://127.0.0.1:8787")
 CHECKS = ("full", "literature", "normcontrol", "reproducibility")
+APPENDIX_HEADING_RE = re.compile(
+    r"^(?:приложени[ея]|appendix)\s+[A-ZА-ЯЁ0-9]+(?:\s*[.:\-–—]\s*.*|\s+.*)?$",
+    re.IGNORECASE,
+)
+BIBLIOGRAPHY_HEADING_RE = re.compile(
+    r"^(?:список\s+(?:(?:использованных|использованной)\s+)?(?:источников|литературы)"
+    r"(?:\s+и\s+литературы)?|библиография|литература|references|bibliography)\s*[.:]?$",
+    re.IGNORECASE,
+)
 
 
 class OsaEduError(RuntimeError):
@@ -368,6 +378,90 @@ def _default_output(file_path: Path) -> Path:
     return Path.cwd() / "osa-edu-results" / f"{file_path.stem}-{stamp}"
 
 
+def _page_lines(page: Any) -> list[str]:
+    text = page.get_text("text", sort=False) or ""
+    return [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
+
+
+def _appendix_cutoff(document: Any) -> dict[str, Any]:
+    """Find a trailing appendix only after the dissertation bibliography.
+
+    Requiring the main bibliography and ignoring the first 40% prevents a table
+    of contents entry from being mistaken for the real appendix boundary.
+    """
+    page_count = len(document)
+    minimum_page = max(1, int(page_count * 0.40))
+    bibliography_page: int | None = None
+
+    for page_index, page in enumerate(document):
+        lines = _page_lines(page)
+        if any(BIBLIOGRAPHY_HEADING_RE.fullmatch(line) for line in lines):
+            bibliography_page = page_index
+        if page_index < minimum_page or bibliography_page is None or page_index <= bibliography_page:
+            continue
+        for line in lines[:30]:
+            if "..." in line or "…" in line:
+                continue
+            if APPENDIX_HEADING_RE.fullmatch(line):
+                return {
+                    "original_page_count": page_count,
+                    "submitted_page_count": page_index,
+                    "cutoff_page": page_index + 1,
+                    "bibliography_page": bibliography_page + 1,
+                    "detected_heading": line,
+                }
+
+    raise OsaEduError(
+        "Не удалось надёжно найти начало приложений после основного списка литературы; "
+        "исходный PDF не был отправлен целиком."
+    )
+
+
+def _prepare_pdf_without_appendices(source: Path, target: Path) -> dict[str, Any]:
+    try:
+        import pymupdf
+    except ImportError as exc:
+        raise OsaEduError("Для отсечения приложений требуется PyMuPDF (pymupdf).") from exc
+
+    source_document = pymupdf.open(source)
+    output_document = pymupdf.open()
+    try:
+        if source_document.needs_pass:
+            raise OsaEduError("PDF защищён паролем; приложения нельзя отсечь автоматически.")
+        cutoff = _appendix_cutoff(source_document)
+        last_page = int(cutoff["submitted_page_count"]) - 1
+        if last_page < 0:
+            raise OsaEduError("До найденного приложения не осталось страниц основного текста.")
+        output_document.insert_pdf(source_document, from_page=0, to_page=last_page, links=True, annots=True)
+        output_document.set_metadata(source_document.metadata)
+        toc = [item for item in source_document.get_toc() if len(item) >= 3 and int(item[2]) <= last_page + 1]
+        if toc:
+            output_document.set_toc(toc)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        output_document.save(target, garbage=4, deflate=True)
+    finally:
+        output_document.close()
+        source_document.close()
+
+    verification = pymupdf.open(target)
+    try:
+        actual_pages = len(verification)
+    finally:
+        verification.close()
+    if actual_pages != cutoff["submitted_page_count"]:
+        target.unlink(missing_ok=True)
+        raise OsaEduError(
+            f"Рабочая копия содержит {actual_pages} страниц вместо ожидаемых "
+            f"{cutoff['submitted_page_count']}."
+        )
+    return {
+        "exclude_appendices": True,
+        **cutoff,
+        "prepared_file": str(target.resolve()),
+        "prepared_size": target.stat().st_size,
+    }
+
+
 def _health(args: argparse.Namespace) -> int:
     health = _json_request(args.base_url, "/api/health")
     summary = health
@@ -397,9 +491,18 @@ def _run(args: argparse.Namespace) -> int:
         raise OsaEduError(f"Файл не найден: {args.file}")
     if args.file.suffix.lower() not in {".pdf", ".docx"}:
         raise OsaEduError("OSA.Edu принимает PDF или DOCX; отдельные этапы могут поддерживать только PDF.")
+    source_file = args.file
     args.base_url = _base_url(args.base_url)
-    output = (args.output_dir or _default_output(args.file)).expanduser().resolve()
+    output = (args.output_dir or _default_output(source_file)).expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
+
+    preprocessing: dict[str, Any] = {"exclude_appendices": False}
+    if args.exclude_appendices:
+        if source_file.suffix.lower() != ".pdf":
+            raise OsaEduError("Отсечение приложений поддерживается только для PDF.")
+        prepared_file = output / "prepared-source" / source_file.name
+        preprocessing = _prepare_pdf_without_appendices(source_file, prepared_file)
+        args.file = prepared_file
 
     health = _json_request(args.base_url, "/api/health")
     _write_json(output / "health.json", health)
@@ -407,7 +510,9 @@ def _run(args: argparse.Namespace) -> int:
         "schema_version": 1,
         "created_at": _utc_now(),
         "base_url": args.base_url,
-        "source_file": str(args.file),
+        "source_file": str(source_file),
+        "submitted_file": str(args.file),
+        "preprocessing": preprocessing,
         "requested_checks": args.checks,
         "output_dir": str(output),
         "health": str((output / "health.json").resolve()),
@@ -450,6 +555,11 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--model", default="")
     run.add_argument("--profile", choices=("core", "full"), default="core")
     run.add_argument("--repository", default="")
+    run.add_argument(
+        "--exclude-appendices",
+        action="store_true",
+        help="Create and submit a PDF copy ending before the first trailing appendix after the bibliography.",
+    )
     run.add_argument("--timeout-seconds", type=_positive_int, default=7200)
     run.add_argument("--poll-seconds", type=_positive_float, default=3.0)
     run.set_defaults(handler=_run)
