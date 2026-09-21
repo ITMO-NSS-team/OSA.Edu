@@ -16,10 +16,8 @@ STATUS_ORDER = ["violation", "pass", "uncertain", "not_checked", "not_applicable
 
 
 def _link_related_violations(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    # Related-rule links are semantic metadata, not an incidental consequence of
-    # two rules quoting the same block. Shared evidence previously linked unrelated
-    # checks (for example a numeral rule with prototype analysis). Only an explicit
-    # shared dedupKey may create a related-rule group.
+    # Shared evidence alone does not establish a semantic relation between
+    # rules. Only an explicit shared dedupKey creates a related-rule group.
     dedup_groups: dict[str, set[str]] = defaultdict(set)
     for result in results:
         if result.get("status") != "violation":
@@ -177,9 +175,8 @@ def make_report(
     groups = _build_score_groups(rules, prepared)
     pass_weight = sum(x["weight"] for x in groups if x["status"] == "pass")
     violation_weight = sum(x["weight"] for x in groups if x["status"] == "violation")
-    # A numeric score on a technically incomplete report looks more precise than
-    # the underlying run actually is. Repo-stable keeps suppressing it until all technical
-    # stages needed for the selected profile have completed.
+    # Suppress the score until all technical stages required by the profile
+    # complete; an incomplete run cannot support a meaningful numeric score.
     score = None if (health.get("status") == "technical_incomplete" or coverage < 0.6 or pass_weight + violation_weight == 0) else round(100 * pass_weight / (pass_weight + violation_weight))
 
     counts = {

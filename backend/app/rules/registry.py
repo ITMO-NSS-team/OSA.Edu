@@ -41,9 +41,8 @@ def _read_rows(path, delimiter: str) -> list[list[str]]:
 
 
 def _catalog_item(*, rid: str, number: str, category: str, requirement: str, layer: str, source_label: str, source_line: int, correct: str | None = None, incorrect: str | None = None) -> dict[str, Any]:
-    # Runtime metadata is never inferred from natural-language wording. This is
-    # the key invariant of the P1 architecture: editing a sentence in CSV cannot
-    # silently reroute a check or change its severity.
+    # Runtime metadata comes from the manifest, not natural-language wording,
+    # so editing a CSV sentence cannot reroute a check or change its severity.
     meta = runtime_metadata(rid)
     item: dict[str, Any] = {
         'id': rid,

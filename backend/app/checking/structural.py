@@ -232,8 +232,8 @@ def _chapter_conclusions(rule,document):
     ordinary sentence can be mistaken for a conclusions section and, conversely,
     a perfectly mapped conclusions block can be skipped.  The confirmed
     Document Map is the canonical structural source, so production checks use its
-    chapter/conclusion ranges directly.  Legacy documents without a usable map
-    retain the old conservative fallback.
+    chapter/conclusion ranges directly. Documents without a usable map retain
+    a conservative extraction-based fallback.
     """
     all_blocks=list(document.get('blocks',[]))
     idx={str(b.get('id')):i for i,b in enumerate(all_blocks) if b.get('id')}
@@ -282,7 +282,7 @@ def _chapter_conclusions(rule,document):
             return _uncertain(rule,'Для части глав карта документа не содержит подтверждённого диапазона выводов; формат выводов нельзя надёжно оценить автоматически.')
         return _pass(rule,'Во всех подтверждённых разделах выводов по главам найдены нумерованные пункты.')
 
-    # Compatibility path for old extracted documents that predate Document Map.
+    # Documents without a usable Document Map need extraction-based scope.
     chapters=document.get('fields',{}).get('chapterHeadings',[]); blocks=_main_work_blocks(document)
     if not chapters: return _uncertain(rule,'Заголовки глав не распознаны.')
     ev=[]
@@ -380,10 +380,9 @@ def _is_code(value:str)->bool:
     """Return True only for a dedicated code payload, not prose mentioning code.
 
     PDF extraction can flatten a paragraph such as "ответ должен быть в блоке
-    ```python```" into one block.  Treating the mere fence marker as executable
-    code made CORE-13 accuse ordinary explanatory prose.  Use code-density
-    signals instead; this remains language-agnostic and does not depend on a
-    particular thesis or programming language.
+    ```python```" into one block. A fence marker alone is not enough to
+    establish executable code. Code-density signals keep explanatory prose out
+    of CORE-13 without depending on a particular thesis or programming language.
     """
     value=str(value or '')
     lines=[x.strip() for x in value.splitlines() if x.strip()]

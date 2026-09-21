@@ -64,7 +64,6 @@ def build_semantic_document(document: dict[str, Any], map_value: dict[str, Any])
             source='document_structure',
         ))
 
-    # Individual defense statements are semantic entities reused by routing.
     defense_statements: list[dict[str, Any]] = []
     blocks = document.get('blocks', [])
     canonical_defense = next((

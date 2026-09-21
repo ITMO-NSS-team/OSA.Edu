@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-"""Document-level grounded facts shared by multiple rule engines.
-
-The store is intentionally conservative: Python only records facts that can be
-located in the extracted document.  Rule engines may project a small subset of
-these facts into an LLM prompt, but the canonical copy is built once per check.
-"""
+# Shared facts must be grounded in the extracted document. The canonical store
+# is built once per check; rule engines project only the facts needed by each prompt.
 
 import json
 import math
@@ -234,8 +230,8 @@ def _structural_facts(document: dict) -> tuple[dict, dict]:
         elif el.get("state") != "confirmed" or confidence < MIN_FACT_CONFIDENCE:
             row["status"] = "ambiguous"
         if name == "title" and raw:
-            # Only grounded map text or extraction INSIDE the mapped interval.
-            # Never search the full document or reuse an old analyzer guess.
+            # Use only grounded map text or extraction inside the mapped interval
+            # so unrelated document content cannot supply a fact for this section.
             joined = " ".join(b.get("text", "") for b in raw)
             values = [str(el.get(k) or "").strip() for k in ("label", "quote")]
             text = next((v for v in values if len(v.split()) >= 2

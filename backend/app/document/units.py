@@ -245,7 +245,6 @@ def canonicalize_document_units(
     if not bounds:
         return prepared, issues
 
-    # Prefer already mapped elements that live inside the main introduction.
     canonical: dict[str, dict[str, Any]] = {}
     for element_type in _CANONICAL_TYPES:
         candidates = [

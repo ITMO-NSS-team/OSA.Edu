@@ -279,8 +279,8 @@ def deterministic_decision(row: dict[str, Any]) -> dict[str, Any] | None:
         )
         return {"status": status, "candidate_index": index, "notes": note, "needs_web": False, "comparison": cmp}
 
-    # Title-search matches are accepted automatically only when several independent
-    # metadata signals line up. Everything else goes to GLM 5.3 Flash.
+    # Accept title-search matches only when independent metadata signals
+    # agree; otherwise defer to the configured comparison model.
     author_ok = author_score is None or author_score >= 0.6
     year_ok = year_relation in {"exact", "adjacent", "unknown"}
     if title_score >= 0.96 and author_ok and year_ok and pages_relation != "conflict":

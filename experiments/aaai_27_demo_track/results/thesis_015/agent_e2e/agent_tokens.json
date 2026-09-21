@@ -1,0 +1,9 @@
+{
+  "chat_id": "01a0ae9f-eb2a-7910-afe2-88b2d7d22387",
+  "input_tokens": 1063025,
+  "cached_input_tokens": 929024,
+  "cache_write_input_tokens": 0,
+  "output_tokens": 28507,
+  "reasoning_output_tokens": 6394,
+  "total_tokens": 1091532
+}

@@ -275,8 +275,8 @@ def _materialize_element(element: dict[str, Any], blocks: list[dict[str, Any]], 
     elif element.get("type") == "goal":
         fallback = _extract_goal(range_text)
     elif element.get("type") in {"tasks", "defense_statements"} and _obvious_list_section(element.get("type"), range_blocks):
-        # When a mapped range contains a complete 1..N list (or a defense bullet
-        # list), there is no useful reason to preserve a stale LLM ambiguity.
+        # A complete 1..N or defense-bullet list resolves the model's ambiguity
+        # with source-grounded structure.
         state = "confirmed"
     elif element.get("type") == "chapter_conclusions" and _range_has_explicit_conclusion_heading(range_blocks):
         # An exact heading like «3.5 Выводы по главе» is not genuinely
@@ -406,7 +406,6 @@ def _recover_major_sections(
                 if auto:
                     result.append(auto)
 
-    # The remaining global sections should occur after the final main chapter.
     tail_floor = last_chapter if last_chapter is not None else -1
 
     has_main_conclusion = any(

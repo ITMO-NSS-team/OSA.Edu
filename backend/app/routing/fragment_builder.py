@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-"""Fragment projection built from the canonical Semantic Document.
-
-Fragments are bounded execution views for rule engines. This module does not own
-rule metadata or normative decisions.
-"""
+# Fragments are bounded execution views of the canonical Semantic Document.
+# Rule metadata and normative decisions belong to the registry and rule engines.
 
 import regex as re
 
@@ -97,11 +94,8 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
     explicit_conclusions = by_type("chapter_conclusions")
     conclusion = by_type("conclusion")
 
-    # Experimental full-document semantic fragment. It mirrors the one-shot
-    # structure request: every extracted block is present exactly once, while
-    # type/page metadata is added later by the checker message. Abbreviation
-    # rules share this selector, so the default grouped semantic pipeline sends
-    # all of them in a single LLM request.
+    # Keep every extracted block once so full-document checks retain source
+    # order and coverage. The checker adds type/page metadata to the prompt.
     add_virtual(
         "whole_document",
         "Полный документ для проверки аббревиатур",
@@ -125,8 +119,8 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
         if linked_chapter:
             conclusion_fragment['chapterId'] = linked_chapter
 
+    # Do not synthesize missing conclusions: every rule must see the same absence.
     derived_conclusions = list(explicit_conclusions)
-    # Missing chapter conclusions remain missing in every rule's view.
 
     add_virtual(
         "title_goal",
@@ -219,8 +213,8 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
             chapter_id = chapter.get("id")
             match = next((item for item in derived_conclusions if item.get("chapterId") == chapter_id), None)
             if match is None:
-                # Compatibility fallback for old maps where the conclusion range
-                # overlapped the tail of the chapter itself.
+                # Accept maps whose conclusion range overlaps the chapter tail
+                # without requiring the conclusion to begin after the chapter.
                 chapter_ids = {block.get("id") for block in chapter.get("blocks", [])}
                 match = next((item for item in derived_conclusions if any(block.get("id") in chapter_ids for block in item.get("blocks", []))), None)
             if match is not None:

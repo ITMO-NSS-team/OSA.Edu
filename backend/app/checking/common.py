@@ -80,9 +80,8 @@ def mapped_excluded_ids(document:dict) -> set[str]:
 def mapped_scientific_body_ids(document: dict) -> set[str] | None:
     """Return ids of authored prose in the canonical main work only.
 
-    3.8 intentionally excludes abstract/synopsis/front matter. Ordinary language
-    checks must not report the same issue from an early synopsis copy or from
-    attached publication reprints.
+    Exclude abstract/synopsis/front matter so ordinary language checks do not
+    report duplicate issues from a synopsis or attached publication reprints.
     """
     return main_work_ids(document)
 

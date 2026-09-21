@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { LiteratureReport } from "./components/LiteratureReport";
 import reportStyles from "./literature-report.css?inline";
+import type { UiLanguage } from "./i18n";
 import type { LiteratureResult } from "./types";
 
 function escapeHtml(value: string) {
@@ -17,11 +18,11 @@ function reportBaseName(result: LiteratureResult) {
   return `${stem}-reference-review`;
 }
 
-export function buildLiteratureReportHtml(result: LiteratureResult) {
-  const markup = renderToStaticMarkup(<LiteratureReport result={result} exportMode />);
-  const title = escapeHtml(`${result.filename} — отчёт по источникам`);
+export function buildLiteratureReportHtml(result: LiteratureResult, language: UiLanguage = "ru") {
+  const markup = renderToStaticMarkup(<LiteratureReport result={result} exportMode language={language} />);
+  const title = escapeHtml(language === "ru" ? `${result.filename} — отчёт по источникам` : `${result.filename} — reference report`);
   return `<!doctype html>
-<html lang="ru">
+<html lang="${language}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -37,8 +38,8 @@ export function buildLiteratureReportHtml(result: LiteratureResult) {
 </html>`;
 }
 
-export function downloadLiteratureReportHtml(result: LiteratureResult) {
-  const blob = new Blob([buildLiteratureReportHtml(result)], { type: "text/html;charset=utf-8" });
+export function downloadLiteratureReportHtml(result: LiteratureResult, language: UiLanguage = "ru") {
+  const blob = new Blob([buildLiteratureReportHtml(result, language)], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -47,12 +48,16 @@ export function downloadLiteratureReportHtml(result: LiteratureResult) {
   URL.revokeObjectURL(url);
 }
 
-export function printLiteratureReport(result: LiteratureResult, popupWindow?: Window | null) {
+export function printLiteratureReport(result: LiteratureResult, language: UiLanguage = "ru", popupWindow?: Window | null) {
   const popup = popupWindow ?? window.open("", "_blank");
-  if (!popup) throw new Error("Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu.");
+  if (!popup) {
+    throw new Error(language === "ru"
+      ? "Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu."
+      : "The browser blocked the print window. Allow pop-ups for OSA.Edu.");
+  }
   popup.opener = null;
   popup.document.open();
-  popup.document.write(buildLiteratureReportHtml(result));
+  popup.document.write(buildLiteratureReportHtml(result, language));
   popup.document.close();
   popup.document.title = reportBaseName(result);
   window.setTimeout(() => {

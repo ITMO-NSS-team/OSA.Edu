@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Normalize extracted bibliography .txt files into one-reference-per-record files.
 
-Input files are the <PDF basename>.txt files produced by extract_references.py.
+Input files contain bibliography text extracted from PDFs (<PDF basename>.txt).
 Outputs are written to references_normalized/:
   - <basename>.refs.txt   human-readable numbered references, one per block
   - <basename>.refs.jsonl machine-readable records
@@ -204,10 +204,8 @@ def final_clean(s: str) -> str:
         return m.group(1) + re.sub(r"\s+", "", m.group(2))
 
     s = DOI_SPACING_RE.sub(fix_doi, s)
-    # Remove spaces before punctuation introduced by extraction.
     s = re.sub(r"\s+([,.;:])", r"\1", s)
 
-    # Repair common pdftotext URL spacing: "https://foo. com / a - b".
     def fix_url(m: re.Match[str]) -> str:
         url = m.group(0)
 

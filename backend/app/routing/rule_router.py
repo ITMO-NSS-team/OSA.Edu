@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-"""Thin rule router.
-
-Semantic document construction and fragment projection live outside this module;
-rule behavior comes from config/rule-manifest.json through registry metadata.
-"""
+# Semantic document construction and fragment projection stay outside the router;
+# rule behavior comes from config/rule-manifest.json through registry metadata.
 
 from ..document.chapter_linker import _statement_chapter_roles
 from ..util import empty_usage

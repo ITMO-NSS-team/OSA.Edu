@@ -1,16 +1,8 @@
 from __future__ import annotations
 
-"""Conservative deterministic abbreviation checks.
-
-Production policy for the repo-stable branch:
-- Python owns scope, first-use order and the final CORE-4 verdict.
-- Known term abbreviations are checked deterministically.
-- Proper names / model versions / units / hardware / publication identifiers are
-  excluded before rule evaluation.
-- Unknown entities are surfaced as ``uncertain`` rather than guessed into a
-  violation.  The legacy LLM abbreviation auditor remains available behind an
-  explicit feature flag in orchestration, but it is not the default path.
-"""
+# Deterministic checks use known term classifications, scope and first-use order.
+# Unknown entities remain uncertain rather than becoming guessed violations.
+# The LLM inventory uses a separate broad collector to preserve candidate recall.
 
 import regex as re
 
@@ -587,11 +579,10 @@ def run_abbreviation_check(rule: dict, document: dict) -> dict:
 def build_llm_abbreviation_inventory(document: dict) -> list[dict]:
     """Build a high-recall compact inventory for the LLM abbreviation judge.
 
-    3.9.3-rc2 deliberately does not call ``analyze_terms`` here: that function is
-    a conservative deterministic classifier and therefore can suppress unknown
-    domain-specific candidates before the LLM sees them.  The rc2 inventory is
-    instead produced by ``collect_abbreviation_tokens`` which scans the canonical
-    main work with broad lexical rules and keeps role-labelled contexts.
+    Use ``collect_abbreviation_tokens`` so unknown domain-specific candidates
+    reach the LLM instead of being filtered by the conservative ``analyze_terms``
+    classifier. Broad lexical rules preserve role-labelled contexts from the
+    canonical main work.
     """
     raw_items = collect_abbreviation_tokens(document)
     result: list[dict] = []

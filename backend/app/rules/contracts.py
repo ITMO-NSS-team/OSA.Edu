@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-"""Compatibility API backed by the canonical rule manifest.
-
-Fact-rule contracts used to live in this Python module. They now live beside each
-rule in config/rule-manifest.json so routing, engine selection and fact semantics
-cannot drift apart.
-"""
+# Compatibility API backed by config/rule-manifest.json. Keeping contracts beside
+# rule metadata prevents routing, engine selection and fact semantics from drifting.
 
 from .manifest import load_rule_manifest, manifest_entry
 
@@ -37,7 +33,7 @@ def is_fact_rule(rule_id: str) -> bool:
     return bool(contract_for(rule_id))
 
 
-# Read-only compatibility snapshot for code that imports the old symbol.
+# Read-only compatibility snapshot for callers importing RULE_CONTRACTS.
 RULE_CONTRACTS = {
     rule_id: contract_for(rule_id)
     for rule_id, entry in load_rule_manifest().rules.items()

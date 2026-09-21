@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api";
+import { useLanguage } from "../i18n";
 import type {
   ReproducibilityJob,
   ReproducibilityPreflight,
@@ -102,15 +103,42 @@ const COPY = {
     modelVerification: "Code verification",
   },
 } as const;
+const REPRO_UI = {
+  ru: {
+    pageTitle: "Проверка воспроизводимости", pageSubtitle: "Сопоставляет технические утверждения из ВКР с кодом указанного репозитория.",
+    backendNotReady: "Backend не готов к запуску OSA.", osaMissing: "Не установлен osa_tool.", llmMissing: "Не настроен API-ключ LLM.", pythonUnsupported: "не поддерживается paper-claims.", gitMissing: "git не найден в PATH.",
+    repoHint: "GitHub, GitLab, GitVerse или SourceCraft.", pdfOnly: "Поддерживается только PDF.", dropPdf: "Перетащите PDF работы", choosePdf: "или нажмите, чтобы выбрать файл", file: "Файл", clear: "Очистить", remove: "Удалить",
+    openJson: "Открыть готовый JSON", running: "Проверка выполняется…", run: "Проверить воспроизводимость", savedClaims: "Claims уже сохранены", savedClaimsSuffix: "Проверку по репозиторию можно продолжить без повторной обработки PDF.", stop: "Остановить", resume: "Продолжить проверку", restart: "Начать заново",
+    historyTech: "История и технические детали", runs: "Запуски", check: "Проверка", noRuns: "Запусков пока нет.", checking: "Проверяем…", checkEnvironment: "Проверить окружение", downloadLog: "Скачать лог", environmentReady: "Окружение готово", environmentProblems: "Есть проблемы с окружением",
+    sections: "Разделы", claims: "Claims", verified: "Проверено", result: "Результат", readyPlural: "готовы", readyOne: "готово", resultReady: "готов", osaLog: "Лог OSA", logPlaceholder: "Лог появится после запуска OSA.", logTail: "Показана последняя часть лога.",
+    resultSubtitle: "Результат проверки воспроизводимости", confirmedPct: "подтверждено", allClaims: "Все claims", checked: "Проверено", confirmed: "Подтверждено", rejected: "Не подтверждено", excluded: "Исключено", checkedClaims: "Проверенные утверждения", noClaims: "В этой категории утверждений нет.", evidenceFound: "Найдено подтверждение в репозитории.",
+    loadFailed: "Не удалось загрузить результат анализа.", enterRepo: "Укажите ссылку на репозиторий.", preflightFailed: "Не пройдена предварительная проверка", envNotReady: "Окружение не готово к запуску OSA.", choosePaper: "Выберите PDF работы.", requestFailed: "Не удалось выполнить запрос к backend.",
+    statusQueued: "В очереди OSA", statusRunning: "Проверка выполняется", statusCancelling: "Останавливаем проверку", statusCompleted: "Проверка завершена", statusCancelled: "Проверка остановлена", statusFailed: "Проверка завершилась с ошибкой"
+  },
+  en: {
+    pageTitle: "Reproducibility check", pageSubtitle: "Compares technical claims from the thesis with the code in the selected repository.",
+    backendNotReady: "The backend is not ready to run OSA.", osaMissing: "osa_tool is not installed.", llmMissing: "The LLM API key is not configured.", pythonUnsupported: "does not support paper-claims.", gitMissing: "git was not found in PATH.",
+    repoHint: "GitHub, GitLab, GitVerse, or SourceCraft.", pdfOnly: "Only PDF files are supported.", dropPdf: "Drop the thesis PDF here", choosePdf: "or click to choose a file", file: "File", clear: "Clear", remove: "Remove",
+    openJson: "Open existing JSON", running: "Check in progress…", run: "Check reproducibility", savedClaims: "Claims are already saved", savedClaimsSuffix: "Repository verification can continue without processing the PDF again.", stop: "Stop", resume: "Continue verification", restart: "Start over",
+    historyTech: "History and technical details", runs: "Runs", check: "Check", noRuns: "No runs yet.", checking: "Checking…", checkEnvironment: "Check environment", downloadLog: "Download log", environmentReady: "Environment is ready", environmentProblems: "Environment has issues",
+    sections: "Sections", claims: "Claims", verified: "Verified", result: "Result", readyPlural: "ready", readyOne: "ready", resultReady: "ready", osaLog: "OSA log", logPlaceholder: "The log will appear after OSA starts.", logTail: "Showing the latest part of the log.",
+    resultSubtitle: "Reproducibility check result", confirmedPct: "confirmed", allClaims: "All claims", checked: "Verified", confirmed: "Confirmed", rejected: "Not confirmed", excluded: "Excluded", checkedClaims: "Verified claims", noClaims: "No claims in this category.", evidenceFound: "Supporting evidence was found in the repository.",
+    loadFailed: "Could not load the analysis result.", enterRepo: "Enter a repository URL.", preflightFailed: "Preflight check failed", envNotReady: "The environment is not ready to run OSA.", choosePaper: "Choose the thesis PDF.", requestFailed: "Could not complete the backend request.",
+    statusQueued: "Queued for OSA", statusRunning: "Check in progress", statusCancelling: "Stopping the check", statusCompleted: "Check completed", statusCancelled: "Check stopped", statusFailed: "Check failed"
+  }
+} as const;
+
 
 export function ReproducibilityPage() {
+  const { language } = useLanguage();
+  const u = REPRO_UI[language];
   const [repo, setRepo] = useState("");
   const [paperName, setPaperName] = useState("");
   const [paperFile, setPaperFile] = useState<File | null>(null);
   const [jsonName, setJsonName] = useState("");
   const [raw, setRaw] = useState<unknown>(null);
   const [error, setError] = useState("");
-  const [printLang, setPrintLang] = useState<UiLang>("ru");
+  const [printLang, setPrintLang] = useState<UiLang>(language);
   const [claimFilter, setClaimFilter] = useState<ClaimFilter>("checked");
   const [jobs, setJobs] = useState<ReproducibilityJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -129,6 +157,8 @@ export function ReproducibilityPage() {
   const jobActive = Boolean(selectedJob && ["queued", "running", "cancelling"].includes(selectedJob.status));
   const analysis = useMemo(() => raw ? normalizeAnalysis(raw, paperName) : null, [raw, paperName]);
   const t = COPY[printLang];
+
+  useEffect(() => { setPrintLang(language); }, [language]);
 
   const filteredClaims = useMemo(() => {
     if (!analysis) return [];
@@ -223,7 +253,7 @@ export function ReproducibilityPage() {
         setPaperName(selectedJob.originalName || (normalized.paperPath ? basename(normalized.paperPath) : ""));
       })
       .catch((resultError) => {
-        if (!disposed) setError(errorMessage(resultError));
+        if (!disposed) setError(errorMessage(resultError, language));
       });
     return () => { disposed = true; };
   }, [selectedJob?.id, selectedJob?.status]);
@@ -248,13 +278,13 @@ export function ReproducibilityPage() {
       if (normalized.repository) setRepo((current) => current || normalized.repository || "");
       if (normalized.paperPath) setPaperName((current) => current || basename(normalized.paperPath || ""));
     } catch {
-      setError("Не удалось загрузить результат анализа.");
+      setError(u.loadFailed);
     }
   }
 
   async function checkEnvironment(): Promise<ReproducibilityPreflight | null> {
     if (!repo.trim()) {
-      setError("Укажите ссылку на репозиторий.");
+      setError(u.enterRepo);
       return null;
     }
     setPreflightBusy(true);
@@ -264,11 +294,11 @@ export function ReproducibilityPage() {
       setPreflight(result);
       if (!result.ok) {
         const failed = result.checks.filter((item) => item.blocking && !item.ok);
-        setError(failed.length ? `Не пройдена предварительная проверка: ${failed.map((item) => item.label).join(", ")}.` : "Окружение не готово к запуску OSA.");
+        setError(failed.length ? `${u.preflightFailed}: ${failed.map((item) => item.label).join(", ")}.` : u.envNotReady);
       }
       return result;
     } catch (preflightError) {
-      setError(errorMessage(preflightError));
+      setError(errorMessage(preflightError, language));
       return null;
     } finally {
       setPreflightBusy(false);
@@ -277,11 +307,11 @@ export function ReproducibilityPage() {
 
   async function runAnalysis() {
     if (!repo.trim()) {
-      setError("Укажите ссылку на репозиторий.");
+      setError(u.enterRepo);
       return;
     }
     if (!paperFile) {
-      setError("Выберите PDF работы.");
+      setError(u.choosePaper);
       return;
     }
     const readiness = await checkEnvironment();
@@ -300,7 +330,7 @@ export function ReproducibilityPage() {
       const created = await api.createReproducibilityJob(body);
       upsertJob(created);
     } catch (runError) {
-      setError(errorMessage(runError));
+      setError(errorMessage(runError, language));
     }
   }
 
@@ -309,7 +339,7 @@ export function ReproducibilityPage() {
     try {
       upsertJob(await api.cancelReproducibilityJob(selectedJob.id));
     } catch (cancelError) {
-      setError(errorMessage(cancelError));
+      setError(errorMessage(cancelError, language));
     }
   }
 
@@ -323,7 +353,7 @@ export function ReproducibilityPage() {
       setLogTruncated(false);
       upsertJob(await api.retryReproducibilityJob(selectedJob.id));
     } catch (retryError) {
-      setError(errorMessage(retryError));
+      setError(errorMessage(retryError, language));
     }
   }
 
@@ -337,7 +367,7 @@ export function ReproducibilityPage() {
       setLogTruncated(false);
       upsertJob(await api.resumeReproducibilityJob(selectedJob.id));
     } catch (resumeError) {
-      setError(errorMessage(resumeError));
+      setError(errorMessage(resumeError, language));
     }
   }
 
@@ -361,7 +391,7 @@ export function ReproducibilityPage() {
       window.print();
       window.setTimeout(() => {
         document.title = oldTitle;
-        setPrintLang("ru");
+        setPrintLang(language);
       }, 250);
     }, 80);
   }
@@ -371,20 +401,20 @@ export function ReproducibilityPage() {
   return <section className="page narrow reproducibility-page">
     <div className="page-title repro-no-print">
       <div>
-        <h1>Проверка воспроизводимости</h1>
-        <p>Сопоставляет технические утверждения из ВКР с кодом указанного репозитория.</p>
+        <h1>{u.pageTitle}</h1>
+        <p>{u.pageSubtitle}</p>
       </div>
     </div>
 
     {serviceStatus && (!serviceStatus.osaInstalled || !serviceStatus.llmConfigured || serviceStatus.pythonSupportedForPaperClaims === false || serviceStatus.gitInstalled === false) && <div className="inline-error repro-no-print">
-      Backend не готов к запуску OSA. {!serviceStatus.osaInstalled ? "Не установлен osa_tool. " : ""}{!serviceStatus.llmConfigured ? "Не настроен API-ключ LLM. " : ""}{serviceStatus.pythonSupportedForPaperClaims === false ? `Python ${serviceStatus.pythonVersion || ""} не поддерживается paper-claims. ` : ""}{serviceStatus.gitInstalled === false ? "git не найден в PATH." : ""}
+      {u.backendNotReady} {!serviceStatus.osaInstalled ? `${u.osaMissing} ` : ""}{!serviceStatus.llmConfigured ? `${u.llmMissing} ` : ""}{serviceStatus.pythonSupportedForPaperClaims === false ? `Python ${serviceStatus.pythonVersion || ""} ${u.pythonUnsupported} ` : ""}{serviceStatus.gitInstalled === false ? u.gitMissing : ""}
     </div>}
 
     <div className="panel repro-no-print">
       <label>
-        <span>Репозиторий</span>
-        <input value={repo} onChange={(event) => setRepo(event.target.value)} placeholder="https://github.com/owner/project или https://sourcecraft.dev/owner/project" />
-        <small>GitHub, GitLab, GitVerse или SourceCraft.</small>
+        <span>{COPY[language].repo}</span>
+        <input value={repo} onChange={(event) => setRepo(event.target.value)} placeholder={language === "ru" ? "https://github.com/owner/project или https://sourcecraft.dev/owner/project" : "https://github.com/owner/project or https://sourcecraft.dev/owner/project"} />
+        <small>{u.repoHint}</small>
       </label>
     </div>
 
@@ -392,7 +422,7 @@ export function ReproducibilityPage() {
       event.preventDefault();
       if (jobActive) return;
       const file = Array.from(event.dataTransfer.files).find((item) => /\.pdf$/i.test(item.name)) || null;
-      if (!file) { setError("Поддерживается только PDF."); return; }
+      if (!file) { setError(u.pdfOnly); return; }
       setPaperFile(file); setPaperName(file.name); setError("");
     }}>
       <input ref={pdfInput} type="file" accept=".pdf,application/pdf" onChange={(event) => {
@@ -400,69 +430,69 @@ export function ReproducibilityPage() {
         setPaperFile(file);
         setPaperName(file?.name || "");
       }} />
-      <strong>{paperFile ? paperFile.name : "Перетащите PDF работы"}</strong>
-      <span>{paperFile ? formatFileSize(paperFile.size) : "или нажмите, чтобы выбрать файл"}</span>
+      <strong>{paperFile ? paperFile.name : u.dropPdf}</strong>
+      <span>{paperFile ? formatFileSize(paperFile.size, language) : u.choosePdf}</span>
     </div>
 
     {paperFile && <div className="panel file-list repro-no-print">
-      <div className="row between"><strong>Файл</strong><button className="text-button" type="button" onClick={() => { setPaperFile(null); setPaperName(""); }}>Очистить</button></div>
-      <div className="file-item"><span>{paperFile.name}</span><small>{formatFileSize(paperFile.size)}</small><button aria-label="Удалить" type="button" onClick={() => { setPaperFile(null); setPaperName(""); }}>×</button></div>
+      <div className="row between"><strong>{u.file}</strong><button className="text-button" type="button" onClick={() => { setPaperFile(null); setPaperName(""); }}>{u.clear}</button></div>
+      <div className="file-item"><span>{paperFile.name}</span><small>{formatFileSize(paperFile.size, language)}</small><button aria-label={u.remove} type="button" onClick={() => { setPaperFile(null); setPaperName(""); }}>×</button></div>
     </div>}
 
     {error && <div className="inline-error repro-no-print">{error}</div>}
 
     <div className="actions end repro-no-print repro-main-actions">
-      <button className="button secondary" type="button" onClick={() => jsonInput.current?.click()} disabled={jobActive}>Открыть готовый JSON</button>
+      <button className="button secondary" type="button" onClick={() => jsonInput.current?.click()} disabled={jobActive}>{u.openJson}</button>
       <input ref={jsonInput} hidden type="file" accept=".json,application/json" onChange={(event) => void loadJson(event.target.files?.[0])} />
       <button className="button primary" type="button" onClick={() => void runAnalysis()} disabled={!repo.trim() || !paperFile || jobActive || preflightBusy}>
-        {jobActive ? "Проверка выполняется…" : "Проверить воспроизводимость"}
+        {jobActive ? u.running : u.run}
       </button>
     </div>
 
     {selectedJob && <div className="panel job-state repro-no-print repro-job-state">
-      <h1>{selectedJob.originalName || "Проверка воспроизводимости"}</h1>
-      <p><b>{reproducibilityStatusLabel(selectedJob.status)}</b>{jobActive ? ` · ${Math.round(selectedJob.progress || 0)} %` : ""}</p>
+      <h1>{selectedJob.originalName || u.pageTitle}</h1>
+      <p><b>{reproducibilityStatusLabel(selectedJob.status, language)}</b>{jobActive ? ` · ${Math.round(selectedJob.progress || 0)} %` : ""}</p>
       {selectedJob.progressMessage && <p className="progress-message">{selectedJob.progressMessage}</p>}
       {jobActive && <progress max="100" value={selectedJob.progress || 0} />}
       {selectedJob.error && <div className="inline-error">{selectedJob.error}</div>}
-      {(selectedJob.status === "failed" || selectedJob.status === "cancelled") && artifacts?.claimsAvailable && <p className="hint">Claims уже сохранены ({artifacts.claimsCount ?? "?"}). Проверку по репозиторию можно продолжить без повторной обработки PDF.</p>}
+      {(selectedJob.status === "failed" || selectedJob.status === "cancelled") && artifacts?.claimsAvailable && <p className="hint">{u.savedClaims} ({artifacts.claimsCount ?? "?"}). {u.savedClaimsSuffix}</p>}
       <div className="actions">
-        {jobActive && <button className="button secondary" type="button" onClick={() => void cancelAnalysis()}>Остановить</button>}
-        {selectedJob.status !== "completed" && selectedJob.availableActions?.resumeVerification && <button className="button primary" type="button" onClick={() => void resumeVerification()}>Продолжить проверку</button>}
-        {selectedJob.status !== "completed" && selectedJob.availableActions?.retryFull && <button className="button secondary" type="button" onClick={() => void retryAnalysis()}>Начать заново</button>}
+        {jobActive && <button className="button secondary" type="button" onClick={() => void cancelAnalysis()}>{u.stop}</button>}
+        {selectedJob.status !== "completed" && selectedJob.availableActions?.resumeVerification && <button className="button primary" type="button" onClick={() => void resumeVerification()}>{u.resume}</button>}
+        {selectedJob.status !== "completed" && selectedJob.availableActions?.retryFull && <button className="button secondary" type="button" onClick={() => void retryAnalysis()}>{u.restart}</button>}
       </div>
     </div>}
 
     <details className="panel technical-details repro-no-print repro-technical-details">
-      <summary>История и технические детали</summary>
+      <summary>{u.historyTech}</summary>
       <div className="technical-body">
-        <div className="row between"><b>Запуски</b><span className="hint">{jobs.length}</span></div>
+        <div className="row between"><b>{u.runs}</b><span className="hint">{jobs.length}</span></div>
         <div className="jobs-list repro-jobs-list">
           {jobs.map((item) => <button key={item.id} className={`job-row ${selectedJob?.id === item.id ? "selected" : ""}`} type="button" onClick={() => setSelectedJobId(item.id)}>
-            <strong>{item.originalName || "Проверка"}</strong>
-            <span>{reproducibilityStatusLabel(item.status)} · {formatDateTime(item.createdAt)}</span>
+            <strong>{item.originalName || u.check}</strong>
+            <span>{reproducibilityStatusLabel(item.status, language)} · {formatDateTime(item.createdAt, language)}</span>
           </button>)}
-          {!jobs.length && <div className="empty small">Запусков пока нет.</div>}
+          {!jobs.length && <div className="empty small">{u.noRuns}</div>}
         </div>
 
         <div className="actions repro-diagnostics-actions">
-          <button className="button secondary" type="button" onClick={() => void checkEnvironment()} disabled={!repo.trim() || jobActive || preflightBusy}>{preflightBusy ? "Проверяем…" : "Проверить окружение"}</button>
-          {selectedJob && liveLog && <a className="button secondary" href={api.reproducibilityLogDownloadUrl(selectedJob.id)} target="_blank" rel="noreferrer">Скачать лог</a>}
+          <button className="button secondary" type="button" onClick={() => void checkEnvironment()} disabled={!repo.trim() || jobActive || preflightBusy}>{preflightBusy ? u.checking : u.checkEnvironment}</button>
+          {selectedJob && liveLog && <a className="button secondary" href={api.reproducibilityLogDownloadUrl(selectedJob.id)} target="_blank" rel="noreferrer">{u.downloadLog}</a>}
         </div>
 
         {preflight && <div className="repro-simple-diagnostics">
-          <p><b>{preflight.ok ? "Окружение готово" : "Есть проблемы с окружением"}</b>{preflight.model ? ` · ${preflight.model}` : ""}</p>
+          <p><b>{preflight.ok ? u.environmentReady : u.environmentProblems}</b>{preflight.model ? ` · ${preflight.model}` : ""}</p>
           <ul>{preflight.checks.map((check) => <li key={check.id}>{check.ok ? "✓" : check.blocking ? "×" : "!"} {check.label}: {check.detail}</li>)}</ul>
         </div>}
 
         {selectedJob && <div className="meta-grid repro-artifacts-simple">
-          <span>Разделы: <b>{artifacts?.sectionsAvailable ? artifacts.sectionCount ?? "готовы" : "—"}</b></span>
-          <span>Claims: <b>{artifacts?.claimsAvailable ? artifacts.claimsCount ?? "готовы" : "—"}</b></span>
-          <span>Проверено: <b>{artifacts?.verificationAvailable ? artifacts.verifiedClaimsCount ?? "готово" : "—"}</b></span>
-          <span>Результат: <b>{selectedJob.resultAvailable ? "готов" : "—"}</b></span>
+          <span>{u.sections}: <b>{artifacts?.sectionsAvailable ? artifacts.sectionCount ?? u.readyPlural : "—"}</b></span>
+          <span>{u.claims}: <b>{artifacts?.claimsAvailable ? artifacts.claimsCount ?? u.readyPlural : "—"}</b></span>
+          <span>{u.verified}: <b>{artifacts?.verificationAvailable ? artifacts.verifiedClaimsCount ?? u.readyOne : "—"}</b></span>
+          <span>{u.result}: <b>{selectedJob.resultAvailable ? u.resultReady : "—"}</b></span>
         </div>}
 
-        {selectedJob && <label><span>Лог OSA</span><textarea readOnly value={liveLog || "Лог появится после запуска OSA."} rows={10} /><small>{logTruncated ? "Показана последняя часть лога." : ""}</small></label>}
+        {selectedJob && <label><span>{u.osaLog}</span><textarea readOnly value={liveLog || u.logPlaceholder} rows={10} /><small>{logTruncated ? u.logTail : ""}</small></label>}
       </div>
     </details>
 
@@ -478,22 +508,22 @@ export function ReproducibilityPage() {
       <div className="page-title report-title repro-result-title">
         <div>
           <h1>{analysis.title}</h1>
-          <p>{analysis.repository || "Результат проверки воспроизводимости"}</p>
+          <p>{analysis.repository || u.resultSubtitle}</p>
         </div>
-        <div className="score-box"><strong>{analysis.stats.implementationRatePct}%</strong><span>подтверждено</span></div>
+        <div className="score-box"><strong>{analysis.stats.implementationRatePct}%</strong><span>{u.confirmedPct}</span></div>
       </div>
 
       <div className="status-grid repro-no-print">
-        <button className={`status-card not_checked ${claimFilter === "extracted" ? "active" : ""}`} type="button" onClick={() => selectClaimFilter(setClaimFilter, "extracted")}><strong>{analysis.stats.sourceTotal}</strong><span>Все claims</span></button>
-        <button className={`status-card not_applicable ${claimFilter === "checked" ? "active" : ""}`} type="button" onClick={() => selectClaimFilter(setClaimFilter, "checked")}><strong>{analysis.stats.scoredTotal}</strong><span>Проверено</span></button>
-        <button className={`status-card pass ${claimFilter === "confirmed" ? "active" : ""}`} type="button" onClick={() => selectClaimFilter(setClaimFilter, "confirmed")}><strong>{analysis.stats.implemented}</strong><span>Подтверждено</span></button>
-        <button className={`status-card violation ${claimFilter === "rejected" ? "active" : ""}`} type="button" onClick={() => selectClaimFilter(setClaimFilter, "rejected")}><strong>{analysis.stats.notImplemented}</strong><span>Не подтверждено</span></button>
-        <button className="status-card not_checked" type="button"><strong>{analysis.stats.excluded + analysis.stats.hiddenLowConfidence}</strong><span>Исключено</span></button>
+        <button className={`status-card not_checked ${claimFilter === "extracted" ? "active" : ""}`} type="button" onClick={() => selectClaimFilter(setClaimFilter, "extracted")}><strong>{analysis.stats.sourceTotal}</strong><span>{u.allClaims}</span></button>
+        <button className={`status-card not_applicable ${claimFilter === "checked" ? "active" : ""}`} type="button" onClick={() => selectClaimFilter(setClaimFilter, "checked")}><strong>{analysis.stats.scoredTotal}</strong><span>{u.checked}</span></button>
+        <button className={`status-card pass ${claimFilter === "confirmed" ? "active" : ""}`} type="button" onClick={() => selectClaimFilter(setClaimFilter, "confirmed")}><strong>{analysis.stats.implemented}</strong><span>{u.confirmed}</span></button>
+        <button className={`status-card violation ${claimFilter === "rejected" ? "active" : ""}`} type="button" onClick={() => selectClaimFilter(setClaimFilter, "rejected")}><strong>{analysis.stats.notImplemented}</strong><span>{u.rejected}</span></button>
+        <button className="status-card not_checked" type="button"><strong>{analysis.stats.excluded + analysis.stats.hiddenLowConfidence}</strong><span>{u.excluded}</span></button>
       </div>
 
       <div className="panel report-controls repro-no-print repro-result-controls">
-        <button className={claimFilter === "checked" ? "text-button active" : "text-button"} type="button" onClick={() => selectClaimFilter(setClaimFilter, "checked")}>Проверенные утверждения ({analysis.stats.scoredTotal})</button>
-        <span>{analysis.stats.implemented} подтверждено · {analysis.stats.notImplemented} не подтверждено</span>
+        <button className={claimFilter === "checked" ? "text-button active" : "text-button"} type="button" onClick={() => selectClaimFilter(setClaimFilter, "checked")}>{u.checkedClaims} ({analysis.stats.scoredTotal})</button>
+        <span>{analysis.stats.implemented} {u.confirmedPct} · {analysis.stats.notImplemented} {u.rejected.toLowerCase()}</span>
       </div>
 
       <div className="result-list repro-claims-section">
@@ -512,11 +542,11 @@ export function ReproducibilityPage() {
             </div>}
             {claim.explanation && <div className="explanation"><b>{t.details}</b><p>{claim.explanation}</p></div>}
             {claim.originalText && <div className="evidence repro-pdf-omit"><b>{t.sourceText}</b><blockquote>{claim.originalText}</blockquote></div>}
-            {claim.evidence.length > 0 && <div className="evidence"><b>{t.evidence}</b>{claim.evidence.map((item, evidenceIndex) => <blockquote key={evidenceIndex}>{item.path && <span>{item.path}</span>}{item.details || "Найдено подтверждение в репозитории."}</blockquote>)}</div>}
+            {claim.evidence.length > 0 && <div className="evidence"><b>{t.evidence}</b>{claim.evidence.map((item, evidenceIndex) => <blockquote key={evidenceIndex}>{item.path && <span>{item.path}</span>}{item.details || u.evidenceFound}</blockquote>)}</div>}
             <details className="technical-details repro-claim-raw repro-pdf-omit"><summary>{t.raw}</summary><div className="technical-body"><pre>{JSON.stringify(claim.raw, null, 2)}</pre></div></details>
           </div>
         </details>)}
-        {!filteredClaims.length && <div className="empty panel">В этой категории утверждений нет.</div>}
+        {!filteredClaims.length && <div className="empty panel">{u.noClaims}</div>}
       </div>
 
       <div className="actions end report-actions repro-no-print">
@@ -649,22 +679,23 @@ function verdictLabel(claim: NormalizedClaim, lang: UiLang) {
   return labels[claim.tone];
 }
 
-function reproducibilityStatusLabel(status: ReproducibilityJob["status"]): string {
-  if (status === "queued") return "В очереди OSA";
-  if (status === "running") return "Проверка выполняется";
-  if (status === "cancelling") return "Останавливаем проверку";
-  if (status === "completed") return "Проверка завершена";
-  if (status === "cancelled") return "Проверка остановлена";
-  return "Проверка завершилась с ошибкой";
+function reproducibilityStatusLabel(status: ReproducibilityJob["status"], language: UiLang): string {
+  const u = REPRO_UI[language];
+  if (status === "queued") return u.statusQueued;
+  if (status === "running") return u.statusRunning;
+  if (status === "cancelling") return u.statusCancelling;
+  if (status === "completed") return u.statusCompleted;
+  if (status === "cancelled") return u.statusCancelled;
+  return u.statusFailed;
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+function formatFileSize(bytes: number, language: UiLang): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} ${language === "ru" ? "КБ" : "KB"}`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} ${language === "ru" ? "МБ" : "MB"}`;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : "Не удалось выполнить запрос к backend.";
+function errorMessage(error: unknown, language: UiLang): string {
+  return error instanceof Error && error.message ? error.message : REPRO_UI[language].requestFailed;
 }
 
 function asRecord(value: unknown): Record<string, any> {
@@ -687,9 +718,9 @@ function pickNumber(record: Record<string, any>, keys: string[]): number | undef
   return undefined;
 }
 
-function formatDateTime(value?: string | null): string {
+function formatDateTime(value: string | null | undefined, language: UiLang): string {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(language === "ru" ? "ru-RU" : "en-US", { dateStyle: "short", timeStyle: "short" });
 }
 

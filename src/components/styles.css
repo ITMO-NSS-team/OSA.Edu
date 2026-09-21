@@ -217,7 +217,7 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
 .map-edit-row .actions { justify-content: flex-end; }
 @media (max-width: 700px) { .map-edit-row { grid-template-columns: 1fr; } .map-edit-row .actions { justify-content: flex-start; } }
 
-/* v3: user-reviewed one-shot structure */
+/* Structure review */
 .structure-review { min-width: 0; }
 .review-intro { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 12px; }
 .review-intro p { margin: 6px 0 0; color: #666d74; line-height: 1.5; max-width: 720px; }
@@ -281,7 +281,7 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
 .report-health.review_required { background: #fff8e8; border-color: #e2c980; }
 .report-health.technical_incomplete { background: #fff0f0; border-color: #e1b4b4; }
 
-/* quality-4: report readability and user-facing polish */
+/* Report presentation */
 .result-card summary { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; }
 .result-card summary .rule-title { white-space: normal; overflow-wrap: anywhere; word-break: normal; line-height: 1.35; }
 .result-card summary .rule-id { align-self: center; }
@@ -591,7 +591,7 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
   .repro-artifact-grid { grid-template-columns: 1fr; }
 }
 
-/* Reproducibility P2: keep the original simple flow, hide operational detail by default. */
+/* Hide operational details until requested to keep the main flow focused. */
 .repro-start-card { margin-bottom: 16px; display: grid; gap: 16px; }
 .repro-start-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 14px; align-items: end; }
 .repro-field { display: grid; gap: 7px; }
@@ -642,4 +642,42 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
 @media (max-width: 560px) {
   .repro-start-actions .button, .repro-run-button { width: 100%; }
   .repro-process-strip { grid-template-columns: 1fr; }
+}
+
+/* Repository quality */
+.repository-quality-page { max-width: 1180px; }
+.rq-launch-card { display: grid; gap: 16px; margin-bottom: 14px; }
+.rq-preflight { margin-bottom: 14px; }
+.rq-job-state { margin: 14px 0 22px; }
+.rq-job-state h2 { margin: 0 0 7px; font-size: 19px; }
+.rq-result-title { margin-top: 8px; }
+.rq-warning { margin: -4px 0 16px; display: grid; gap: 5px; background: #fff9e8; border-color: #eadcae; }
+.rq-warning span { color: #6d6250; line-height: 1.45; }
+.rq-checks-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 26px; }
+.rq-check-card { display: grid; gap: 11px; align-content: start; }
+.rq-check-card.pass { border-color: #d5e5d8; }
+.rq-check-card.fail { border-color: #ecd2ce; }
+.rq-check-card.uncertain { border-color: #eadcae; }
+.rq-check-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.rq-check-head > div { display: grid; gap: 8px; min-width: 0; }
+.rq-check-head h3 { margin: 0; font-size: 17px; }
+.rq-check-head > strong { font-size: 18px; white-space: nowrap; }
+.rq-check-card > p { margin: 0; color: #6c737a; line-height: 1.45; }
+.rq-check-status, .rq-check-details, .rq-recommendation { font-size: 13px; line-height: 1.5; }
+.rq-check-details { color: #666e75; }
+.rq-recommendation { padding: 10px 11px; border-radius: 8px; background: #f6f7f8; }
+.rq-check-card.fail .rq-recommendation { background: #fff4f2; }
+.rq-check-card.uncertain .rq-recommendation { background: #fff9e8; }
+.rq-check-card .technical-details { margin-top: 2px; }
+.rq-check-card .technical-body pre { max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 11px; }
+.rq-info-section { margin-bottom: 24px; }
+.rq-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.rq-info-card { display: grid; gap: 5px; }
+.rq-info-card p { margin: 0; color: #50565c; }
+.rq-info-card span { color: #767d84; font-size: 12px; line-height: 1.45; }
+.rq-result-actions { margin-bottom: 22px; }
+.rq-technical { margin-top: 18px; }
+
+@media (max-width: 820px) {
+  .rq-checks-grid, .rq-info-grid { grid-template-columns: 1fr; }
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { useLanguage } from "../i18n";
 import type { LiteratureJob, ModelInfo } from "../types";
 import { ATTENTION_STATUSES, LiteratureReport, literatureResultCounts } from "./LiteratureReport";
 
@@ -9,16 +10,18 @@ interface Props {
   models: ModelInfo[];
 }
 
-const JOB_COPY: Record<LiteratureJob["status"], string> = {
-  queued: "В очереди",
-  running: "Проверяется",
-  cancelling: "Останавливается",
-  done: "Готово",
-  failed: "Ошибка",
-  cancelled: "Остановлено",
+const JOB_COPY = {
+  ru: { queued: "В очереди", running: "Проверяется", cancelling: "Останавливается", done: "Готово", failed: "Ошибка", cancelled: "Остановлено" } as Record<LiteratureJob["status"], string>,
+  en: { queued: "Queued", running: "Checking", cancelling: "Stopping", done: "Done", failed: "Error", cancelled: "Stopped" } as Record<LiteratureJob["status"], string>,
 };
 
 export function LiteraturePage({ models }: Props) {
+  const { language } = useLanguage();
+  const t = language === "ru" ? {
+    onlyPdf: "Для проверки литературы поддерживаются только PDF.", eyebrow: "Проверка источников", title: "Проверка литературы", subtitle: "Загрузите PDF. Работы проверяются по очереди, а сомнительные источники дополнительно перепроверяются в сети.", model: "Модель", modelHint: "Модель используется для сопоставления источников и углублённой веб-проверки.", selected: "Выбрано", choosePdf: "Выберите PDF", queuedHint: "Файлы будут добавлены в общую очередь", multiHint: "Можно выбрать несколько работ сразу", adding: "Добавляем…", addQueue: "Добавить в очередь", clear: "Очистить", running: "Проверка выполняется", waiting: "Работы ожидают запуска", now: "Сейчас", inQueue: "в очереди", queue: "Очередь работ", cancel: "Отменить", stop: "Остановить", retry: "Повторить", remove: "Удалить", failed: "Проверка не завершилась.", attention: "Требуют внимания", confirmed: "Подтверждено", all: "Все", filter: "Фильтр результатов", empty: "В выбранной категории источников нет.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu."
+  } : {
+    onlyPdf: "Only PDF files are supported for literature checking.", eyebrow: "Source verification", title: "Literature check", subtitle: "Upload PDFs. Documents are processed in a queue, and suspicious references are additionally checked online.", model: "Model", modelHint: "The model is used for citation matching and deeper web verification.", selected: "Selected", choosePdf: "Choose PDF", queuedHint: "Files will be added to the shared queue", multiHint: "You can select multiple documents", adding: "Adding…", addQueue: "Add to queue", clear: "Clear", running: "Check in progress", waiting: "Waiting to start", now: "Running", inQueue: "queued", queue: "Document queue", cancel: "Cancel", stop: "Stop", retry: "Retry", remove: "Remove", failed: "The check did not complete.", attention: "Needs attention", confirmed: "Confirmed", all: "All", filter: "Result filter", empty: "There are no sources in this category.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "The browser blocked the print window. Allow pop-ups for OSA.Edu."
+  };
   const inputRef = useRef<HTMLInputElement | null>(null);
   const productionModels = models.filter((item) => item.tier === "production");
   const defaultModel = productionModels.find((item) => item.recommended)?.id
@@ -76,7 +79,7 @@ export function LiteraturePage({ models }: Props) {
   function addFiles(input: FileList | File[]) {
     const incoming = Array.from(input);
     const pdfs = incoming.filter((file) => /\.pdf$/i.test(file.name));
-    if (pdfs.length !== incoming.length) setError("Для проверки литературы поддерживаются только PDF.");
+    if (pdfs.length !== incoming.length) setError(t.onlyPdf);
     else setError("");
     setFiles((current) => {
       const next = [...current];
@@ -161,7 +164,7 @@ export function LiteraturePage({ models }: Props) {
     if (!result) return;
     try {
       const { downloadLiteratureReportHtml } = await import("../literatureReportExport");
-      downloadLiteratureReportHtml(result);
+      downloadLiteratureReportHtml(result, language);
     } catch (reason) {
       setError((reason as Error).message);
     }
@@ -171,12 +174,12 @@ export function LiteraturePage({ models }: Props) {
     if (!result) return;
     const popup = window.open("", "_blank");
     if (!popup) {
-      setError("Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu.");
+      setError(t.popupBlocked);
       return;
     }
     try {
       const { printLiteratureReport } = await import("../literatureReportExport");
-      printLiteratureReport(result, popup);
+      printLiteratureReport(result, language, popup);
     } catch (reason) {
       popup.close();
       setError((reason as Error).message);
@@ -188,15 +191,15 @@ export function LiteraturePage({ models }: Props) {
     <section className="page literature-page polished-literature-page">
       <div className="literature-hero">
         <div>
-          <span className="literature-eyebrow">Проверка источников</span>
-          <h1>Проверка литературы</h1>
-          <p>Загрузите PDF. Работы проверяются по очереди, а сомнительные источники дополнительно перепроверяются в сети.</p>
+          <span className="literature-eyebrow">{t.eyebrow}</span>
+          <h1>{t.title}</h1>
+          <p>{t.subtitle}</p>
         </div>
       </div>
 
       <div className="panel literature-start-card literature-queue-start-card">
         <label className="literature-model-field">
-          <span>Модель</span>
+          <span>{t.model}</span>
           <select
             value={model}
             onChange={(event) => {
@@ -206,7 +209,7 @@ export function LiteraturePage({ models }: Props) {
           >
             {productionModels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
-          <small>{selectedModel?.note || "Модель используется для сопоставления источников и углублённой веб-проверки."}</small>
+          <small>{selectedModel?.note || t.modelHint}</small>
         </label>
 
         <button type="button" className={`literature-file-picker ${files.length ? "has-file" : ""}`} onClick={() => inputRef.current?.click()}>
@@ -222,24 +225,24 @@ export function LiteraturePage({ models }: Props) {
           />
           <span className="literature-file-icon" aria-hidden="true">PDF</span>
           <span className="literature-file-copy">
-            <strong>{files.length ? `Выбрано: ${files.length}` : "Выберите PDF"}</strong>
-            <small>{files.length ? "Файлы будут добавлены в общую очередь" : "Можно выбрать несколько работ сразу"}</small>
+            <strong>{files.length ? `${t.selected}: ${files.length}` : t.choosePdf}</strong>
+            <small>{files.length ? t.queuedHint : t.multiHint}</small>
           </span>
         </button>
 
         <div className="literature-start-actions">
           <button className="button primary literature-start-button" disabled={!files.length || sending || !model} onClick={() => void enqueue()}>
-            {sending ? "Добавляем…" : files.length > 1 ? `Добавить в очередь · ${files.length}` : "Добавить в очередь"}
+            {sending ? t.adding : files.length > 1 ? `${t.addQueue} · ${files.length}` : t.addQueue}
           </button>
-          {files.length > 0 && <button className="button secondary" disabled={sending} onClick={() => setFiles([])}>Очистить</button>}
+          {files.length > 0 && <button className="button secondary" disabled={sending} onClick={() => setFiles([])}>{t.clear}</button>}
         </div>
 
         {(runningCount > 0 || queuedCount > 0) && (
           <div className="literature-running" role="status">
             <span className="literature-spinner" aria-hidden="true" />
             <div>
-              <strong>{runningCount ? "Проверка выполняется" : "Работы ожидают запуска"}</strong>
-              <small>{runningCount ? `Сейчас: ${runningCount}` : ""}{runningCount && queuedCount ? " · " : ""}{queuedCount ? `в очереди: ${queuedCount}` : ""}</small>
+              <strong>{runningCount ? t.running : t.waiting}</strong>
+              <small>{runningCount ? `${t.now}: ${runningCount}` : ""}{runningCount && queuedCount ? " · " : ""}{queuedCount ? `${t.inQueue}: ${queuedCount}` : ""}</small>
             </div>
           </div>
         )}
@@ -249,7 +252,7 @@ export function LiteraturePage({ models }: Props) {
       {jobs.length > 0 && (
         <section className="panel literature-queue-panel">
           <div className="literature-queue-head">
-            <div><strong>Очередь работ</strong><span>{jobs.length} {pluralJobs(jobs.length)}</span></div>
+            <div><strong>{t.queue}</strong><span>{jobs.length} {language === "ru" ? pluralJobs(jobs.length) : jobs.length === 1 ? "document" : "documents"}</span></div>
           </div>
           <div className="literature-job-list">
             {jobs.map((job, index) => (
@@ -258,20 +261,20 @@ export function LiteraturePage({ models }: Props) {
                   <span className="literature-job-index">{index + 1}</span>
                   <span className="literature-job-copy">
                     <strong>{job.originalName}</strong>
-                    <small>{job.error || job.progressMessage || JOB_COPY[job.status]}</small>
+                    <small>{job.error || job.progressMessage || JOB_COPY[language][job.status]}</small>
                     {(job.status === "running" || job.status === "cancelling") && (
                       <span className="literature-progress-track"><span style={{ width: `${Math.max(2, job.progress)}%` }} /></span>
                     )}
                   </span>
-                  <span className={`literature-queue-status ${job.status}`}>{JOB_COPY[job.status]}</span>
+                  <span className={`literature-queue-status ${job.status}`}>{JOB_COPY[language][job.status]}</span>
                 </button>
                 <div className="literature-job-actions">
                   {(job.status === "queued" || job.status === "running" || job.status === "cancelling") && (
-                    <button className="text-button" disabled={job.status === "cancelling"} onClick={() => void stop(job)}>{job.status === "queued" ? "Отменить" : "Остановить"}</button>
+                    <button className="text-button" disabled={job.status === "cancelling"} onClick={() => void stop(job)}>{job.status === "queued" ? t.cancel : t.stop}</button>
                   )}
-                  {(job.status === "failed" || job.status === "cancelled") && <button className="text-button" onClick={() => void retry(job)}>Повторить</button>}
+                  {(job.status === "failed" || job.status === "cancelled") && <button className="text-button" onClick={() => void retry(job)}>{t.retry}</button>}
                   {!(["running", "cancelling"] as LiteratureJob["status"][]).includes(job.status) && (
-                    <button className="literature-job-remove" aria-label="Удалить" title="Удалить" onClick={() => void remove(job)}>×</button>
+                    <button className="literature-job-remove" aria-label={t.remove} title={t.remove} onClick={() => void remove(job)}>×</button>
                   )}
                 </div>
               </div>
@@ -281,30 +284,30 @@ export function LiteraturePage({ models }: Props) {
       )}
 
       {selectedJob?.status === "failed" && (
-        <div className="inline-error literature-selected-error">{selectedJob.error || "Проверка не завершилась."}</div>
+        <div className="inline-error literature-selected-error">{selectedJob.error || t.failed}</div>
       )}
 
       {result && (
-        <>
-          <LiteratureReport
-            result={result}
-            rows={visibleRows}
-            actions={(
-              <>
-                <button className="button secondary" onClick={downloadTsv}>TSV</button>
-                <button className="button secondary" onClick={() => void downloadHtml()}>HTML</button>
-                <button className="button primary" onClick={() => void printPdf()}>PDF</button>
-              </>
-            )}
-            controls={(
-              <div className="literature-segmented" role="tablist" aria-label="Фильтр результатов">
-              <button className={filter === "attention" ? "active" : ""} onClick={() => setFilter("attention")}>Требуют внимания · {attentionCount}</button>
-              <button className={filter === "confirmed" ? "active" : ""} onClick={() => setFilter("confirmed")}>Подтверждено · {confirmedCount}</button>
-              <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Все · {result.reference_count}</button>
-              </div>
-            )}
-          />
-        </>
+        <LiteratureReport
+          result={result}
+          rows={visibleRows}
+          language={language}
+          emptyMessage={t.empty}
+          actions={(
+            <>
+              <button className="button secondary" onClick={downloadTsv}>{t.downloadTsv}</button>
+              <button className="button secondary" onClick={() => void downloadHtml()}>{t.downloadHtml}</button>
+              <button className="button primary" onClick={() => void printPdf()}>{t.printPdf}</button>
+            </>
+          )}
+          controls={(
+            <div className="literature-segmented" role="tablist" aria-label={t.filter}>
+              <button className={filter === "attention" ? "active" : ""} onClick={() => setFilter("attention")}>{t.attention} · {attentionCount}</button>
+              <button className={filter === "confirmed" ? "active" : ""} onClick={() => setFilter("confirmed")}>{t.confirmed} · {confirmedCount}</button>
+              <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>{t.all} · {result.reference_count}</button>
+            </div>
+          )}
+        />
       )}
     </section>
   );

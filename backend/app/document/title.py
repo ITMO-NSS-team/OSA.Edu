@@ -45,8 +45,8 @@ def _title_from_vkr_anchors(blocks: list[dict], lexicon: dict[str, int]):
 
     On digital VKR title pages the work title is normally located between the
     fixed heading ``ВЫПУСКНАЯ КВАЛИФИКАЦИОННАЯ РАБОТА`` and the first
-    ``Обучающийся:`` field.  This is a stronger signal than lexical title hints
-    and fixes titles beginning with generic words such as ``Исследование``.
+    ``Обучающийся:`` field. This structural signal remains useful when the
+    title begins with generic words such as ``Исследование``.
     """
     if not blocks:
         return None
@@ -74,10 +74,9 @@ def _title_variants(value: str) -> list[str]:
     """Return plausible title strings from one PDF text block.
 
     Digital title pages often place the Russian title and its English translation
-    in the same PyMuPDF block. The older extractor rejected the whole block as soon
-    as Latin letters appeared, which made the result depend on the structure LLM.
-    Keep the original value when it is monolingual and additionally expose the
-    Russian prefix when a clear multi-word English translation follows it.
+    in the same PyMuPDF block. Keep monolingual values intact and expose the
+    Russian prefix when a clear multi-word English translation follows it, so
+    bilingual blocks remain usable without relying on the structure LLM.
     """
     text = re.sub(r'\s+', ' ', value).strip()
     if not text:

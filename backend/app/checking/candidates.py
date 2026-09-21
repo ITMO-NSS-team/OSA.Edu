@@ -78,9 +78,8 @@ def _block_context(document: dict, block: dict, start: int, end: int) -> str:
         return _context(block.get('text', ''), start, end)
     selected: list[str] = []
     for item in blocks[max(0, index - 2):min(len(blocks), index + 3)]:
-        # Cross-page neighbours are intentionally retained. A sentence may continue
-        # on the next PDF page, and hiding the previous page made sentence-start
-        # checks treat continuations such as «а источник ...» as new sentences.
+        # Keep cross-page neighbours so sentence-start checks recognize prose
+        # continuing from the preceding PDF page.
         selected.append(compact(item.get('text', '')))
     return compact(' '.join(selected))[:1200]
 
@@ -255,9 +254,8 @@ def _numeral_in_math_context(text: str, start: int, end: int) -> bool:
 def _numeral_is_structural_sequence(text: str, start: int, end: int) -> bool:
     """Treat enumerated identifiers as identifiers, not prose quantities.
 
-    The one-token left-context guard catches ``Шаг 5`` but the second/third
-    numbers in ``Шаги 1, 2, 3`` previously leaked through. Evaluate the
-    complete local sequence up to the current number.
+    Inspect the complete local sequence so every number in ``Шаги 1, 2, 3``
+    inherits its identifier context, including numbers not adjacent to ``Шаги``.
     """
     local = text[max(0, start - 80):end]
     return bool(re.search(

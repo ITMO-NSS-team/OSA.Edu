@@ -364,16 +364,13 @@ async def execute_candidate_plan(
     if fatal is not None:
         raise fatal
 
-    # A valid JSON response may still omit several candidate/rule pairs. Retrying
-    # the whole packet wastes tokens and used to leave coverage at values such as
-    # 26/48 or 69/91. Retry only the exact missing pairs, preserving all successful
-    # verdicts from the first pass.
+    # A valid JSON response may omit candidate/rule pairs. Retry only those
+    # pairs so successful verdicts are preserved and tokens are not wasted.
     retry_rounds = max(1, env_int('CANDIDATE_MISSING_RETRY_ROUNDS', 2))
     recovery_pair_batch = max(4, env_int('CANDIDATE_RECOVERY_PAIR_BATCH_SIZE', 8))
     for retry_round in range(1, retry_rounds + 1):
-        # If a large JSON packet was malformed, retrying the same 48+ verdicts
-        # tends to reproduce the failure.  Split missing exact pairs; on the next
-        # round halve the packet again for an adaptive final recovery.
+        # Large malformed packets can fail repeatedly. Split missing pairs
+        # into smaller packets and halve the target size on successive rounds.
         round_batch_size = max(4, recovery_pair_batch // (2 ** (retry_round - 1)))
         retry_requests = build_recovery_requests(
             requests,
@@ -412,4 +409,3 @@ async def execute_candidate_plan(
             'соответствующие правила оставлены неопределёнными, а не засчитаны как проверенные.'
         )
     return aggregate_candidate_results(plan, verdicts), warnings
-
