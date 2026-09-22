@@ -30,6 +30,31 @@ class HostLlmError(RuntimeError):
         self.network_code = ""
 
 
+def _decode_host_bridge_response(raw: str) -> dict[str, Any]:
+    """Decode a bridge envelope, tolerating one interrupted final brace write.
+
+    Some host workers write the closing quote of ``text`` before the envelope's
+    final brace.  If the backend observes the file in that state, the embedded
+    model response is already complete but the outer JSON object is not.  Only
+    that exact, unambiguous truncation is repaired here; every other malformed
+    response remains an error and can be retried by the caller.
+    """
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as original_error:
+        stripped = raw.rstrip()
+        if stripped and not stripped.endswith("}"):
+            try:
+                value = json.loads(stripped + "}")
+            except json.JSONDecodeError:
+                raise original_error
+        else:
+            raise
+    if not isinstance(value, dict):
+        raise ValueError("Host bridge response must be a JSON object.")
+    return value
+
+
 def normalize_host_model(model: str | None) -> str:
     value = (model or DEFAULT_HOST_LLM_MODEL).strip()
     if value.startswith("openai/"):
@@ -226,7 +251,7 @@ def _run_host_bridge_sync(
         time.sleep(0.25)
 
     try:
-        response = json.loads(response_path.read_text(encoding="utf-8"))
+        response = _decode_host_bridge_response(response_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise HostLlmError(
             f"Host bridge вернул некорректный JSON: {exc}",

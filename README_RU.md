@@ -745,7 +745,7 @@ HOST_LLM_BRIDGE_DIR=/absolute/path/to/bridge
 - восстановления кандидатов;
 - обработки сокращений;
 - MCP endpoint, DAG, количества попыток и timeouts для вкладки «Нормоконтроль»: `NORMCONTROL_MCP_URL`, `NORMCONTROL_DAG_ID`, `NORMCONTROL_MCP_ATTEMPTS`, `NORMCONTROL_MCP_ATTEMPT_TIMEOUT_SECONDS`, `NORMCONTROL_HTTP_TIMEOUT_SECONDS`;
-- модели и веб-этапа проверки литературы: `LITERATURE_REVIEW_MODEL`, `LITERATURE_WEB_SEARCH_ENABLED`, `LITERATURE_WEB_FALLBACK_TO_PLUGIN`, `LITERATURE_WEB_SEARCH_ENGINE`, `LITERATURE_WEB_PROVIDER_ORDER`;
+- модели и веб-этапа проверки литературы: `LITERATURE_REVIEW_MODEL`, `LITERATURE_WEB_SEARCH_ENABLED`, `LITERATURE_WEB_MAX_ATTEMPTS`, `LITERATURE_WEB_FALLBACK_TO_PLUGIN`, `LITERATURE_WEB_SEARCH_ENGINE`, `LITERATURE_WEB_PROVIDER_ORDER`;
 - опционального контакта для polite pool Crossref: `CROSSREF_MAILTO`.
 - параметры проверки воспроизводимости: модель OSA, Host LLM routing, timeout, context window, max tokens и количество повторов (`REPRODUCIBILITY_MODEL`, `REPRODUCIBILITY_USE_HOST_LLM`, `REPRODUCIBILITY_TIMEOUT_SECONDS`, `REPRODUCIBILITY_CONTEXT_WINDOW`, `REPRODUCIBILITY_MAX_TOKENS`, `REPRODUCIBILITY_LLM_MAX_RETRIES`);
 Обычно значения по умолчанию менять не требуется.

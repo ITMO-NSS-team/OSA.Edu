@@ -102,6 +102,18 @@ def web_concurrency() -> int:
     return _env_int("LITERATURE_WEB_CONCURRENCY", 2, minimum=1, maximum=8)
 
 
+def _host_web_retryable(error: BaseException) -> bool:
+    provider_code = str(getattr(error, "provider_code", "") or "")
+    if provider_code in {
+        "host_bridge_invalid_response",
+        "host_bridge_timeout",
+        "host_bridge_empty_response",
+        "host_bridge_worker_error",
+    }:
+        return True
+    return provider_code == "host_web_invalid_json"
+
+
 def _provider_order() -> list[str]:
     raw = os.getenv("LITERATURE_WEB_PROVIDER_ORDER", "")
     return [part.strip() for part in raw.split(",") if part.strip()]
@@ -278,30 +290,45 @@ async def verify_reference_on_web(
             "instruction": "Выполни независимую веб-проверку. Precheck — только подсказка, а не доказательство.",
         }
         started = time.monotonic()
-        raw = await run_host_llm(
-            model=model,
-            system_prompt=WEB_SYSTEM_PROMPT,
-            user_message=json.dumps(user_payload, ensure_ascii=False),
-            timeout_seconds=_env_int("LITERATURE_WEB_TIMEOUT_MS", 600000, minimum=10000, maximum=1800000) // 1000,
-            allow_web_search=True,
-        )
-        try:
-            value = parse_json(raw)
-        except Exception:
-            recovered = salvage_json_objects(raw, required_key="status")
-            if not recovered:
+        max_attempts = _env_int("LITERATURE_WEB_MAX_ATTEMPTS", 2, minimum=1, maximum=4)
+        last_error: BaseException | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                raw = await run_host_llm(
+                    model=model,
+                    system_prompt=WEB_SYSTEM_PROMPT,
+                    user_message=json.dumps(user_payload, ensure_ascii=False),
+                    timeout_seconds=_env_int("LITERATURE_WEB_TIMEOUT_MS", 600000, minimum=10000, maximum=1800000) // 1000,
+                    allow_web_search=True,
+                )
+                try:
+                    value = parse_json(raw)
+                except Exception as parse_error:
+                    recovered = salvage_json_objects(raw, required_key="status")
+                    if not recovered:
+                        wrapped = RuntimeError(f"Host web verifier вернул невалидный JSON: {parse_error}")
+                        setattr(wrapped, "provider_code", "host_web_invalid_json")
+                        raise wrapped from parse_error
+                    value = recovered[-1]
+                decision = apply_hallucination_guard(normalize_web_decision(value))
+                _assert_web_search_performed(decision)
+                decision["matched_citation"] = _matched_citation(decision)
+                decision["model"] = model
+                decision["provider"] = host_provider_name()
+                decision["request_id"] = ""
+                decision["attempts"] = attempt
+                decision["web_mode"] = "host_web_search"
+                decision["duration_seconds"] = round(time.monotonic() - started, 2)
+                return decision
+            except asyncio.CancelledError:
                 raise
-            value = recovered[-1]
-        decision = apply_hallucination_guard(normalize_web_decision(value))
-        _assert_web_search_performed(decision)
-        decision["matched_citation"] = _matched_citation(decision)
-        decision["model"] = model
-        decision["provider"] = host_provider_name()
-        decision["request_id"] = ""
-        decision["attempts"] = 1
-        decision["web_mode"] = "host_web_search"
-        decision["duration_seconds"] = round(time.monotonic() - started, 2)
-        return decision
+            except BaseException as exc:
+                last_error = exc
+                if attempt >= max_attempts or not _host_web_retryable(exc):
+                    raise
+                await asyncio.sleep(min(5.0, 1.5 * attempt))
+        assert last_error is not None
+        raise last_error
 
     key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not key:
