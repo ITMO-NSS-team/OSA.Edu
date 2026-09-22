@@ -41,6 +41,22 @@ STOP_HEADING_RE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+SPLIT_SECTION_LETTER_RE = re.compile(r"^\s*[A-ZА-ЯЁ]\.?\s*$")
+SPLIT_SECTION_TITLE_RE = re.compile(
+    r"^\s*[A-ZА-ЯЁ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’\-]+"
+    r"(?:\s+(?:[A-ZА-ЯЁ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’\-]+|and|of|the|и|в|на|для)){0,7}\s*$"
+)
+
+
+def _is_split_section_heading(lines: list[str], index: int) -> bool:
+    """Recognize headings whose section letter and title are separate PDF lines."""
+    if not SPLIT_SECTION_LETTER_RE.match(lines[index]):
+        return False
+    next_index = index + 1
+    while next_index < len(lines) and not lines[next_index].strip():
+        next_index += 1
+    return next_index < len(lines) and bool(SPLIT_SECTION_TITLE_RE.match(lines[next_index]))
+
 
 def extract_references(text: str) -> tuple[str, str]:
     lines = text.splitlines()
@@ -49,7 +65,7 @@ def extract_references(text: str) -> tuple[str, str]:
         start = matches[-1]
         end = len(lines)
         for i in range(start + 1, len(lines)):
-            if STOP_HEADING_RE.match(lines[i]):
+            if STOP_HEADING_RE.match(lines[i]) or _is_split_section_heading(lines, i):
                 end = i
                 break
         return "heading", "\n".join(lines[start:end]).strip() + "\n"
@@ -77,6 +93,51 @@ def _select_page_text(sorted_text: str, native_text: str, prefer_native_order: b
     return (native_text if prefer_native_order else sorted_text), prefer_native_order
 
 
+def _indent_positioned_lines(positioned_lines: list[tuple[float, str]], page_width: float) -> str:
+    """Restore hanging indents that PyMuPDF drops from native-order text.
+
+    Academic bibliographies commonly place wrapped lines roughly 10 points to
+    the right of the first line.  A single leading space is enough for the
+    bibliography normalizer to preserve that structural signal.  Column bases
+    are calculated independently so a continuation at the top of the right
+    column is not mistaken for a new reference.
+    """
+    midpoint = page_width / 2
+    bases: dict[int, float] = {}
+    for x0, text in positioned_lines:
+        stripped = text.strip()
+        if not stripped or stripped.isdigit():
+            continue
+        column = 0 if x0 < midpoint else 1
+        bases[column] = min(bases.get(column, x0), x0)
+
+    rendered: list[str] = []
+    for x0, text in positioned_lines:
+        column = 0 if x0 < midpoint else 1
+        base = bases.get(column, x0)
+        prefix = " " if x0 - base >= 3.0 else ""
+        rendered.append(prefix + text.rstrip())
+    return "\n".join(rendered).rstrip() + "\n"
+
+
+def _native_page_text(page: Any) -> str:
+    """Return native PDF reading order while retaining line x-coordinates."""
+    positioned_lines: list[tuple[float, str]] = []
+    page_dict = page.get_text("dict", sort=False) or {}
+    for block in page_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            text = "".join(str(span.get("text") or "") for span in spans)
+            if not text.strip():
+                continue
+            x_positions = [float(span["bbox"][0]) for span in spans if span.get("bbox")]
+            x0 = min(x_positions) if x_positions else float(line.get("bbox", [0.0])[0])
+            positioned_lines.append((x0, text))
+    return _indent_positioned_lines(positioned_lines, float(page.rect.width))
+
+
 def pdf_text(pdf_bytes: bytes) -> tuple[str, list[str]]:
     import pymupdf
 
@@ -90,7 +151,7 @@ def pdf_text(pdf_bytes: bytes) -> tuple[str, list[str]]:
         prefer_native_order = False
         for index, page in enumerate(document):
             sorted_text = page.get_text("text", sort=True) or ""
-            native_text = page.get_text("text", sort=False) or ""
+            native_text = _native_page_text(page)
             text, prefer_native_order = _select_page_text(sorted_text, native_text, prefer_native_order)
             if not text.strip():
                 empty_pages.append(index + 1)
