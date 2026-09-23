@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from backend.app.literature.extractor import _select_page_text
+from backend.app.literature.extractor import _select_page_text, extract_references
 from backend.app.literature.normalize_references import normalize_text
 from backend.app.literature.web_verifier import (
     _assert_web_search_performed,
@@ -19,6 +19,45 @@ class LiteratureExtractionRegressionTests(unittest.TestCase):
 
         self.assertTrue(prefer_native_order)
         self.assertEqual(native_text, selected)
+
+    def test_appendix_heading_after_references_is_clipped(self) -> None:
+        text = """Introduction
+References
+Dayu Yang, Antoine Simoulin, Xin Qian, Xiaoyi Liu,
+Yuwei Cao, Zhaopu Teng, and Grey Yang. 2025.
+Docagent:
+A multi-agent system for automated
+code documentation generation.
+arXiv preprint arXiv:2504.08725.
+7
+A
+Claim Extraction Prompts
+This appendix summarizes the prompt families
+"""
+
+        mode, bibliography = extract_references(text)
+
+        self.assertEqual("heading", mode)
+        self.assertIn("A multi-agent system for automated", bibliography)
+        self.assertNotIn("A Claim Extraction Prompts", bibliography)
+        self.assertNotIn("This appendix summarizes", bibliography)
+
+    def test_wrapped_reference_title_is_not_treated_as_tail_heading(self) -> None:
+        text = """References
+Dayu Yang, Antoine Simoulin, Xin Qian, Xiaoyi Liu,
+Yuwei Cao, Zhaopu Teng, and Grey Yang. 2025.
+Docagent:
+A multi-agent system for automated
+code documentation generation.
+arXiv preprint arXiv:2504.08725.
+"""
+
+        mode, bibliography = extract_references(text)
+
+        self.assertEqual("heading", mode)
+        self.assertIn("Docagent:", bibliography)
+        self.assertIn("A multi-agent system for automated", bibliography)
+        self.assertIn("code documentation generation", bibliography)
 
     def test_author_year_references_without_hanging_indent_stay_whole(self) -> None:
         text = """References
