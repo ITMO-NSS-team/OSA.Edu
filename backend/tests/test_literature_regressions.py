@@ -86,6 +86,134 @@ for Dynamic Response. arXiv preprint arXiv:2506.07223.
         self.assertEqual(1, len(rows))
         self.assertIn("Reflex First, Reflect Later", rows[0]["reference"])
 
+    def test_split_access_date_does_not_start_numbered_mode(self) -> None:
+        text = """References
+Eli Salamie. 2025. Readme file generator, powered
+by ai. https://github.com/eli64s/README-AI.
+Accessed:
+2025-09-
+15.
+Qinyu Luo, Yining Ye, Shihao Liang, Zhong Zhang,
+Yujia Qin, Yaxi Lu, Yesai Wu, Xin Cong, Yankai
+Lin, Yingli Zhang, et al. 2024.
+Repoagent: An
+llm-powered open-source framework for repository-
+level code documentation generation. arXiv preprint
+arXiv:2402.16667.
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(2, len(rows))
+        self.assertEqual("1", rows[0]["number"])
+        self.assertEqual("2", rows[1]["number"])
+        self.assertIn("Readme file generator", rows[0]["reference"])
+        self.assertIn("Repoagent", rows[1]["reference"])
+
+    def test_current_paper_unnumbered_references_split_into_records(self) -> None:
+        text = """References
+Fabien CY Benureau and Nicolas P Rougier. 2018. Re-
+run, repeat, reproduce, reuse, replicate: transforming
+code into scientific contributions. Frontiers in neu-
+roinformatics, 11:69.
+Eli Salamie. 2025. Readme file generator, powered
+by ai. https://github.com/eli64s/README-AI.
+Accessed: 2025-09-15.
+Aleksandra Eliseeva, Alexander Kovrigin, Ilia Kholkin,
+Egor Bogomolov, and Yaroslav Zharov. 2025. En-
+vbench: A benchmark for automated environment
+setup. arXiv preprint arXiv:2503.14443.
+Michael Färber. 2020. Analyzing the github repositories
+of research papers. In Proceedings of the ACM/IEEE
+joint conference on digital libraries in 2020, pages
+491–492.
+Peter Ivie and Douglas Thain. 2018. Reproducibility
+in scientific computing. ACM Computing Surveys
+(CSUR), 51(3):1–36.
+Yuta Koreeda, Terufumi Morishita, Osamu Imaichi, and
+Yasuhiro Sogawa. 2023.
+Larch: Large language
+model-based automatic readme creation with heuris-
+tics. In Proceedings of the 32nd ACM International
+Conference on Information and Knowledge Manage-
+ment, pages 5066–5070.
+Linus
+Unnebäck.
+2025.
+Api
+documentation
+generator.
+https://github.com/LinusU/
+ts-readme-generator.
+Accessed:
+2025-09-
+15.
+Qinyu Luo, Yining Ye, Shihao Liang, Zhong Zhang,
+Yujia Qin, Yaxi Lu, Yesai Wu, Xin Cong, Yankai
+Lin, Yingli Zhang, et al. 2024.
+Repoagent: An
+llm-powered open-source framework for repository-
+level code documentation generation. arXiv preprint
+arXiv:2402.16667.
+K. Jarrod Millman, Matthew Brett, Ross Barnowski,
+and Jean-Baptiste Poline. 2018. Teaching computa-
+tional reproducibility for neuroimaging. Frontiers in
+Neuroscience, 12:727.
+OpenBMB. 2024.
+An llm-powered framework for
+repository-level code documentation generation.
+https://github.com/OpenBMB/RepoAgent.
+Ac-
+cessed: 2025-09-15.
+Harald Semmelrock, Simone Kopeinik, Dieter Theiler,
+Tony Ross-Hellauer, and Dominik Kowald. 2023. Re-
+producibility in machine learning-driven research.
+arXiv preprint arXiv:2307.10320.
+Simon
+Kenyon
+Shepard.
+2021.
+mer-
+maidjs
+diagrams
+generator.
+https:
+//github.com/SimonKenyonShepard/
+mermaidjs-github-svg-generator.
+Accessed:
+2025-09-15.
+Xiangru Tang, Yuliang Liu, Zefan Cai, Yanjun Shao,
+Junjie Lu, Yichi Zhang, Zexuan Deng, Helan Hu,
+Kaikai An, Ruijun Huang, et al. 2023. Ml-bench:
+Evaluating large language models and agents for ma-
+chine learning tasks on repository-level code. arXiv
+preprint arXiv:2311.09835.
+Harold Thimbleby. 2024. Improving science that uses
+code. The Computer Journal, 67(4):1381–1404.
+Ana Trisovic, Matthew K Lau, Thomas Pasquier, and
+Mercè Crosas. 2022. A large-scale study on research
+code quality and execution. Scientific Data, 9(1):60.
+Dayu Yang, Antoine Simoulin, Xin Qian, Xiaoyi Liu,
+Yuwei Cao, Zhaopu Teng, and Grey Yang. 2025.
+Docagent:
+A multi-agent system for automated
+code documentation generation.
+arXiv preprint
+arXiv:2504.08725.
+7
+"""
+
+        rows = normalize_text(text)
+        refs = [str(row["reference"]) for row in rows]
+
+        self.assertEqual(16, len(rows))
+        self.assertTrue(refs[6].startswith("Linus Unnebäck. 2025"))
+        self.assertTrue(refs[10].startswith("Harald Semmelrock"))
+        self.assertTrue(refs[11].startswith("Simon Kenyon Shepard. 2021"))
+        self.assertTrue(refs[15].startswith("Dayu Yang"))
+        self.assertIn("OpenBMB. 2024", refs[9])
+        self.assertIn("A multi-agent system for automated", refs[15])
+
 
 class LiteratureWebRegressionTests(unittest.TestCase):
     def test_cp1251_mojibake_is_repaired(self) -> None:
