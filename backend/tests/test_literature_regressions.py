@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from backend.app.literature.extractor import _select_page_text
+from backend.app.literature.extractor import (
+    _indent_positioned_lines,
+    _select_page_text,
+    extract_references,
+)
 from backend.app.literature.normalize_references import normalize_text
 from backend.app.literature.web_verifier import (
     _assert_web_search_performed,
@@ -19,6 +23,60 @@ class LiteratureExtractionRegressionTests(unittest.TestCase):
 
         self.assertTrue(prefer_native_order)
         self.assertEqual(native_text, selected)
+
+    def test_native_layout_preserves_hanging_indents_in_both_columns(self) -> None:
+        text = _indent_positioned_lines(
+            [
+                (70.9, "References"),
+                (70.9, "First Author. 2024. First paper."),
+                (81.8, "continued on the left."),
+                (317.1, "continued at the top of the right column."),
+                (306.1, "Second Author. 2025. Second paper."),
+                (317.1, "continued on the right."),
+            ],
+            595.0,
+        )
+
+        self.assertEqual(
+            [
+                "References",
+                "First Author. 2024. First paper.",
+                " continued on the left.",
+                " continued at the top of the right column.",
+                "Second Author. 2025. Second paper.",
+                " continued on the right.",
+            ],
+            text.splitlines(),
+        )
+
+    def test_split_appendix_heading_ends_bibliography(self) -> None:
+        text = """References
+First Author. 2024. First paper.
+ continued line.
+A
+Run Registry
+All experiment rows are listed here.
+"""
+
+        mode, bibliography = extract_references(text)
+
+        self.assertEqual("heading", mode)
+        self.assertIn("First Author", bibliography)
+        self.assertNotIn("Run Registry", bibliography)
+        self.assertNotIn("experiment rows", bibliography)
+
+    def test_decimal_metric_is_not_a_numbered_reference(self) -> None:
+        text = """References
+First Author. 2024. First paper.
+ continuation line.
+0.807 after reranking.
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(2, len(rows))
+        self.assertTrue(rows[0]["reference"].startswith("First Author"))
+        self.assertTrue(rows[1]["reference"].startswith("0.807"))
 
     def test_author_year_references_without_hanging_indent_stay_whole(self) -> None:
         text = """References

@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 
 BRACKET_ENTRY_START_RE = re.compile(r"^\s*\[([A-Za-zА-Яа-я]?\d+)\]\s*(.*)$")
-NUMBER_ENTRY_START_RE = re.compile(r"^\s*(\d+)[.)][\s\u200b\ufeff]*(.*)$")
+NUMBER_ENTRY_START_RE = re.compile(r"^\s*(\d+)[.)][\s\u200b\ufeff]+(.*)$")
 HEADER_RE = re.compile(
     r"^(?:# Extracted from:|# Mode:|\s*(?:\d+(?:\.\d+)*[.)]?\s*)?(?:список\s+(?:(?:использованных|использованной|использованых)\s+)?(?:источников|литературы)(?:\s+и\s+литературы)?|библиографический\s+список|библиография|литература|references|bibliography)\s*$)",
     re.I,
@@ -105,7 +105,7 @@ def normalize_text(text: str) -> list[dict[str, object]]:
             current_int = int(re.search(r"\d+", current_num).group(0)) if current_num else None
             same_prefix = current_num is None or re.sub(r"\d+", "", parsed_label) == re.sub(r"\d+", "", current_num)
             restarts_with_prefix = current_num is not None and not same_prefix and parsed_num == 1
-            if parsed_num < 300 and ((same_prefix and (current_int is None or parsed_num == current_int + 1)) or restarts_with_prefix):
+            if 1 <= parsed_num < 300 and ((same_prefix and (current_int is None or parsed_num == current_int + 1)) or restarts_with_prefix):
                 if current_num is not None:
                     refs.append({"number": current_num, "reference": final_clean(current)})
                 current_num = parsed_label
