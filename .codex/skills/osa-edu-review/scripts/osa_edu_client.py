@@ -240,7 +240,9 @@ def _run_full(args: argparse.Namespace, root: Path) -> dict[str, Any]:
 def _run_literature(args: argparse.Namespace, root: Path) -> dict[str, Any]:
     if args.file.suffix.lower() != ".pdf":
         raise OsaEduError("Проверка литературы поддерживает только PDF.")
-    fields = {"model": args.model} if args.model else {}
+    fields = {"origin": "skill"}
+    if args.model:
+        fields["model"] = args.model
     created = _submit(args.base_url, "/api/literature/jobs", args.file, fields, file_field="files")
     if not isinstance(created, list) or not created or not isinstance(created[0], dict):
         raise OsaEduError("OSA.Edu не вернул созданную задачу проверки литературы.")
