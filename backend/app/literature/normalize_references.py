@@ -41,6 +41,83 @@ CORPORATE_ENTRY_START_RE = re.compile(
 )
 
 
+UNNUMBERED_START_LOOKAHEAD = 5
+REFERENCE_START_DENY_RE = re.compile(
+    r"^\s*(?:accessed\b|дата\b|url\b|https?://|www\.|arxiv\b|"
+    r"in\s+proceedings\b|proceedings\b|pages?\b|pp?\.|с\.)",
+    re.I,
+)
+CREATOR_WORD_RE = re.compile(r"[A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’.-]*")
+
+
+def numbered_entry_is_credible(
+    current_num: str | None,
+    parsed_label: str,
+    parsed_num: int,
+    parsed_rest: str,
+) -> bool:
+    if not parsed_rest.strip() or parsed_num >= 300:
+        return False
+    if current_num is None:
+        return parsed_num == 1
+    current_int = int(re.search(r"\d+", current_num).group(0))
+    same_prefix = re.sub(r"\d+", "", parsed_label) == re.sub(r"\d+", "", current_num)
+    restarts_with_prefix = not same_prefix and parsed_num == 1
+    return (same_prefix and parsed_num == current_int + 1) or restarts_with_prefix
+
+
+def reference_ready_for_split(current: str) -> bool:
+    text = current.strip()
+    if not text or not YEAR_RE.search(text):
+        return False
+    return bool(
+        text.endswith((".", "!", "?"))
+        or re.search(r"(?:arXiv:\s*\S+|accessed\s*:|https?://\S+)", text, re.I)
+    )
+
+
+def creator_has_sentence_boundary(creator: str) -> bool:
+    without_initials = re.sub(r"\b[A-ZА-ЯЁ]\.", "", creator)
+    return bool(re.search(r"\.\s+[A-ZА-ЯЁÀ-ÖØ-Þ][a-zа-яёà-öø-ÿ]{2,}", without_initials))
+
+
+def looks_like_reference_creator(creator: str) -> bool:
+    value = creator.strip(" .")
+    if not value or len(value) > 260:
+        return False
+    if REFERENCE_START_DENY_RE.match(value):
+        return False
+    if re.search(r"(?:https?://|www\.|arxiv|doi\b|accessed\s*:)", value, re.I):
+        return False
+    if creator_has_sentence_boundary(value):
+        return False
+    words = CREATOR_WORD_RE.findall(value)
+    if not words:
+        return False
+    if re.search(r"(?:,|\band\b|\bи\b|\bet\s+al\b)", value, re.I):
+        return True
+    return len(words) <= 5 and bool(re.match(r"^[A-ZА-ЯЁÀ-ÖØ-Þ]", value))
+
+
+def lookahead_text(items: list[tuple[str, str]], index: int) -> str:
+    lines = [line.strip() for _, line in items[index : index + UNNUMBERED_START_LOOKAHEAD]]
+    return " ".join(line for line in lines if line)
+
+
+def looks_like_unnumbered_reference_start(items: list[tuple[str, str]], index: int) -> bool:
+    line = items[index][1].strip()
+    if REFERENCE_START_DENY_RE.match(line):
+        return False
+    window = lookahead_text(items, index)
+    year = YEAR_RE.search(window)
+    if not year:
+        return False
+    prefix = window[: year.start()].rstrip()
+    if not prefix.endswith("."):
+        return False
+    return looks_like_reference_creator(prefix[:-1])
+
+
 def clean_line(line: str) -> str | None:
     line = line.replace("\f", "").rstrip()
     if not line.strip():
@@ -98,14 +175,10 @@ def normalize_text(text: str) -> list[dict[str, object]]:
             parsed_label = match.group(1)
             parsed_num = int(re.search(r"\d+", parsed_label).group(0))
             parsed_rest = match.group(2).strip()
-            # Avoid mistaking wrapped page ranges like "700—\n708." or volume/page
-            # fragments like "27. — C. ..." for new references. Plain numbered entries
-            # must have whitespace after the dot/paren, so decimals like "6.5" are not
-            # treated as new references. New reference numbers should also increase by 1.
-            current_int = int(re.search(r"\d+", current_num).group(0)) if current_num else None
-            same_prefix = current_num is None or re.sub(r"\d+", "", parsed_label) == re.sub(r"\d+", "", current_num)
-            restarts_with_prefix = current_num is not None and not same_prefix and parsed_num == 1
-            if parsed_num < 300 and ((same_prefix and (current_int is None or parsed_num == current_int + 1)) or restarts_with_prefix):
+            # A numbered bibliography must start with a real first record. This
+            # prevents split access dates like "2025-09-\n15." from hijacking
+            # unnumbered author-year bibliographies.
+            if numbered_entry_is_credible(current_num, parsed_label, parsed_num, parsed_rest):
                 if current_num is not None:
                     refs.append({"number": current_num, "reference": final_clean(current)})
                 current_num = parsed_label
@@ -129,36 +202,31 @@ def normalize_text(text: str) -> list[dict[str, object]]:
 def normalize_unnumbered_text(text: str) -> list[dict[str, object]]:
     """Parse bibliography styles where entries are not numbered.
 
-    These PDFs use hanging indentation: the first line of each reference starts at
-    column 0, while wrapped continuation lines are indented. Blank lines also
-    separate many entries, but not all (notably across page breaks), so indentation
-    is the most reliable signal.
+    These PDFs use hanging indentation when the text layer preserves it. When
+    PyMuPDF flattens indentation, use conservative author-year starts with a
+    short lookahead window instead of splitting on arbitrary title-cased lines.
     """
     refs: list[dict[str, object]] = []
     current = ""
-    raw_lines = text.splitlines()
-    content_lines = [raw for raw in raw_lines if raw.strip() and clean_line(raw) not in (None, "")]
-    has_hanging_indent = any(raw[:1].isspace() for raw in content_lines) and any(
-        not raw[:1].isspace() for raw in content_lines
+    items: list[tuple[str, str]] = []
+    for raw in text.splitlines():
+        line = clean_line(raw)
+        if line is None or line == "":
+            continue
+        items.append((raw, line))
+
+    has_hanging_indent = any(raw[:1].isspace() for raw, _ in items) and any(
+        not raw[:1].isspace() for raw, _ in items
     )
 
-    for raw in raw_lines:
-        line = clean_line(raw)
-        if line is None:
-            continue
-        if line == "":
-            continue
-
+    for index, (raw, line) in enumerate(items):
         if has_hanging_indent:
             starts_new = bool(raw.strip()) and not raw[:1].isspace()
         else:
-            # PyMuPDF often drops hanging indentation entirely. In author-year
-            # bibliographies every visual line then appears to start at column 0,
-            # which previously turned one wrapped citation into many fragments.
-            # Split only after the current entry has acquired a year and the next
-            # line looks like a personal or corporate author heading.
-            starts_new = bool(current) and bool(YEAR_RE.search(current)) and bool(
-                AUTHOR_ENTRY_START_RE.match(line) or CORPORATE_ENTRY_START_RE.match(line)
+            starts_new = (
+                bool(current)
+                and reference_ready_for_split(current)
+                and looks_like_unnumbered_reference_start(items, index)
             )
         if starts_new and current:
             refs.append({"number": str(len(refs) + 1), "reference": final_clean(current)})
