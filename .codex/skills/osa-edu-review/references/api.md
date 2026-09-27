@@ -19,8 +19,9 @@ Terminal states: `completed`, `failed`, `cancelled`. The client also stops at
 
 ## Literature
 
-- `POST /api/literature/jobs` — multipart PDF upload.
-- `GET /api/literature/jobs/{id}` — job and embedded result.
+- `POST /api/literature/jobs` — multipart PDF upload; optional `origin` field (`web` by default, `skill` for skill client submissions).
+- `GET /api/literature/jobs/{id}` — job and embedded result, including persisted `origin` when available.
+- `POST /api/literature/check` — legacy one-shot PDF check; persists an `api` history record while returning the result body directly.
 
 Terminal states: `done`, `failed`, `cancelled`.
 

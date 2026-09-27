@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import uuid
@@ -24,6 +25,7 @@ from .store import (
 
 router = APIRouter(prefix="/api/literature", tags=["literature"])
 LITERATURE_UPLOADS_DIR = UPLOADS_DIR / "literature"
+LITERATURE_ORIGINS = {"web", "skill", "api"}
 
 
 def _error(status: int, message: str) -> JSONResponse:
@@ -32,6 +34,11 @@ def _error(status: int, message: str) -> JSONResponse:
 
 def _safe_name(value: str) -> str:
     return re.sub(r'[\\/:*?"<>|]', "_", value)
+
+
+def _origin(value: object, default: str) -> str:
+    normalized = value.strip().lower() if isinstance(value, str) else default
+    return normalized if normalized in LITERATURE_ORIGINS else default
 
 
 async def _save_upload(upload: UploadFile, target: Path) -> int:
@@ -65,6 +72,7 @@ async def literature_job(job_id: str):
 async def create_literature_job_endpoint(
     files: list[UploadFile] = File(...),
     model: str = Form(""),
+    origin: str = Form("web"),
 ):
     if not files:
         return _error(400, "Добавьте хотя бы один PDF.")
@@ -92,6 +100,7 @@ async def create_literature_job_endpoint(
 
     prepared: list[dict] = []
     written: list[Path] = []
+    run_origin = _origin(origin, "web")
     try:
         for upload, name in validated:
             job_id = str(uuid.uuid4())
@@ -112,6 +121,7 @@ async def create_literature_job_endpoint(
                     "createdAt": created_at,
                     "updatedAt": created_at,
                     "status": "queued",
+                    "origin": run_origin,
                     "model": selected["id"],
                     "progress": 0,
                     "progressMessage": "Работа добавлена в очередь.",
@@ -188,22 +198,75 @@ async def check_literature_endpoint(
     file: UploadFile = File(...),
     model: str = Form(""),
 ):
-    filename = file.filename or "document.pdf"
+    filename = _safe_name(file.filename or "document.pdf")
     if not filename.lower().endswith(".pdf"):
         await file.close()
         return _error(400, "Для проверки литературы загрузите PDF.")
-    try:
-        content = await file.read()
-    finally:
-        await file.close()
-    if not content:
-        return _error(400, "Загружен пустой PDF.")
-    if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
-        return _error(413, f"Файл больше {MAX_FILE_SIZE_MB} МБ.")
     selected_model = model or None
     if selected_model and not model_definition(selected_model):
+        await file.close()
         return _error(400, "Выбрана неизвестная модель.")
+
+    job_id = str(uuid.uuid4())
+    target = LITERATURE_UPLOADS_DIR / f"{job_id}.pdf"
     try:
-        return await check_literature(content, filename, model=selected_model)
+        size = await _save_upload(file, target)
     except Exception as exc:
+        target.unlink(missing_ok=True)
+        return _error(500, f"Не удалось сохранить PDF: {exc}")
+
+    if size == 0:
+        target.unlink(missing_ok=True)
+        return _error(400, "Загружен пустой PDF.")
+    if size > MAX_FILE_SIZE_MB * 1024 * 1024:
+        target.unlink(missing_ok=True)
+        return _error(413, f"Файл больше {MAX_FILE_SIZE_MB} МБ.")
+
+    created_at = now_iso()
+    job = {
+        "id": job_id,
+        "originalName": filename,
+        "filePath": str(target.resolve()),
+        "size": size,
+        "createdAt": created_at,
+        "updatedAt": created_at,
+        "status": "running",
+        "origin": "api",
+        "model": selected_model or os.getenv("LITERATURE_REVIEW_MODEL", "").strip(),
+        "progress": 1,
+        "progressMessage": "Выполняется разовая проверка литературы.",
+        "result": None,
+        "error": None,
+        "startedAt": created_at,
+        "finishedAt": None,
+    }
+    await create_literature_jobs([job])
+
+    try:
+        content = await asyncio.to_thread(target.read_bytes)
+        result = await check_literature(content, filename, model=selected_model)
+        await update_literature_job(
+            job_id,
+            {
+                "status": "done",
+                "progress": 100,
+                "progressMessage": "Проверка литературы завершена.",
+                "model": str(result.get("model") or selected_model or job["model"] or ""),
+                "result": result,
+                "error": None,
+                "finishedAt": now_iso(),
+            },
+        )
+        return result
+    except Exception as exc:
+        await update_literature_job(
+            job_id,
+            {
+                "status": "failed",
+                "progress": 100,
+                "progressMessage": "Проверка остановлена из-за ошибки.",
+                "error": str(exc),
+                "finishedAt": now_iso(),
+            },
+        )
         return _error(500, f"Не удалось проверить литературу: {exc}")

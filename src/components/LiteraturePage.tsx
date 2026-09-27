@@ -15,12 +15,17 @@ const JOB_COPY = {
   en: { queued: "Queued", running: "Checking", cancelling: "Stopping", done: "Done", failed: "Error", cancelled: "Stopped" } as Record<LiteratureJob["status"], string>,
 };
 
+const ORIGIN_COPY = {
+  ru: { web: "Web", skill: "Skill", api: "API", unknown: "Unknown" },
+  en: { web: "Web", skill: "Skill", api: "API", unknown: "Unknown" },
+};
+
 export function LiteraturePage({ models }: Props) {
   const { language } = useLanguage();
   const t = language === "ru" ? {
-    onlyPdf: "Для проверки литературы поддерживаются только PDF.", eyebrow: "Проверка источников", title: "Проверка литературы", subtitle: "Загрузите PDF. Работы проверяются по очереди, а сомнительные источники дополнительно перепроверяются в сети.", model: "Модель", modelHint: "Модель используется для сопоставления источников и углублённой веб-проверки.", selected: "Выбрано", choosePdf: "Выберите PDF", queuedHint: "Файлы будут добавлены в общую очередь", multiHint: "Можно выбрать несколько работ сразу", adding: "Добавляем…", addQueue: "Добавить в очередь", clear: "Очистить", running: "Проверка выполняется", waiting: "Работы ожидают запуска", now: "Сейчас", inQueue: "в очереди", queue: "Очередь работ", cancel: "Отменить", stop: "Остановить", retry: "Повторить", remove: "Удалить", failed: "Проверка не завершилась.", attention: "Требуют внимания", confirmed: "Подтверждено", all: "Все", filter: "Фильтр результатов", empty: "В выбранной категории источников нет.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu."
+    onlyPdf: "Для проверки литературы поддерживаются только PDF.", eyebrow: "Проверка источников", title: "Проверка литературы", subtitle: "Загрузите PDF. Работы проверяются по очереди, а сомнительные источники дополнительно перепроверяются в сети.", model: "Модель", modelHint: "Модель используется для сопоставления источников и углублённой веб-проверки.", selected: "Выбрано", choosePdf: "Выберите PDF", queuedHint: "Файлы будут добавлены в общую очередь", multiHint: "Можно выбрать несколько работ сразу", adding: "Добавляем…", addQueue: "Добавить в очередь", clear: "Очистить", running: "Проверка выполняется", waiting: "Работы ожидают запуска", now: "Сейчас", inQueue: "в очереди", queue: "История проверок", cancel: "Отменить", stop: "Остановить", retry: "Повторить", remove: "Удалить", failed: "Проверка не завершилась.", attention: "Требуют внимания", confirmed: "Подтверждено", all: "Все", filter: "Фильтр результатов", empty: "В выбранной категории источников нет.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu."
   } : {
-    onlyPdf: "Only PDF files are supported for literature checking.", eyebrow: "Source verification", title: "Literature check", subtitle: "Upload PDFs. Documents are processed in a queue, and suspicious references are additionally checked online.", model: "Model", modelHint: "The model is used for citation matching and deeper web verification.", selected: "Selected", choosePdf: "Choose PDF", queuedHint: "Files will be added to the shared queue", multiHint: "You can select multiple documents", adding: "Adding…", addQueue: "Add to queue", clear: "Clear", running: "Check in progress", waiting: "Waiting to start", now: "Running", inQueue: "queued", queue: "Document queue", cancel: "Cancel", stop: "Stop", retry: "Retry", remove: "Remove", failed: "The check did not complete.", attention: "Needs attention", confirmed: "Confirmed", all: "All", filter: "Result filter", empty: "There are no sources in this category.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "The browser blocked the print window. Allow pop-ups for OSA.Edu."
+    onlyPdf: "Only PDF files are supported for literature checking.", eyebrow: "Source verification", title: "Literature check", subtitle: "Upload PDFs. Documents are processed in a queue, and suspicious references are additionally checked online.", model: "Model", modelHint: "The model is used for citation matching and deeper web verification.", selected: "Selected", choosePdf: "Choose PDF", queuedHint: "Files will be added to the shared queue", multiHint: "You can select multiple documents", adding: "Adding…", addQueue: "Add to queue", clear: "Clear", running: "Check in progress", waiting: "Waiting to start", now: "Running", inQueue: "queued", queue: "Run history", cancel: "Cancel", stop: "Stop", retry: "Retry", remove: "Remove", failed: "The check did not complete.", attention: "Needs attention", confirmed: "Confirmed", all: "All", filter: "Result filter", empty: "There are no sources in this category.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "The browser blocked the print window. Allow pop-ups for OSA.Edu."
   };
   const inputRef = useRef<HTMLInputElement | null>(null);
   const productionModels = models.filter((item) => item.tier === "production");
@@ -266,6 +271,7 @@ export function LiteraturePage({ models }: Props) {
                       <span className="literature-progress-track"><span style={{ width: `${Math.max(2, job.progress)}%` }} /></span>
                     )}
                   </span>
+                  <span className={`literature-origin-badge ${literatureOrigin(job)}`}>{ORIGIN_COPY[language][literatureOrigin(job)]}</span>
                   <span className={`literature-queue-status ${job.status}`}>{JOB_COPY[language][job.status]}</span>
                 </button>
                 <div className="literature-job-actions">
@@ -311,6 +317,10 @@ export function LiteraturePage({ models }: Props) {
       )}
     </section>
   );
+}
+
+function literatureOrigin(job: LiteratureJob): "web" | "skill" | "api" | "unknown" {
+  return job.origin === "web" || job.origin === "skill" || job.origin === "api" ? job.origin : "unknown";
 }
 
 function pluralJobs(value: number) {
