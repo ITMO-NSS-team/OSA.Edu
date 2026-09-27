@@ -41,7 +41,7 @@ STOP_HEADING_RE = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
-
+_SECTION_LETTER_RE = re.compile(r"^\s*[A-ZА-ЯЁ]\.?\s*$")
 _PAGE_NUMBER_RE = re.compile(r"^\s*\d{1,4}\s*$")
 _YEAR_RE = re.compile(r"\b(?:18|19|20)\d{2}\b")
 _BIBLIOGRAPHIC_SIGNAL_RE = re.compile(
@@ -49,13 +49,13 @@ _BIBLIOGRAPHIC_SIGNAL_RE = re.compile(
     re.IGNORECASE,
 )
 _SINGLE_LETTER_APPENDIX_HEADING_RE = re.compile(
-    r"^\s*[A-ZА-Я]\s+"
-    r"[A-ZА-Я][A-Za-zА-Яа-яЁё0-9'’.-]*"
-    r"(?:\s+[A-Za-zА-Яа-яЁё0-9'’.-]+){1,8}\s*$"
+    r"^\s*[A-ZА-ЯЁ]\.?\s+"
+    r"[A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ0-9'’.-]*"
+    r"(?:\s+[A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ0-9'’.-]+){1,8}\s*$"
 )
 _APPENDIX_HEADING_HINT_RE = re.compile(
     r"\b(?:appendix|appendices|supplement|supplementary|prompt|prompts|"
-    r"claim\s+extraction|proof|details|artifact|artifacts|additional)\b",
+    r"claim\s+extraction|proof|details|artifact|artifacts|additional|registry)\b",
     re.IGNORECASE,
 )
 
@@ -101,12 +101,12 @@ def _additional_tail_heading_text(lines: list[str], index: int) -> str | None:
     line = lines[index].strip()
     if _SINGLE_LETTER_APPENDIX_HEADING_RE.match(line):
         return line
-    if not re.fullmatch(r"[A-ZА-Я]", line):
+    if not _SECTION_LETTER_RE.fullmatch(line):
         return None
     next_index = _next_nonempty(lines, index)
     if next_index is None:
         return None
-    combined = f"{line} {lines[next_index].strip()}"
+    combined = f"{line.rstrip('.')} {lines[next_index].strip()}"
     return combined if _SINGLE_LETTER_APPENDIX_HEADING_RE.match(combined) else None
 
 
@@ -166,6 +166,51 @@ def _select_page_text(
     return (native_text if prefer_native_order else sorted_text), prefer_native_order
 
 
+def _indent_positioned_lines(positioned_lines: list[tuple[float, str]], page_width: float) -> str:
+    """Restore hanging indents that PyMuPDF drops from native-order text.
+
+    Academic bibliographies commonly place wrapped lines roughly 10 points to
+    the right of the first line.  A single leading space is enough for the
+    bibliography normalizer to preserve that structural signal.  Column bases
+    are calculated independently so a continuation at the top of the right
+    column is not mistaken for a new reference.
+    """
+    midpoint = page_width / 2
+    bases: dict[int, float] = {}
+    for x0, text in positioned_lines:
+        stripped = text.strip()
+        if not stripped or stripped.isdigit():
+            continue
+        column = 0 if x0 < midpoint else 1
+        bases[column] = min(bases.get(column, x0), x0)
+
+    rendered: list[str] = []
+    for x0, text in positioned_lines:
+        column = 0 if x0 < midpoint else 1
+        base = bases.get(column, x0)
+        prefix = " " if x0 - base >= 3.0 else ""
+        rendered.append(prefix + text.rstrip())
+    return "\n".join(rendered).rstrip() + "\n"
+
+
+def _native_page_text(page: Any) -> str:
+    """Return native PDF reading order while retaining line x-coordinates."""
+    positioned_lines: list[tuple[float, str]] = []
+    page_dict = page.get_text("dict", sort=False) or {}
+    for block in page_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            text = "".join(str(span.get("text") or "") for span in spans)
+            if not text.strip():
+                continue
+            x_positions = [float(span["bbox"][0]) for span in spans if span.get("bbox")]
+            x0 = min(x_positions) if x_positions else float(line.get("bbox", [0.0])[0])
+            positioned_lines.append((x0, text))
+    return _indent_positioned_lines(positioned_lines, float(page.rect.width))
+
+
 def pdf_text(pdf_bytes: bytes) -> tuple[str, list[str]]:
     import pymupdf
 
@@ -181,7 +226,7 @@ def pdf_text(pdf_bytes: bytes) -> tuple[str, list[str]]:
         prefer_native_order = False
         for index, page in enumerate(document):
             sorted_text = page.get_text("text", sort=True) or ""
-            native_text = page.get_text("text", sort=False) or ""
+            native_text = _native_page_text(page)
             text, prefer_native_order = _select_page_text(
                 sorted_text, native_text, prefer_native_order
             )

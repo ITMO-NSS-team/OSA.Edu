@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 
 BRACKET_ENTRY_START_RE = re.compile(r"^\s*\[([A-Za-zА-Яа-я]?\d+)\]\s*(.*)$")
-NUMBER_ENTRY_START_RE = re.compile(r"^\s*(\d+)[.)][\s\u200b\ufeff]*(.*)$")
+NUMBER_ENTRY_START_RE = re.compile(r"^\s*(\d+)[.)][\s\u200b\ufeff]+(.*)$")
 HEADER_RE = re.compile(
     r"^(?:# Extracted from:|# Mode:|\s*(?:\d+(?:\.\d+)*[.)]?\s*)?(?:список\s+(?:(?:использованных|использованной|использованых)\s+)?(?:источников|литературы)(?:\s+и\s+литературы)?|библиографический\s+список|библиография|литература|references|bibliography)\s*$)",
     re.I,

@@ -83,10 +83,10 @@ ipython_config.py
 .pdm-python
 .pdm-build/
 
-
+# pixi
 .pixi
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+
 __pypackages__/
 
 # Celery stuff
@@ -143,8 +143,10 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+# Abstra
 .abstra/
 
+# Visual Studio Code
 tempCodeRunnerFile.py
 
 # Ruff stuff:
@@ -162,4 +164,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 /data/
+
 node_modules/
+
+.idea/
