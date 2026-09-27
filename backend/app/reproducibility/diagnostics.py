@@ -88,7 +88,7 @@ print(json.dumps(payload, ensure_ascii=False))
 
 def runtime_status(*, include_cuda: bool = False) -> dict[str, Any]:
     version = sys.version_info
-    python_supported = (3, 11) <= (version.major, version.minor) <= (3, 14)
+    python_supported = (3, 11) <= (version.major, version.minor) < (4, 0)
     result: dict[str, Any] = {
         "pythonVersion": f"{version.major}.{version.minor}.{version.micro}",
         "pythonExecutable": sys.executable,

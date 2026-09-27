@@ -8,7 +8,9 @@ from ..llm.host_llm import patch_osa_model_handler
 
 def main() -> int:
     patch_osa_model_handler()
-    sys.argv = ["osa_tool.run", *sys.argv[1:]]
+    from .osa_edu_runner import prepare_arguments
+
+    sys.argv = ["osa_tool.run", *prepare_arguments(sys.argv[1:])]
     runpy.run_module("osa_tool.run", run_name="__main__")
     return 0
 
