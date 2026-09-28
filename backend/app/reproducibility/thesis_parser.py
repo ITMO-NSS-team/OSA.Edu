@@ -55,8 +55,8 @@ def parse_thesis_pdf(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     pages = document.get("pages", [])
     empty_pages = [page["number"] for page in pages if not str(page.get("text") or "").strip()]
     sections = document_sections(document)
-    if not sections or empty_pages:
-        detail = " Страницы без текста: " + ", ".join(map(str, empty_pages)) + "." if empty_pages else ""
+    if not sections:
+        detail = ( " Страницы без текста: " + ", ".join(map(str, empty_pages)) + "." if empty_pages else "")
         raise TextLayerRequiredError(
             "Требуется PDF с текстовым слоем (text layer required)."
             + detail
