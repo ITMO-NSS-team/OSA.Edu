@@ -8,4 +8,4 @@ fastmcp>=2.0,<3.0
 python-docx>=1.1,<2.0
 reportlab>=4.2,<5.0
 regex>=2024.11.6
-osa_tool[paper-claims]>=0.3.1
+osa_tool[paper-claims-lite] @ git+https://github.com/aimclub/OSA.git@b64f50dd8fcab9c8b03686c256ec9e9ddf3e33a0

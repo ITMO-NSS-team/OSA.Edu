@@ -119,11 +119,7 @@ def _osa_cli_args(repository: str, paper_path: Path, output_dir: Path, *, mode: 
 
 
 def build_osa_command(repository: str, paper_path: Path, output_dir: Path, *, mode: str = "full", claims_path: Path | None = None) -> list[str]:
-    """Run OSA's canonical paper-analysis CLI.
-
-    OSA.Edu owns only job lifecycle and presentation. PDF parsing, claim extraction,
-    filtering, batching and repository verification stay inside OSA.
-    """
+    """Run Edu's PDF adapter followed by OSA's generic paper-analysis CLI."""
     model = configured_model()
     template = os.getenv("REPRODUCIBILITY_OSA_COMMAND", "").strip()
     if template:
@@ -139,7 +135,7 @@ def build_osa_command(repository: str, paper_path: Path, output_dir: Path, *, mo
         return [part.format(**values) for part in shlex.split(template)]
 
     python = os.getenv("REPRODUCIBILITY_OSA_PYTHON", "").strip() or sys.executable
-    module = "backend.app.reproducibility.osa_host_runner" if use_host_llm() else "osa_tool.run"
+    module = "backend.app.reproducibility.osa_edu_runner"
     return [python, "-m", module, *_osa_cli_args(repository, paper_path, output_dir, mode=mode, claims_path=claims_path)]
 
 
@@ -333,7 +329,7 @@ async def run_osa_analysis(
 ) -> tuple[dict[str, Any], Path, str]:
     if not osa_installed():
         raise OsaRunError(
-            'Пакет OSA не установлен. Установите `osa_tool[paper-claims]` из ветки feat/thesis-repository-analysis '
+            'Пакет OSA не установлен. Установите зависимости из requirements.txt (OSA paper-claims-lite) '
             "или задайте REPRODUCIBILITY_OSA_COMMAND."
         )
 
@@ -344,7 +340,7 @@ async def run_osa_analysis(
         if mode == "verification-only":
             await on_progress(68, "Возобновляем проверку: claims уже выделены, запускаем только проверку по репозиторию.")
         else:
-            await on_progress(10, "Запускаем штатный OSA paper-analysis: PDF → claims → проверка по репозиторию.")
+            await on_progress(10, "OSA.Edu: PDF → разделы; OSA: claims → проверка по репозиторию.")
 
     env = _subprocess_env()
     openrouter_key = env.get("OPENROUTER_API_KEY", "").strip()

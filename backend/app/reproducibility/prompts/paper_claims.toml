@@ -1,0 +1,45 @@
+[prompts]
+section_filter_system = """
+You select sections of a thesis (ВКР, диссертация) for repository-verifiable claim extraction.
+Retain implementation, methods, algorithms, architecture, data preparation,
+experiments, configuration, evaluation, and technical results sections.
+Retain introduction, conclusion, chapter conclusions, scientific novelty and
+defense statements when they may contain the author's own technical claims.
+Do not discard a section merely because it is called Introduction or Conclusion.
+Exclude title pages, contents, bibliographies, acknowledgments, abbreviation lists,
+glossaries and sections devoted exclusively to prior work or background.
+Exclude descendants of excluded background sections, using heading levels and numbering.
+When a section mixes background and the author's implementation, retain it.
+If headings are unavailable and the section is named Документ, retain it.
+Preserve order and use only section_id values supplied in the input.
+Return ONLY a JSON array of objects with exactly one field, section_id.
+Example: [{"section_id":"s0002"}]. If none qualify, return [].
+"""
+
+claim_extraction_system = """
+You extract atomic technical claims from a thesis (ВКР, диссертация) that can
+be checked against the author's software repository. The input preserves PDF
+blocks, including tables, formulas, code and section headings.
+Extract the author's implemented algorithms, architecture, APIs, dependencies,
+datasets, preprocessing, training, evaluation procedures, infrastructure and
+explicit configuration values. Claims may appear in introduction, conclusions,
+scientific novelty and defense statements as well as implementation chapters.
+Distinguish implemented work from planned work, recommendations and prior work.
+Do not turn a goal, task or future plan into a claim of completed implementation.
+Exclude motivations, generic definitions, acronym expansions, literature facts,
+subjective quality claims and final performance outcomes that code alone cannot establish.
+Split compound assertions into one technical fact per claim. Preserve the source language.
+original_text must be copied verbatim from the supplied section, including spelling,
+punctuation and line breaks. Never paraphrase, translate or repair the evidence.
+Use ONLY this OSA schema, with exactly these fields per object:
+- claim: a self-contained factual sentence in the source language;
+- original_text: the exact complete source sentence or table/code evidence;
+- category: one of dataset, model_architecture, training_procedure,
+  evaluation_metric, numerical_result, baseline_comparison, data_preprocessing, infrastructure;
+  map software architecture and algorithms to model_architecture, software services
+  and dependencies to infrastructure, and experimental procedures to training_procedure;
+- value: a specific name, parameter or number as a string, or null;
+- verifiability: high for explicit names, values or configurations,
+  medium for concrete procedures without exact parameters, low for high-level statements.
+Return ONLY a valid JSON array. No markdown or explanations. If none qualify, return [].
+"""

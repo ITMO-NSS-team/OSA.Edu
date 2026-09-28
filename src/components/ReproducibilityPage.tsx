@@ -106,8 +106,8 @@ const COPY = {
 const REPRO_UI = {
   ru: {
     pageTitle: "Проверка воспроизводимости", pageSubtitle: "Сопоставляет технические утверждения из ВКР с кодом указанного репозитория.",
-    backendNotReady: "Backend не готов к запуску OSA.", osaMissing: "Не установлен osa_tool.", llmMissing: "Не настроен API-ключ LLM.", pythonUnsupported: "не поддерживается paper-claims.", gitMissing: "git не найден в PATH.",
-    repoHint: "GitHub, GitLab, GitVerse или SourceCraft.", pdfOnly: "Поддерживается только PDF.", dropPdf: "Перетащите PDF работы", choosePdf: "или нажмите, чтобы выбрать файл", file: "Файл", clear: "Очистить", remove: "Удалить",
+    backendNotReady: "Backend не готов к запуску OSA.", osaMissing: "Не установлен osa_tool.", llmMissing: "Не настроен API-ключ LLM.", pythonUnsupported: "не поддерживается OSA (требуется >=3.11, <4.0).", gitMissing: "git не найден в PATH.",
+    repoHint: "GitHub, GitLab, GitVerse или SourceCraft.", pdfOnly: "Требуется PDF с текстовым слоем.", dropPdf: "Перетащите PDF работы", choosePdf: "или нажмите, чтобы выбрать файл", file: "Файл", clear: "Очистить", remove: "Удалить",
     openJson: "Открыть готовый JSON", running: "Проверка выполняется…", run: "Проверить воспроизводимость", savedClaims: "Claims уже сохранены", savedClaimsSuffix: "Проверку по репозиторию можно продолжить без повторной обработки PDF.", stop: "Остановить", resume: "Продолжить проверку", restart: "Начать заново",
     historyTech: "История и технические детали", runs: "Запуски", check: "Проверка", noRuns: "Запусков пока нет.", checking: "Проверяем…", checkEnvironment: "Проверить окружение", downloadLog: "Скачать лог", environmentReady: "Окружение готово", environmentProblems: "Есть проблемы с окружением",
     sections: "Разделы", claims: "Claims", verified: "Проверено", result: "Результат", readyPlural: "готовы", readyOne: "готово", resultReady: "готов", osaLog: "Лог OSA", logPlaceholder: "Лог появится после запуска OSA.", logTail: "Показана последняя часть лога.",
@@ -117,8 +117,8 @@ const REPRO_UI = {
   },
   en: {
     pageTitle: "Reproducibility check", pageSubtitle: "Compares technical claims from the thesis with the code in the selected repository.",
-    backendNotReady: "The backend is not ready to run OSA.", osaMissing: "osa_tool is not installed.", llmMissing: "The LLM API key is not configured.", pythonUnsupported: "does not support paper-claims.", gitMissing: "git was not found in PATH.",
-    repoHint: "GitHub, GitLab, GitVerse, or SourceCraft.", pdfOnly: "Only PDF files are supported.", dropPdf: "Drop the thesis PDF here", choosePdf: "or click to choose a file", file: "File", clear: "Clear", remove: "Remove",
+    backendNotReady: "The backend is not ready to run OSA.", osaMissing: "osa_tool is not installed.", llmMissing: "The LLM API key is not configured.", pythonUnsupported: "is not supported by OSA (requires >=3.11, <4.0).", gitMissing: "git was not found in PATH.",
+    repoHint: "GitHub, GitLab, GitVerse, or SourceCraft.", pdfOnly: "A PDF with a text layer is required.", dropPdf: "Drop the thesis PDF here", choosePdf: "or click to choose a file", file: "File", clear: "Clear", remove: "Remove",
     openJson: "Open existing JSON", running: "Check in progress…", run: "Check reproducibility", savedClaims: "Claims are already saved", savedClaimsSuffix: "Repository verification can continue without processing the PDF again.", stop: "Stop", resume: "Continue verification", restart: "Start over",
     historyTech: "History and technical details", runs: "Runs", check: "Check", noRuns: "No runs yet.", checking: "Checking…", checkEnvironment: "Check environment", downloadLog: "Download log", environmentReady: "Environment is ready", environmentProblems: "Environment has issues",
     sections: "Sections", claims: "Claims", verified: "Verified", result: "Result", readyPlural: "ready", readyOne: "ready", resultReady: "ready", osaLog: "OSA log", logPlaceholder: "The log will appear after OSA starts.", logTail: "Showing the latest part of the log.",
@@ -723,4 +723,3 @@ function formatDateTime(value: string | null | undefined, language: UiLang): str
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString(language === "ru" ? "ru-RU" : "en-US", { dateStyle: "short", timeStyle: "short" });
 }
-
