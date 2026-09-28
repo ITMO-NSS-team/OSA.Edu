@@ -7,6 +7,10 @@ from backend.app.literature.extractor import (
     _select_page_text,
     extract_references,
 )
+from backend.app.literature.metadata_compare import (
+    author_overlap,
+    deterministic_decision,
+)
 from backend.app.literature.normalize_references import normalize_text
 from backend.app.literature.web_verifier import (
     _assert_web_search_performed,
@@ -131,6 +135,123 @@ Lee, H.; Choi, D.; Kim, B.; Park, H.; and Kim, S. G.
         self.assertEqual(2, len(rows))
         self.assertIn("White, M.; Mercangöz", rows[0]["reference"])
         self.assertIn("2026. NRT-Bench", rows[1]["reference"])
+
+    def test_full_name_start_with_middle_initial_splits_reference(self) -> None:
+        text = """References
+Feng Wang, Yuqing Li, and Han Xiao. Jina-reranker-v3: Last but not late interaction for listwise
+document reranking. arXiv preprint arXiv:2509.25085, 2025.
+Geemi P Wellawatte, Huixuan Guo, Magdalena Lederbauer, Anna Borisova, Matthew Hart, Marta
+Brucka, and Philippe Schwaller. Chemlit-qa: a human evaluated dataset for chemistry rag tasks.
+Machine Learning: Science and Technology, 6(2):020601, 2025.
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(2, len(rows))
+        self.assertTrue(rows[0]["reference"].startswith("Feng Wang"))
+        self.assertNotIn("Geemi P Wellawatte", rows[0]["reference"])
+        self.assertTrue(rows[1]["reference"].startswith("Geemi P Wellawatte"))
+        self.assertIn("Marta Brucka", rows[1]["reference"])
+
+    def test_line_numbered_multiline_references_stay_whole(self) -> None:
+        text = """References
+474    Marah Abdin, Sam Ade Jacobs, Ammar Ahmad Awan, Jyoti Aneja, Awais Behnan, Arash
+475      Behnam, et al. Phi-3 technical report: A highly capable language model locally on your
+476       phone, 2024. URL https://arxiv.org/abs/2404.14219.
+      AI Forever Research. LIBRA: A benchmark for Russian long-context language understand-
+           ing. https://huggingface.co/datasets/ai-forever/LIBRA, 2025.
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(2, len(rows))
+        self.assertIn("Arash Behnam, et al.", rows[0]["reference"])
+        self.assertIn("locally on your phone", rows[0]["reference"])
+        self.assertNotIn("LIBRA", rows[0]["reference"])
+        self.assertTrue(rows[1]["reference"].startswith("AI Forever Research. LIBRA"))
+        self.assertIn("long-context language understanding", rows[1]["reference"])
+
+    def test_split_arxiv_url_continuation_stays_with_reference(self) -> None:
+        text = """References
+584     Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon
+          Child, Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural585
+         language models. arXiv preprint arXiv:2001.08361, 2020. URL https://arxiv.org/abs/
+586
+          2001.08361.
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(1, len(rows))
+        self.assertIn("Scaling laws for neural language models", rows[0]["reference"])
+        self.assertIn("https://arxiv.org/abs/2001.08361", rows[0]["reference"])
+
+    def test_arxiv_id_with_trailing_line_number_splits_before_next_source(self) -> None:
+        text = """References
+627    David Patterson, Joseph Gonzalez, Quoc Le, Chen Liang, Lluis-Miquel Munguia, Daniel
+628       Rothchild, David So, Maud Texier, and Jeff Dean. Carbon emissions and large neural
+629      network training. arXiv preprint arXiv:2104.10350, 2021. URL https://arxiv.org/abs/
+          2104.10350.630
+        Plato. Plato: Protagoras and Meno. Penguin Classics, 1956. Translated with an introduction
+         by W. K. C. Guthrie.
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(2, len(rows))
+        self.assertIn("https://arxiv.org/abs/2104.10350", rows[0]["reference"])
+        self.assertTrue(rows[1]["reference"].startswith("Plato. Plato"))
+        self.assertNotIn("2104.10350", rows[1]["reference"])
+
+    def test_trailing_line_number_after_year_splits_before_next_source(self) -> None:
+        text = """References
+678    Yubo Wang, Xuezhi Ma, Zhaowei Zhang, et al. MMLU-Pro: A more robust and challeng-
+679       ing multi-task language understanding benchmark. In Advances in Neural Information
+          Processing Systems, volume 37, 2024.680
+681    Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi,
+682     Quoc V Le, and Denny Zhou. Chain-of-thought prompting elicits reasoning in large
+683       language models. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and
+684      A. Oh (eds.), Advances in Neural Information Processing Systems, volume 35, pp. 24824–
+685       24837. Curran Associates, Inc., 2022.
+       Zhishang Xiang, Chuanjie Wu, Qinggang Zhang, Shengyuan Chen, Zijin Hong, Xiao Huang,
+        and Jinsong Su. When to use graphs in RAG: A comprehensive analysis for graph retrieval-
+         augmented generation. In International Conference on Learning Representations (ICLR
+689       2026), 2026. URL https://openreview.net/pdf?id=i9q9xDMjG7.
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(3, len(rows))
+        self.assertTrue(rows[0]["reference"].startswith("Yubo Wang"))
+        self.assertNotIn("Jason Wei", rows[0]["reference"])
+        self.assertTrue(rows[1]["reference"].startswith("Jason Wei"))
+        self.assertIn("Chain-of-thought prompting", rows[1]["reference"])
+        self.assertTrue(rows[2]["reference"].startswith("Zhishang Xiang"))
+
+    def test_under_review_footer_does_not_merge_adjacent_references(self) -> None:
+        text = """References
+485     Sher Badshah, Ali Emami, and Hassan Sajjad. Judge, retrieve, or abstain: Uncertainty-guarded LLM
+          judging with provable risk guarantees. In Conference on Language Modeling (COLM), 2026.
+
+
+                                              9
+       Under review as a conference paper at ICLR 2027
+
+
+486
+         Julia Belikova, Rauf Parchiev, Evgeny Egorov, Grigorii Davydenko, Gleb Gusev, Andrey
+487       Savchenko, and Maksim Makarenko. Managing procedural memory in LLM agents: Control,
+488        adaptation, and evaluation. arXiv preprint arXiv:2606.23127, 2026.
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(2, len(rows))
+        self.assertTrue(rows[0]["reference"].startswith("Sher Badshah"))
+        self.assertNotIn("Under review", rows[0]["reference"])
+        self.assertNotIn("Julia Belikova", rows[0]["reference"])
+        self.assertTrue(rows[1]["reference"].startswith("Julia Belikova"))
+        self.assertIn("arXiv:2606.23127", rows[1]["reference"])
 
     def test_title_with_comma_is_not_mistaken_for_an_author(self) -> None:
         text = """References
@@ -271,6 +392,45 @@ arXiv:2504.08725.
         self.assertTrue(refs[15].startswith("Dayu Yang"))
         self.assertIn("OpenBMB. 2024", refs[9])
         self.assertIn("A multi-agent system for automated", refs[15])
+
+
+class LiteratureMetadataRegressionTests(unittest.TestCase):
+    def test_full_name_author_list_with_middle_initials_matches_arxiv_candidate(self) -> None:
+        reference = (
+            "Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, "
+            "Benjamin Chess, Rewon Child, Scott Gray, Alec Radford, Jeffrey Wu, "
+            "and Dario Amodei. Scaling laws for neural language models. "
+            "arXiv preprint arXiv:2001.08361, 2020. "
+            "URL https://arxiv.org/abs/2001.08361."
+        )
+        cited_title = "Scaling laws for neural language models"
+        authors = (
+            "Jared Kaplan; Sam McCandlish; Tom Henighan; Tom B. Brown; "
+            "Benjamin Chess; Rewon Child; Scott Gray; Alec Radford; "
+            "Jeffrey Wu; Dario Amodei"
+        )
+
+        self.assertEqual(1.0, author_overlap(reference, cited_title, authors))
+
+        row = {
+            "reference": reference,
+            "cited_title": cited_title,
+            "source_type": "PREPRINT",
+            "candidates": [
+                {
+                    "title": "Scaling Laws for Neural Language Models",
+                    "authors": authors,
+                    "year": "2020",
+                    "arxiv_id": "2001.08361",
+                    "url": "https://arxiv.org/abs/2001.08361",
+                }
+            ],
+        }
+
+        decision = deterministic_decision(row)
+
+        self.assertIsNotNone(decision)
+        self.assertEqual("OK", decision["status"])
 
 
 class LiteratureWebRegressionTests(unittest.TestCase):
