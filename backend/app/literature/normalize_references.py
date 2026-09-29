@@ -24,13 +24,18 @@ HEADER_RE = re.compile(
 PAGE_NO_RE = re.compile(r"^\s*\d{1,4}\s*$")
 LINE_NO_PREFIX_RE = re.compile(r"^\s*\d{1,5}\s{2,}(?=\S)(.*)$")
 FOOTER_RE = re.compile(
-    r"(?:confidential reviewer copy|unauthorized|sharing, redistribution, or disclosure|^\s*MM\s+[’']\d{2},.*$|^\s*[A-ZА-ЯЁ][\w.\-]+(?:\s+[A-ZА-ЯЁ][\w.\-]+)*\s+et\s+al\.\s*$|^\s*Лист\s*$|^\s*ВКР\([^\n]*\)\S*.*\s+\d+\s*$|^\s*Изм\s+Лист\s+№\s*докум\.\s+Подпись\s+Дата\s*$|^\s*\d{1,4}\s+[A-ZА-ЯЁ][\w.\- ]+\s+et\s+al\.\s*$|^\s*[A-ZА-ЯЁ][^\n]{20,}\s{2,}\d{1,4}\s*$)",
+    r"(?:confidential reviewer copy|unauthorized|sharing, redistribution, or disclosure|^\s*under\s+review\s+as\s+a\s+conference\s+paper\s+at\s+ICLR\s+\d{4}\s*$|^\s*MM\s+[’']\d{2},.*$|^\s*[A-ZА-ЯЁ][\w.\-]+(?:\s+[A-ZА-ЯЁ][\w.\-]+)*\s+et\s+al\.\s*$|^\s*Лист\s*$|^\s*ВКР\([^\n]*\)\S*.*\s+\d+\s*$|^\s*Изм\s+Лист\s+№\s*докум\.\s+Подпись\s+Дата\s*$|^\s*\d{1,4}\s+[A-ZА-ЯЁ][\w.\- ]+\s+et\s+al\.\s*$|^\s*[A-ZА-ЯЁ][^\n]{20,}\s{2,}\d{1,4}\s*$)",
     re.I,
 )
 URL_SPLIT_RE = re.compile(r"(https?):\s+//")
 SPACE_RE = re.compile(r"[ \t]+")
 DOI_SPACING_RE = re.compile(r"\b(DOI:\s*)(10\s*\.\s*\d{4,9}\s*/\s*[-._;()/:A-Z0-9]+(?:\s+[-._;()/:]*(?:\d|[A-Z]+\d)[-._;()/:A-Z0-9]*)*)", re.I)
 YEAR_RE = re.compile(r"\b(?:18|19|20)\d{2}[a-z]?\b", re.I)
+INCOMPLETE_ARXIV_URL_RE = re.compile(r"https?://arxiv\.org(?:/(?:abs|pdf))?/?$", re.I)
+TRAILING_YEAR_LINE_MARKER_RE = re.compile(r"\b((?:18|19|20)\d{2}[a-z]?)\.\d{3,5}$", re.I)
+TRAILING_ARXIV_LINE_MARKER_RE = re.compile(r"\b(\d{4}\.\d{4,5}(?:v\d+)?)\.\d{3,5}$", re.I)
+EMBEDDED_WORD_LINE_MARKER_RE = re.compile(r"(?<=[A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ])\d{3,5}(?=\s+(?:[A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ]|https?://))")
+EMBEDDED_PUNCT_LINE_MARKER_RE = re.compile(r"(?<=[,.;:])\d{3,5}(?=\s+(?:[A-ZА-ЯЁÀ-ÖØ-Þ]|\d{4}\b|https?://))")
 AUTHOR_ENTRY_START_RE = re.compile(
     r"^[A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’.-]{0,60},\s*"
     r"[A-ZА-ЯЁ]\.(?:\s*[A-ZА-ЯЁ]\.)?"
@@ -48,6 +53,12 @@ REFERENCE_START_DENY_RE = re.compile(
     re.I,
 )
 CREATOR_WORD_RE = re.compile(r"[A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’.-]*")
+DECIMAL_ENTRY_START_RE = re.compile(r"^\d+\.\d+\b")
+FULL_NAME_AUTHOR_START_RE = re.compile(
+    r"^[A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’.-]+"
+    r"(?:\s+(?:[A-ZА-ЯЁ]\.?|[A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’.-]+)){1,4}"
+    r"(?:,|\s+and\s+|\s+и\s+)"
+)
 
 
 def numbered_entry_is_credible(
@@ -69,6 +80,8 @@ def numbered_entry_is_credible(
 def reference_ready_for_split(current: str) -> bool:
     text = current.strip()
     if not text or not YEAR_RE.search(text):
+        return False
+    if INCOMPLETE_ARXIV_URL_RE.search(text):
         return False
     return bool(
         text.endswith((".", "!", "?"))
@@ -99,6 +112,19 @@ def looks_like_reference_creator(creator: str) -> bool:
     return len(words) <= 5 and bool(re.match(r"^[A-ZА-ЯЁÀ-ÖØ-Þ]", value))
 
 
+def looks_like_reference_opening(line: str) -> bool:
+    value = line.strip()
+    if not value or REFERENCE_START_DENY_RE.match(value):
+        return False
+    if AUTHOR_ENTRY_START_RE.match(value) or FULL_NAME_AUTHOR_START_RE.match(value):
+        return True
+
+    first_sentence = re.split(r"\.\s+", value, maxsplit=1)[0].strip()
+    if first_sentence == value:
+        return False
+    return looks_like_reference_creator(first_sentence)
+
+
 def lookahead_text(items: list[tuple[str, str]], index: int) -> str:
     lines = [line.strip() for _, line in items[index : index + UNNUMBERED_START_LOOKAHEAD]]
     return " ".join(line for line in lines if line)
@@ -108,6 +134,10 @@ def looks_like_unnumbered_reference_start(items: list[tuple[str, str]], index: i
     line = items[index][1].strip()
     if REFERENCE_START_DENY_RE.match(line):
         return False
+    if DECIMAL_ENTRY_START_RE.match(line):
+        return True
+    if looks_like_reference_opening(line):
+        return True
     window = lookahead_text(items, index)
     year = YEAR_RE.search(window)
     if not year:
@@ -118,6 +148,11 @@ def looks_like_unnumbered_reference_start(items: list[tuple[str, str]], index: i
     return looks_like_reference_creator(prefix[:-1])
 
 
+def strip_trailing_line_marker(line: str) -> str:
+    line = TRAILING_ARXIV_LINE_MARKER_RE.sub(r"\1.", line)
+    return TRAILING_YEAR_LINE_MARKER_RE.sub(r"\1.", line)
+
+
 def clean_line(line: str) -> str | None:
     line = line.replace("\f", "").rstrip()
     if not line.strip():
@@ -125,6 +160,7 @@ def clean_line(line: str) -> str | None:
     if FOOTER_RE.search(line):
         return None
     line = LINE_NO_PREFIX_RE.sub(r"\1", line)
+    line = strip_trailing_line_marker(line)
     if HEADER_RE.match(line.strip()):
         return None
     if PAGE_NO_RE.match(line):
@@ -215,19 +251,12 @@ def normalize_unnumbered_text(text: str) -> list[dict[str, object]]:
             continue
         items.append((raw, line))
 
-    has_hanging_indent = any(raw[:1].isspace() for raw, _ in items) and any(
-        not raw[:1].isspace() for raw, _ in items
-    )
-
-    for index, (raw, line) in enumerate(items):
-        if has_hanging_indent:
-            starts_new = bool(raw.strip()) and not raw[:1].isspace()
-        else:
-            starts_new = (
-                bool(current)
-                and reference_ready_for_split(current)
-                and looks_like_unnumbered_reference_start(items, index)
-            )
+    for index, (_, line) in enumerate(items):
+        starts_new = (
+            bool(current)
+            and reference_ready_for_split(current)
+            and looks_like_unnumbered_reference_start(items, index)
+        )
         if starts_new and current:
             refs.append({"number": str(len(refs) + 1), "reference": final_clean(current)})
             current = line.strip()
@@ -241,6 +270,9 @@ def normalize_unnumbered_text(text: str) -> list[dict[str, object]]:
 
 def final_clean(s: str) -> str:
     s = s.replace("\u200b", "").replace("\ufeff", "")
+    s = SPACE_RE.sub(" ", s)
+    s = EMBEDDED_WORD_LINE_MARKER_RE.sub("", s)
+    s = EMBEDDED_PUNCT_LINE_MARKER_RE.sub("", s)
     s = SPACE_RE.sub(" ", s)
 
     # Default pdftotext reading order handles multi-column bibliographies well,

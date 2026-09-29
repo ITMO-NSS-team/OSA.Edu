@@ -168,3 +168,4 @@ __marimo__/
 node_modules/
 
 .idea/
+host-llm-bridge/
