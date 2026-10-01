@@ -16,9 +16,10 @@ import re
 from pathlib import Path
 
 BRACKET_ENTRY_START_RE = re.compile(r"^\s*\[([A-Za-zА-Яа-я]?\d+)\]\s*(.*)$")
+PAREN_ENTRY_START_RE = re.compile(r"^\s*\(([A-Za-zА-Яа-я]?\d+)\)\s*(.*)$")
 NUMBER_ENTRY_START_RE = re.compile(r"^\s*(\d+)[.)][\s\u200b\ufeff]+(.*)$")
 HEADER_RE = re.compile(
-    r"^(?:# Extracted from:|# Mode:|\s*(?:\d+(?:\.\d+)*[.)]?\s*)?(?:список\s+(?:(?:использованных|использованной|использованых)\s+)?(?:источников|литературы)(?:\s+и\s+литературы)?|библиографический\s+список|библиография|литература|references|bibliography)\s*$)",
+    r"^(?:# Extracted from:|# Mode:|\s*(?:\d+(?:\.\d+)*[.)]?\s*)?(?:список\s+(?:(?:использованных|использованной|использованых)\s+)?(?:источников|литературы)(?:\s+и\s+литературы)?|библиографический\s+список|библиография|литература|references?|bibliography)\s*$)",
     re.I,
 )
 PAGE_NO_RE = re.compile(r"^\s*\d{1,4}\s*$")
@@ -205,9 +206,10 @@ def normalize_text(text: str) -> list[dict[str, object]]:
             continue
 
         bracket_match = BRACKET_ENTRY_START_RE.match(line)
+        paren_match = PAREN_ENTRY_START_RE.match(line)
         number_match = NUMBER_ENTRY_START_RE.match(line)
-        if bracket_match or number_match:
-            match = bracket_match or number_match
+        if bracket_match or paren_match or number_match:
+            match = bracket_match or paren_match or number_match
             parsed_label = match.group(1)
             parsed_num = int(re.search(r"\d+", parsed_label).group(0))
             parsed_rest = match.group(2).strip()

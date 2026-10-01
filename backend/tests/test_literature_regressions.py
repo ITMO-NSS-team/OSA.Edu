@@ -19,6 +19,26 @@ from backend.app.literature.web_verifier import (
 
 
 class LiteratureExtractionRegressionTests(unittest.TestCase):
+    def test_singular_reference_heading_is_supported(self) -> None:
+        text = """Conclusion
+Reference
+(1) Ma, Z.; Sun, S. Magnetic Nanoparticles. Chem. Rev. 2023.
+(2) Chen, X.; Liu, Y. Unconventional Magnons. Nature 2025.
+Data Availability
+Repository details follow.
+"""
+
+        mode, bibliography = extract_references(text)
+        rows = normalize_text(bibliography)
+
+        self.assertEqual("heading", mode)
+        self.assertIn("Magnetic Nanoparticles", bibliography)
+        self.assertIn("Unconventional Magnons", bibliography)
+        self.assertNotIn("Data Availability", bibliography)
+        self.assertEqual(2, len(rows))
+        self.assertEqual("1", rows[0]["number"])
+        self.assertEqual("2", rows[1]["number"])
+
     def test_native_order_wins_when_column_sort_corrupts_references_heading(self) -> None:
         sorted_text = "                 References                 likova, J.; Polev, K.\nCemri, M.; Pan, M. Z."
         native_text = "References\nCemri, M.; Pan, M. Z.\nZhidkovskaya, A.; Be-\nlikova, J.; Polev, K."
