@@ -35,6 +35,7 @@ YEAR_RE = re.compile(r"\b(?:18|19|20)\d{2}[a-z]?\b", re.I)
 INCOMPLETE_ARXIV_URL_RE = re.compile(r"https?://arxiv\.org(?:/(?:abs|pdf))?/?$", re.I)
 TRAILING_YEAR_LINE_MARKER_RE = re.compile(r"\b((?:18|19|20)\d{2}[a-z]?)\.\d{3,5}$", re.I)
 TRAILING_ARXIV_LINE_MARKER_RE = re.compile(r"\b(\d{4}\.\d{4,5}(?:v\d+)?)\.\d{3,5}$", re.I)
+TRAILING_DOI_RE = re.compile(r"(?:https?://(?:dx\.)?doi\.org/|doi\s*:)\S+$", re.I)
 EMBEDDED_WORD_LINE_MARKER_RE = re.compile(r"(?<=[A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ])\d{3,5}(?=\s+(?:[A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ]|https?://))")
 EMBEDDED_PUNCT_LINE_MARKER_RE = re.compile(r"(?<=[,.;:])\d{3,5}(?=\s+(?:[A-ZА-ЯЁÀ-ÖØ-Þ]|\d{4}\b|https?://))")
 AUTHOR_ENTRY_START_RE = re.compile(
@@ -150,6 +151,8 @@ def looks_like_unnumbered_reference_start(items: list[tuple[str, str]], index: i
 
 
 def strip_trailing_line_marker(line: str) -> str:
+    if TRAILING_DOI_RE.search(line):
+        return line
     line = TRAILING_ARXIV_LINE_MARKER_RE.sub(r"\1.", line)
     return TRAILING_YEAR_LINE_MARKER_RE.sub(r"\1.", line)
 

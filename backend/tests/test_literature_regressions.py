@@ -248,6 +248,19 @@ Machine Learning: Science and Technology, 6(2):020601, 2025.
         self.assertIn("Chain-of-thought prompting", rows[1]["reference"])
         self.assertTrue(rows[2]["reference"].startswith("Zhishang Xiang"))
 
+    def test_doi_suffix_after_year_is_not_stripped_as_line_number(self) -> None:
+        text = """Reference
+(1) Brodersen, K. H.; Ong, C. S. The Balanced Accuracy and Its Posterior Distribution. 2010.
+https://doi.org/10.1109/ICPR.2010.764
+(2) Kresse, G.; Furthmüller, J. Efficient Iterative Schemes. 1996.
+https://doi.org/10.1103/PhysRevB.54.11169
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(2, len(rows))
+        self.assertTrue(rows[0]["reference"].endswith("10.1109/ICPR.2010.764"))
+
     def test_under_review_footer_does_not_merge_adjacent_references(self) -> None:
         text = """References
 485     Sher Badshah, Ali Emami, and Hassan Sajjad. Judge, retrieve, or abstain: Uncertainty-guarded LLM
