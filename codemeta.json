@@ -1,0 +1,10 @@
+{
+  "@context": "https://w3id.org/codemeta/3.0",
+  "@type": "SoftwareSourceCode",
+  "name": "OSA.Edu",
+  "description": null,
+  "codeRepository": "https://github.com/ITMO-NSS-team/OSA.Edu.git",
+  "dateCreated": "2026-06-02T21:02:28Z",
+  "dateModified": "2026-10-01T21:40:45Z",
+  "issueTracker": "https://api.github.com/repos/ITMO-NSS-team/OSA.Edu/issues"
+}
