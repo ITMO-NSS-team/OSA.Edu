@@ -16,9 +16,10 @@ import re
 from pathlib import Path
 
 BRACKET_ENTRY_START_RE = re.compile(r"^\s*\[([A-Za-zА-Яа-я]?\d+)\]\s*(.*)$")
+PAREN_ENTRY_START_RE = re.compile(r"^\s*\(([A-Za-zА-Яа-я]?\d+)\)\s*(.*)$")
 NUMBER_ENTRY_START_RE = re.compile(r"^\s*(\d+)[.)][\s\u200b\ufeff]+(.*)$")
 HEADER_RE = re.compile(
-    r"^(?:# Extracted from:|# Mode:|\s*(?:\d+(?:\.\d+)*[.)]?\s*)?(?:список\s+(?:(?:использованных|использованной|использованых)\s+)?(?:источников|литературы)(?:\s+и\s+литературы)?|библиографический\s+список|библиография|литература|references|bibliography)\s*$)",
+    r"^(?:# Extracted from:|# Mode:|\s*(?:\d+(?:\.\d+)*[.)]?\s*)?(?:список\s+(?:(?:использованных|использованной|использованых)\s+)?(?:источников|литературы)(?:\s+и\s+литературы)?|библиографический\s+список|библиография|литература|references?|bibliography)\s*$)",
     re.I,
 )
 PAGE_NO_RE = re.compile(r"^\s*\d{1,4}\s*$")
@@ -34,6 +35,7 @@ YEAR_RE = re.compile(r"\b(?:18|19|20)\d{2}[a-z]?\b", re.I)
 INCOMPLETE_ARXIV_URL_RE = re.compile(r"https?://arxiv\.org(?:/(?:abs|pdf))?/?$", re.I)
 TRAILING_YEAR_LINE_MARKER_RE = re.compile(r"\b((?:18|19|20)\d{2}[a-z]?)\.\d{3,5}$", re.I)
 TRAILING_ARXIV_LINE_MARKER_RE = re.compile(r"\b(\d{4}\.\d{4,5}(?:v\d+)?)\.\d{3,5}$", re.I)
+TRAILING_DOI_RE = re.compile(r"(?:https?://(?:dx\.)?doi\.org/|doi\s*:)\S+$", re.I)
 EMBEDDED_WORD_LINE_MARKER_RE = re.compile(r"(?<=[A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ])\d{3,5}(?=\s+(?:[A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ]|https?://))")
 EMBEDDED_PUNCT_LINE_MARKER_RE = re.compile(r"(?<=[,.;:])\d{3,5}(?=\s+(?:[A-ZА-ЯЁÀ-ÖØ-Þ]|\d{4}\b|https?://))")
 AUTHOR_ENTRY_START_RE = re.compile(
@@ -149,6 +151,8 @@ def looks_like_unnumbered_reference_start(items: list[tuple[str, str]], index: i
 
 
 def strip_trailing_line_marker(line: str) -> str:
+    if TRAILING_DOI_RE.search(line):
+        return line
     line = TRAILING_ARXIV_LINE_MARKER_RE.sub(r"\1.", line)
     return TRAILING_YEAR_LINE_MARKER_RE.sub(r"\1.", line)
 
@@ -205,9 +209,10 @@ def normalize_text(text: str) -> list[dict[str, object]]:
             continue
 
         bracket_match = BRACKET_ENTRY_START_RE.match(line)
+        paren_match = PAREN_ENTRY_START_RE.match(line)
         number_match = NUMBER_ENTRY_START_RE.match(line)
-        if bracket_match or number_match:
-            match = bracket_match or number_match
+        if bracket_match or paren_match or number_match:
+            match = bracket_match or paren_match or number_match
             parsed_label = match.group(1)
             parsed_num = int(re.search(r"\d+", parsed_label).group(0))
             parsed_rest = match.group(2).strip()

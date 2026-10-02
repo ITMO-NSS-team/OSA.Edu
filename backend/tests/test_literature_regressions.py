@@ -19,6 +19,26 @@ from backend.app.literature.web_verifier import (
 
 
 class LiteratureExtractionRegressionTests(unittest.TestCase):
+    def test_singular_reference_heading_is_supported(self) -> None:
+        text = """Conclusion
+Reference
+(1) Ma, Z.; Sun, S. Magnetic Nanoparticles. Chem. Rev. 2023.
+(2) Chen, X.; Liu, Y. Unconventional Magnons. Nature 2025.
+Data Availability
+Repository details follow.
+"""
+
+        mode, bibliography = extract_references(text)
+        rows = normalize_text(bibliography)
+
+        self.assertEqual("heading", mode)
+        self.assertIn("Magnetic Nanoparticles", bibliography)
+        self.assertIn("Unconventional Magnons", bibliography)
+        self.assertNotIn("Data Availability", bibliography)
+        self.assertEqual(2, len(rows))
+        self.assertEqual("1", rows[0]["number"])
+        self.assertEqual("2", rows[1]["number"])
+
     def test_native_order_wins_when_column_sort_corrupts_references_heading(self) -> None:
         sorted_text = "                 References                 likova, J.; Polev, K.\nCemri, M.; Pan, M. Z."
         native_text = "References\nCemri, M.; Pan, M. Z.\nZhidkovskaya, A.; Be-\nlikova, J.; Polev, K."
@@ -227,6 +247,19 @@ Machine Learning: Science and Technology, 6(2):020601, 2025.
         self.assertTrue(rows[1]["reference"].startswith("Jason Wei"))
         self.assertIn("Chain-of-thought prompting", rows[1]["reference"])
         self.assertTrue(rows[2]["reference"].startswith("Zhishang Xiang"))
+
+    def test_doi_suffix_after_year_is_not_stripped_as_line_number(self) -> None:
+        text = """Reference
+(1) Brodersen, K. H.; Ong, C. S. The Balanced Accuracy and Its Posterior Distribution. 2010.
+https://doi.org/10.1109/ICPR.2010.764
+(2) Kresse, G.; Furthmüller, J. Efficient Iterative Schemes. 1996.
+https://doi.org/10.1103/PhysRevB.54.11169
+"""
+
+        rows = normalize_text(text)
+
+        self.assertEqual(2, len(rows))
+        self.assertTrue(rows[0]["reference"].endswith("10.1109/ICPR.2010.764"))
 
     def test_under_review_footer_does_not_merge_adjacent_references(self) -> None:
         text = """References
