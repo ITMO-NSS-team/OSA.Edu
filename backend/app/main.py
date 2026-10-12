@@ -157,7 +157,7 @@ async def health():
 @app.get("/api/rules")
 async def rules(profile: str = "core"):
     registry = load_rule_registry()
-    return registry["all"] if profile == "full" else registry["core"]
+    return registry["vkrcheck"] if profile == "vkrcheck" else registry["all"] if profile == "full" else registry["core"]
 
 
 @app.get("/api/jobs")
@@ -337,7 +337,7 @@ async def create_job_endpoint(
         host_status = host_provider_status(force=True)
         if not host_status.get("authenticated"):
             return _error(400, f"Host LLM не готов: {host_status.get('detail') or 'провайдер не авторизован.'}")
-    selected_profile = "full" if profile == "full" else "core"
+    selected_profile = profile if profile in {"core", "full", "vkrcheck"} else "core"
     semantic_prompt = (prompt or DEFAULT_PROMPT).strip()
     map_prompt = (mapPrompt or DEFAULT_MAP_PROMPT).strip()
     additional = additionalCriteria.strip()

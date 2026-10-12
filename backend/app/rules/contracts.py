@@ -4,9 +4,12 @@ from __future__ import annotations
 # rule metadata prevents routing, engine selection and fact semantics from drifting.
 
 from .manifest import load_rule_manifest, manifest_entry
+from .vkrcheck import INTRO_FACT_ITEMS
 
 
 def contract_for(rule_id: str) -> dict | None:
+    if rule_id == 'VKR-INTRO-CONTENT':
+        return {'kind': 'semantic_fact', 'scope': 'document', 'facts': INTRO_FACT_ITEMS}
     entry = manifest_entry(rule_id)
     if entry is None or entry.engine.kind.value != 'semantic_fact':
         return None
