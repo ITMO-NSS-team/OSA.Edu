@@ -4,6 +4,7 @@ import { LanguageContext, type UiLanguage } from "./i18n";
 import { CheckPage } from "./components/CheckPage";
 import { LiteraturePage } from "./components/LiteraturePage";
 import { NormControlPage } from "./components/NormControlPage";
+import { NirRoadmapPage } from "./components/NirRoadmapPage";
 import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
@@ -19,6 +20,7 @@ import type {
 
 type Page =
   | "check"
+  | "nir-roadmap"
   | "normcontrol"
   | "literature"
   | "reproducibility"
@@ -51,6 +53,7 @@ export default function App() {
   const [mapPrompt, setMapPrompt] = useState("");
   const [criteria, setCriteria] = useState("");
   const [error, setError] = useState("");
+  const [roadmapTarget, setRoadmapTarget] = useState<{ page: "literature" | "repository-quality" | "reproducibility"; jobId?: string; repository?: string } | null>(null);
 
   useEffect(() => { void bootstrap(); }, []);
   useEffect(() => {
@@ -101,6 +104,7 @@ export default function App() {
     queueFree: "Очередь свободна",
     brand: "содержательная проверка ВКР",
     check: "Формальная и смысловая проверка",
+    nirRoadmap: "Маршрут НИР",
     prompts: "Промпты",
     rules: "Правила",
     reports: "Отчёты",
@@ -116,6 +120,7 @@ export default function App() {
     queueFree: "Queue is empty",
     brand: "thesis quality checks",
     check: "Thesis check",
+    nirRoadmap: "Research roadmap",
     prompts: "Prompts",
     rules: "Rules",
     reports: "Reports",
@@ -145,10 +150,11 @@ export default function App() {
           <NavButton active={page === "reports"} onClick={() => setPage("reports")}>{copy.reports}{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
         </div>
         <div className="nav-group nav-group-secondary">
+          <NavButton active={page === "nir-roadmap"} onClick={() => setPage("nir-roadmap")}>{copy.nirRoadmap}</NavButton>
           <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>{copy.norm}{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
-          <NavButton active={page === "literature"} onClick={() => setPage("literature")}>{copy.literature}</NavButton>
-          <NavButton active={page === "reproducibility"} onClick={() => setPage("reproducibility")}>{copy.reproducibility}</NavButton>
-          <NavButton active={page === "repository-quality"} onClick={() => setPage("repository-quality")}>{copy.repositoryQuality}</NavButton>
+          <NavButton active={page === "literature"} onClick={() => { setRoadmapTarget(null); setPage("literature"); }}>{copy.literature}</NavButton>
+          <NavButton active={page === "reproducibility"} onClick={() => { setRoadmapTarget(null); setPage("reproducibility"); }}>{copy.reproducibility}</NavButton>
+          <NavButton active={page === "repository-quality"} onClick={() => { setRoadmapTarget(null); setPage("repository-quality"); }}>{copy.repositoryQuality}</NavButton>
         </div>
       </nav>
       <div className="header-tools">
@@ -165,9 +171,10 @@ export default function App() {
     {page === "check" && <CheckPage health={health} prompt={prompt} mapPrompt={mapPrompt} profile={profile} model={model} criteria={criteria}
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
-    <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
-    {page === "reproducibility" && <ReproducibilityPage />}
-    {page === "repository-quality" && <RepositoryQualityPage />}
+    {page === "nir-roadmap" && <NirRoadmapPage models={health.models} onOpenCheck={(nextPage, jobId, repository) => { setRoadmapTarget({ page: nextPage, jobId, repository }); setPage(nextPage); }} />}
+    <div hidden={page !== "literature"}><LiteraturePage models={health.models} preferredJobId={roadmapTarget?.page === "literature" ? roadmapTarget.jobId : undefined} /></div>
+    {page === "reproducibility" && <ReproducibilityPage initialRepository={roadmapTarget?.page === "reproducibility" ? roadmapTarget.repository : undefined} initialJobId={roadmapTarget?.page === "reproducibility" ? roadmapTarget.jobId : undefined} />}
+    {page === "repository-quality" && <RepositoryQualityPage initialRepository={roadmapTarget?.page === "repository-quality" ? roadmapTarget.repository : undefined} initialJobId={roadmapTarget?.page === "repository-quality" ? roadmapTarget.jobId : undefined} />}
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}

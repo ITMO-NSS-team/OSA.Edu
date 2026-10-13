@@ -8,6 +8,7 @@ type Filter = "attention" | "all" | "confirmed";
 
 interface Props {
   models: ModelInfo[];
+  preferredJobId?: string;
 }
 
 const JOB_COPY = {
@@ -20,7 +21,7 @@ const ORIGIN_COPY = {
   en: { web: "Web", skill: "Skill", api: "API", unknown: "Unknown" },
 };
 
-export function LiteraturePage({ models }: Props) {
+export function LiteraturePage({ models, preferredJobId }: Props) {
   const { language } = useLanguage();
   const t = language === "ru" ? {
     onlyPdf: "Для проверки литературы поддерживаются только PDF.", eyebrow: "Проверка источников", title: "Проверка литературы", subtitle: "Загрузите PDF. Работы проверяются по очереди, а сомнительные источники дополнительно перепроверяются в сети.", model: "Модель", modelHint: "Модель используется для сопоставления источников и углублённой веб-проверки.", selected: "Выбрано", choosePdf: "Выберите PDF", queuedHint: "Файлы будут добавлены в общую очередь", multiHint: "Можно выбрать несколько работ сразу", adding: "Добавляем…", addQueue: "Добавить в очередь", clear: "Очистить", running: "Проверка выполняется", waiting: "Работы ожидают запуска", now: "Сейчас", inQueue: "в очереди", queue: "История проверок", cancel: "Отменить", stop: "Остановить", retry: "Повторить", remove: "Удалить", failed: "Проверка не завершилась.", attention: "Требуют внимания", confirmed: "Подтверждено", all: "Все", filter: "Фильтр результатов", empty: "В выбранной категории источников нет.", downloadTsv: "TSV", downloadHtml: "HTML", printPdf: "PDF", popupBlocked: "Браузер заблокировал окно печати. Разрешите всплывающие окна для OSA.Edu."
@@ -42,6 +43,8 @@ export function LiteraturePage({ models }: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<Filter>("attention");
+
+  useEffect(() => { if (preferredJobId) setSelectedId(preferredJobId); }, [preferredJobId]);
 
   useEffect(() => {
     if (!productionModels.some((item) => item.id === model) && defaultModel) setModel(defaultModel);
