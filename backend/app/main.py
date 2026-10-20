@@ -142,6 +142,7 @@ async def health():
             "coreCount": len(registry["core"]),
             "softCount": len(registry["soft"]),
             "fullCount": len(registry["all"]),
+            "itmoMasterCount": len(registry["itmo_master"]),
             "retrieval": "После подтверждения карты точные правила проверяются кодом, языковые — через полный поиск коротких кандидатов и LLM-судью, содержательные — по назначенным разделам документа.",
         },
         "normcontrol": {
@@ -156,8 +157,21 @@ async def health():
 
 @app.get("/api/rules")
 async def rules(profile: str = "core"):
-    registry = load_rule_registry()
-    return registry["all"] if profile == "full" else registry["core"]
+    from .rules.registry import rules_for_profile, PROFILE_LABELS
+    if profile not in PROFILE_LABELS:
+        return _error(400, "Неизвестный набор правил.")
+    return rules_for_profile(profile)
+
+
+@app.get("/api/rule-sources/itmo_master.pdf")
+async def itmo_requirements_source():
+    # A single explicit normative source, never an arbitrary path or directory.
+    # Student files in test_data are not exposed by this endpoint.
+    from .config import ROOT
+    path = Path(os.getenv("ITMO_REQUIREMENTS_PDF") or ROOT / "test_data" / "trebovaniia-k-vkr.pdf")
+    if not path.is_file():
+        return _error(404, "Нормативный PDF ИТМО не установлен на сервере. Пункт и страница приведены в правиле.")
+    return FileResponse(path, media_type="application/pdf", headers={"Content-Disposition": "inline"})
 
 
 @app.get("/api/jobs")
@@ -337,9 +351,14 @@ async def create_job_endpoint(
         host_status = host_provider_status(force=True)
         if not host_status.get("authenticated"):
             return _error(400, f"Host LLM не готов: {host_status.get('detail') or 'провайдер не авторизован.'}")
-    selected_profile = "full" if profile == "full" else "core"
+    from .rules.registry import PROFILE_LABELS
+    if profile not in PROFILE_LABELS:
+        return _error(400, "Неизвестный набор правил.")
+    selected_profile = profile
     semantic_prompt = (prompt or DEFAULT_PROMPT).strip()
     map_prompt = (mapPrompt or DEFAULT_MAP_PROMPT).strip()
+    from .rules.registry import map_prompt_for_profile
+    map_prompt = map_prompt_for_profile(map_prompt, selected_profile)
     additional = additionalCriteria.strip()
     if len(semantic_prompt) < 300 or len(map_prompt) < 300:
         return _error(400, "Промпты слишком короткие для строгого JSON-режима.")

@@ -8,6 +8,35 @@ _SPACED_DASH = re.compile(r'\s[–—]\s')
 _ENTRY_START = re.compile(r'^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.)])\s+(?![—–-])(?=\S)')
 
 
+def numeric_citations(text: str) -> list[dict]:
+    """Ordered numeric square-bracket citations, retaining source offsets.
+
+    Intentionally does not reinterpret author/year citations or decimal
+    intervals. Segmentation of references remains bibliography_entries().
+    """
+    out = []
+    pattern = r'\[\s*(\d{1,3}(?:\s*(?:[,;–—−-]\s*\d{1,3}))*)\s*\]'
+    for match in re.finditer(pattern, text):
+        if re.search(r'\b(?:диапазон\p{L}*|интервал\p{L}*|range|interval)\s*$', text[:match.start()], re.I):
+            continue
+        numbers = []
+        valid = True
+        for part in re.split(r'\s*[,;]\s*', match[1]):
+            bounds = list(map(int, re.split(r'\s*[–—−-]\s*', part)))
+            if not all(n > 0 for n in bounds):
+                valid = False; break
+            if len(bounds) == 2:
+                a, b = bounds
+                if not (a <= b <= a+200):
+                    valid = False; break
+                numbers.extend(range(a, b+1))
+            else:
+                numbers.extend(bounds)
+        if valid:
+            out.append(dict(numbers=numbers, text=match[0], start=match.start(), end=match.end()))
+    return out
+
+
 def bibliography_entries(blocks: list[dict]) -> tuple[list[dict], bool]:
     """Join wrapped records, retaining every source block and original number.
 

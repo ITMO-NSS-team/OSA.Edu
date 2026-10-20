@@ -109,6 +109,25 @@ def enrich_matrix(rule_id: str, matrix: dict | None, fragment: dict) -> dict | N
     if not matrix or not is_fact_rule(rule_id):
         return matrix
     text = _fragment_text(fragment)
+    # ITMO 3.7 does not require a separate recommendation subsection or only
+    # implementation advice. A grounded future-work recommendation can satisfy
+    # both aspects. A modal cue is only a plausible candidate: Python abstains
+    # rather than upgrading the semantic fact to found/PASS.
+    future = next((cell for cell in matrix.get('items') or []
+                   if cell.get('name') == 'future_work' and cell.get('status') == 'found'), {})
+    future_quotes = ' '.join(str(ev.get('quote') or '') for ev in future.get('evidence') or []
+                             if ev.get('verified'))
+    recommendation_candidate = rule_id == 'ITMO-3-7' and bool(re.search(
+        r'\b(?:must|should|recommend\p{L}*|следует|необходимо|целесообразно|рекоменду\p{L}*|'
+        r'перспектив\p{L}*\s+(?:практическ\p{L}*\s+)?примен\p{L}*|'
+        r'(?:potential|promise|prospects?)\s+(?:for\s+)?(?:practical\s+)?(?:use|application))\b',
+        future_quotes, re.I,
+    ))
+    # Application context is a plausible candidate, not proof of practical
+    # significance. An absence verdict must semantically disambiguate it.
+    practical_candidate = rule_id == 'ITMO-3-5' and bool(
+        re.search(r'\b(?:на\s+практике|практическ\p{L}*\s+примен\p{L}*|practical\s+application)\b', text, re.I)
+        and re.search(r'\b(?:в\s+(?:данной|настоящей|этой)\s+работе|this\s+(?:study|research|work))\b', text, re.I))
     adjusted = dict(matrix)
     rows = []
     for source in matrix.get("items") or []:
@@ -117,6 +136,24 @@ def enrich_matrix(rule_id: str, matrix: dict | None, fragment: dict) -> dict | N
         candidates = list(item.get("candidates") or [])
         name = str(item.get("name") or "")
         status = str(item.get("status") or "ambiguous")
+
+        if rule_id.startswith('ITMO-') and status == 'found' and name in {
+            'content_matches_title', 'goal_tasks_match_title', 'chapters_solve_tasks',
+            'logical_connections', 'conclusion_matches_tasks',
+        }:
+            support = {(ev.get('blockId'), normalized_quote(str(ev.get('quote') or '')))
+                       for ev in item.get('evidence') or [] if ev.get('verified')}
+            if len(support) < 2:
+                status = 'ambiguous'
+                changes.append('found→ambiguous: для отношения требуются цитаты с обеих сторон, наличие одного элемента не доказывает связь')
+
+        if recommendation_candidate and name == 'recommendations' and status == 'not_found':
+            status = 'ambiguous'
+            changes.append('not_found→ambiguous: в grounded-перспективах есть возможная рекомендация; отдельный подраздел не требуется')
+
+        if practical_candidate and name == 'practical_significance' and status == 'not_found':
+            status = 'ambiguous'
+            changes.append('not_found→ambiguous: во введении есть практический контекст и область собственной работы; отсутствие отдельной формулировки не исключает значимость по смыслу')
 
         if status == "not_found" and candidates:
             status = "ambiguous"
@@ -300,6 +337,8 @@ def aggregate_fact_rule(rule: dict, routed: dict, items: list[dict]) -> dict:
     for matrix in matrices:
         for cell in matrix.get("items") or []:
             evidence.extend(cell.get("evidence") or [])
+            if rule_id.startswith('ITMO-'):
+                evidence.extend((cell.get('assessment') or {}).get('counterEvidence') or [])
             for candidate in cell.get("candidates") or []:
                 evidence.extend(candidate.get("evidence") or [])
     seen: set[tuple[str, str]] = set()
@@ -317,7 +356,7 @@ def aggregate_fact_rule(rule: dict, routed: dict, items: list[dict]) -> dict:
         "severity": rule.get("severity", "major"),
         "explanation": explanation,
         "confidence": 0,
-        "evidence": deduped[:20] if status in {"violation", "uncertain"} else [],
+        "evidence": deduped[:20] if status in {"violation", "uncertain"} or rule_id.startswith('ITMO-') else [],
         "evidenceStatus": "coverage_verified" if matrices and all(m.get("complete") for m in matrices) else "verified" if deduped else "not_required",
         "checkedBy": "fact-engine+llm-extractor",
         "coverage": coverage,
@@ -329,6 +368,11 @@ def aggregate_fact_rule(rule: dict, routed: dict, items: list[dict]) -> dict:
             "fragments": [{"fragmentId": fid, "status": st, "details": details} for fid, st, details in decisions],
         },
     }
+    if rule_id.startswith('ITMO-'):
+        if status == 'pass' and (not routed.get('allowPass', True) or rule.get('routing', {}).get('allowPass') is False):
+            out.update(status='uncertain', explanation='Найдены подтверждающие признаки. Полное требование включает экспертную оценку, поэтому положительные факты не означают полного выполнения.', assessmentScope='partial')
+        else:
+            out['assessmentScope'] = 'full' if status == 'pass' else 'counterexample' if status == 'violation' else 'partial'
     if status == "violation":
         fix = str(_fact_engine_config(rule_id).get("fix") or "").strip()
         if fix:

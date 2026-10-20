@@ -1,0 +1,1860 @@
+{
+  "version": 3,
+  "description": "Independent ITMO master profile; never extends legacy profiles.",
+  "rules": {
+    "ITMO-1-2": {
+      "layer": "itmo_master",
+      "sourceNumber": "1.2; 2.1",
+      "scope": "document",
+      "severity": "info",
+      "weight": 0,
+      "mode": "manual",
+      "dedupKey": "itmo:1-2",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Нужны рабочая программа ГИА и образовательный стандарт; они не предоставлены."
+      }
+    },
+    "ITMO-1-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "1.3; 2.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:1-3",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Авторство и происхождение материалов не устанавливаются по PDF."
+      }
+    },
+    "ITMO-1-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "1.4–1.6; 2.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:1-4",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Полная оценка требует образовательного стандарта, экспертной оценки, проверки заимствований и защиты."
+      }
+    },
+    "ITMO-1-6": {
+      "layer": "itmo_master",
+      "sourceNumber": "1.6",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:1-6",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "title",
+          "introduction",
+          "chapter",
+          "conclusion",
+          "document_text"
+        ],
+        "facts": [
+          "content_matches_title",
+          "goal_tasks_match_title"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Содержание соответствует теме; цель и задачи соответствуют теме работы. Соответствие официально утверждённой теме и направлению подготовки проверяется отдельно по документам ОП. Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "content_matches_title",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "goal_tasks_match_title",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "content_matches_title",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "goal_tasks_match_title",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "itmo_scientific"
+        ]
+      }
+    },
+    "ITMO-2-4-results": {
+      "layer": "itmo_master",
+      "sourceNumber": "2.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:2-4-results",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "introduction",
+          "chapter",
+          "conclusion",
+          "document_text"
+        ],
+        "facts": [
+          "results_and_scientific_propositions",
+          "problem_formulated",
+          "theoretical_depth",
+          "research_orientation"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Магистерская диссертация содержит совокупность результатов и научных положений для защиты, формулировку проблемы, внутреннее единство, глубокую теоретическую проработку и исследовательскую направленность. Допустимы прикладные и организационно-управленческие задачи. Отдельный структурный раздел положений и доказательство мировой научной новизны не требуются этим пунктом. Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "results_and_scientific_propositions",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "problem_formulated",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "theoretical_depth",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "research_orientation",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "results_and_scientific_propositions",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "problem_formulated",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "theoretical_depth",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "research_orientation",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "itmo_scientific"
+        ],
+        "allowPass": false,
+        "reason": "Выявлены содержательные признаки, но полнота теоретической проработки/нормативности терминологии требует экспертной оценки."
+      }
+    },
+    "ITMO-2-4-volume": {
+      "layer": "itmo_master",
+      "sourceNumber": "2.4",
+      "scope": "document",
+      "severity": "info",
+      "weight": 0,
+      "mode": "manual",
+      "dedupKey": "itmo:2-4-volume",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Отклонение от рекомендации не является нарушением. Для обязательного объёма нужна программа ГИА."
+      }
+    },
+    "ITMO-2-5": {
+      "layer": "itmo_master",
+      "sourceNumber": "2.5",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:2-5",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Нужны распорядительные акты и материалы защиты."
+      }
+    },
+    "ITMO-2-6": {
+      "layer": "itmo_master",
+      "sourceNumber": "2.6; 4.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:2-6",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Загрузка PDF подтверждает только формат этого файла, но не полноту представленных материалов."
+      }
+    },
+    "ITMO-2-7": {
+      "layer": "itmo_master",
+      "sourceNumber": "2.7",
+      "scope": "document",
+      "severity": "info",
+      "weight": 0,
+      "mode": "manual",
+      "dedupKey": "itmo:2-7",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Нужны сведения о языке реализации конкретной ОП; английский PDF сам по себе не нарушение."
+      }
+    },
+    "ITMO-3-1-title": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:3-1-title",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "title",
+          "document_text"
+        ],
+        "facts": [
+          "title_action",
+          "title_no_abbreviations"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Название темы не содержит сокращений и аббревиатур и содержит признак действия, например моделирование, исследование, расчёт.  Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "title_action",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "title_no_abbreviations",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "title_action",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "title_no_abbreviations",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "title"
+        ]
+      }
+    },
+    "ITMO-3-1-bilingual": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:3-1-bilingual",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Нужен официальный Перечень тем. Язык PDF не подтверждает условие автоматически."
+      }
+    },
+    "ITMO-3-2-titlepage": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-2-titlepage",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:presence:titlepage"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-2-assignment": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-2-assignment",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:presence:assignment"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-2-abstract": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-2-abstract",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:presence:abstract"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-2-contents": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-2-contents",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:presence:contents"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-2-introduction": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-2-introduction",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:presence:introduction"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-2-chapter": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-2-chapter",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:presence:chapter"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-2-conclusion": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-2-conclusion",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:presence:conclusion"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-2-bibliography": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-2-bibliography",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:presence:bibliography"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-2-optional": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.2, сноска 2",
+      "scope": "document",
+      "severity": "info",
+      "weight": 0,
+      "mode": "manual",
+      "dedupKey": "itmo:3-2-optional",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Отсутствие необязательного элемента само по себе не нарушение."
+      }
+    },
+    "ITMO-3-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:3-3",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Факт согласования требует данных ИСУ."
+      }
+    },
+    "ITMO-3-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:3-4",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:3-4"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-3-5": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.5",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:3-5",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "introduction",
+          "document_text"
+        ],
+        "facts": [
+          "relevance",
+          "prior_research",
+          "problem",
+          "goal",
+          "tasks",
+          "practical_significance"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Введение включает актуальность, степень разработанности, решаемую проблему, цель и задачи, практическую значимость.  Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев. Оценивай содержание, а не наличие отдельных подзаголовков или буквальных ключевых слов для каждого элемента введения.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "relevance",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "prior_research",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "problem",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "goal",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "tasks",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "practical_significance",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "relevance",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "prior_research",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "problem",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "goal",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "tasks",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "practical_significance",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "introduction"
+        ]
+      }
+    },
+    "ITMO-3-5-recommended": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.5",
+      "scope": "document",
+      "severity": "info",
+      "weight": 0,
+      "mode": "manual",
+      "dedupKey": "itmo:3-5-recommended",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Отсутствие этих элементов во введении не является нарушением; методы в основной части и результаты оцениваются по 2.4 и 3.6."
+      }
+    },
+    "ITMO-3-6-approval": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.6",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:3-6-approval",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Факт согласования требует внешних документов; сопоставление с заданием пока ручное."
+      }
+    },
+    "ITMO-3-6-process": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.6",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:3-6-process",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "chapter",
+          "document_text"
+        ],
+        "facts": [
+          "research_process",
+          "methods_justified",
+          "results_described"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Основная часть отражает процесс теоретических и/или экспериментальных исследований, методы исследований и расчёта, обоснование необходимости экспериментов, принципы действия объектов и их характеристики применительно к характеру работы. Не требуй эксперимента, расчёта или разработанного объекта, если они не относятся к характеру конкретной работы. Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Обязательные элементы проверяются по основной части в совокупности, а не отдельно в каждой главе. Результаты могут быть в отдельной главе результатов. Не требуй обоснования каждого метода: пункт требует отразить методы и обоснование необходимости экспериментов, если они применимы. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "research_process",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "methods_justified",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "results_described",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "research_process",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "methods_justified",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "results_described",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "itmo_main"
+        ]
+      }
+    },
+    "ITMO-3-6-links": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.6",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:3-6-links",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "introduction",
+          "chapter",
+          "conclusion",
+          "document_text"
+        ],
+        "facts": [
+          "chapters_solve_tasks",
+          "logical_connections"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Главы, разделы и подразделы соответствуют цели, решают конкретные задачи введения, логически связаны; изложение чёткое и последовательное.  Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "chapters_solve_tasks",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "logical_connections",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "chapters_solve_tasks",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "logical_connections",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "itmo_scientific"
+        ]
+      }
+    },
+    "ITMO-3-7": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.7",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:3-7",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "conclusion",
+          "document_text"
+        ],
+        "facts": [
+          "results_summarized",
+          "conclusions",
+          "recommendations",
+          "future_work"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Заключение обобщает результаты исследования, содержит выводы, рекомендации и перспективы дальнейшей разработки темы.  Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев. Рекомендации могут касаться дальнейших исследований. Один фрагмент может одновременно подтверждать рекомендации и перспективы. Не требуй отдельного подраздела, буквального слова recommendation или только рекомендаций по внедрению; оценивай смысл, включая выражения should/must в направлениях дальнейшей работы.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "results_summarized",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "conclusions",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "recommendations",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "future_work",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "results_summarized",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "conclusions",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "recommendations",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "future_work",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "conclusion"
+        ]
+      }
+    },
+    "ITMO-3-7-tasks": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.6; 3.7",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:3-7-tasks",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "introduction",
+          "conclusion",
+          "document_text"
+        ],
+        "facts": [
+          "conclusion_matches_tasks"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Результаты и выводы согласованы с задачами введения; главы решают поставленные задачи.  Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "conclusion_matches_tasks",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "conclusion_matches_tasks",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "itmo_intro_conclusion"
+        ]
+      }
+    },
+    "ITMO-3-8": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.8",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:3-8",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Форма проекта не установлена. Нужны метаданные ОП; автоматическое установление формы не реализовано."
+      }
+    },
+    "ITMO-3-9": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.9",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "semantic",
+      "dedupKey": "itmo:3-9",
+      "engine": {
+        "kind": "semantic_fact",
+        "requiredFacts": [
+          "document_text"
+        ],
+        "facts": [
+          "academic_language",
+          "consistent_terminology"
+        ],
+        "globalFactKeys": [
+          "structure"
+        ],
+        "externalKnowledge": "forbidden",
+        "fixPolicy": "minimal",
+        "guidance": "Применяй только указанное требование ИТМО. Не добавляй требования Шалыто. Не допускаются разговорная речь, техницизмы, профессионализмы, разные термины для одного понятия, произвольные словообразования, ненормативные сокращения; иностранные термины при русском эквиваленте оцениваются с учётом языка работы. В английской ВКР не требуй замены английских слов русскими. Стандарты сокращений и единицы измерения требуют отдельной проверки; это правило их не покрывает. Факт found требует точной цитаты; отсутствие можно подтвердить только полным просмотром. Нормативные рекомендации (например, новизна во введении) не являются обязательными; обязательные рекомендации в заключении по п.3.7 этим не отменяются. Единообразие терминологии проверяется между всеми разделами, а не только внутри каждой главы. Библиографические записи, код и дословные цитаты не оценивай как авторский разговорный стиль. Возвращай компактную матрицу: обычно достаточно одной короткой дословной цитаты на подтверждённый факт; не копируй целые абзацы. Не выдумывай цитаты для not_found. checkedBlockCount должен точно отражать число просмотренных BLOCK, а не оценку количества абзацев. Первое лицо само по себе этим пунктом не запрещено; не вводи требование безличного стиля.",
+        "decisionPolicy": {
+          "type": "ordered_facts",
+          "steps": [
+            {
+              "fact": "academic_language",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "consistent_terminology",
+              "value": "not_found",
+              "status": "violation"
+            },
+            {
+              "fact": "academic_language",
+              "value": "ambiguous",
+              "status": "uncertain"
+            },
+            {
+              "fact": "consistent_terminology",
+              "value": "ambiguous",
+              "status": "uncertain"
+            }
+          ],
+          "default": "pass"
+        }
+      },
+      "routing": {
+        "strategy": "llm",
+        "exhaustive": true,
+        "selectors": [
+          "whole_document"
+        ],
+        "allowPass": false,
+        "reason": "Выявлены содержательные признаки, но полнота теоретической проработки/нормативности терминологии требует экспертной оценки."
+      }
+    },
+    "ITMO-3-9-units": {
+      "layer": "itmo_master",
+      "sourceNumber": "3.9",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:3-9-units",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Надёжная классификация единиц и исключений пока не реализована."
+      }
+    },
+    "ITMO-4-2-a4": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-2-a4",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-2-a4"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-2-font": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-2-font",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-2-font"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-2-color": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-2-color",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-2-color"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-2-spacing": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-2-spacing",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-2-spacing"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-2-alignment": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-2-alignment",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-2-alignment"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-2-margins": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-2-margins",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-2-margins"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-2-indent": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-2-indent",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-2-indent"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-2-emphasis": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-2-emphasis",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "PDF не позволяет надёжно отличить допустимое акцентирование от недопустимого полужирного текста."
+      }
+    },
+    "ITMO-4-3-1": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.3.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-3-1",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-3-1"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-4-1": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.4.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-4-1",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-4-1"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-4-2": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.4.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-4-2",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-4-2"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-4-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.4.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-4-3",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-4-3"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-4-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.4.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-4-4",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-4-4"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-5-2": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.5.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-5-2",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-5-2"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-5-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.5.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-5-3",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-5-3"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-5-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.5.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-5-4",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-5-4"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-6-1": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.6.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-6-1",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-6-1"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-6-2-number": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.6.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-6-2-number",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-6-2-number"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-6-2-links": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.6.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-6-2-links",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-6-2-links"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-6-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.6.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-6-3",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-6-3"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-6-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.6.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-6-4",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-7-1": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.7.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-7-1",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-7-1"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-7-2": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.7.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-7-2",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-7-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.7.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-7-3",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-7-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.7.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-7-4",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-7-4"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-8-1": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.8.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-8-1",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-8-2": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.8.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-8-2",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-8-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.8.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-8-3",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-8-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.8.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-8-4",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-8-4"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-8-5": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.8.5",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-8-5",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-8-5"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-9-1": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.9.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-9-1",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-9-2": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.9.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-9-2",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-9-2"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-9-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.9.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-9-3",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-9-3"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-10-1": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.10.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-10-1",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-10-1"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-10-2": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.10.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-10-2",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-10-2"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-10-3-order": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.10.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-10-3-order",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-10-3-order"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-10-3-format": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.10.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-10-3-format",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-10-3-format"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-10-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.10.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-10-4",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-10-4"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-10-5": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.10.5",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-10-5",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-11-1": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.11.1",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "manual",
+      "dedupKey": "itmo:4-11-1",
+      "engine": {
+        "kind": "unavailable",
+        "requiredFacts": []
+      },
+      "routing": {
+        "strategy": "unavailable",
+        "exhaustive": true,
+        "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+      }
+    },
+    "ITMO-4-11-2": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.11.2",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-11-2",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-11-2"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-11-3": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.11.3",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-11-3",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-11-3"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-11-4": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.11.4",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-11-4",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-11-4"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-4-11-5": {
+      "layer": "itmo_master",
+      "sourceNumber": "4.11.5",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:4-11-5",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:4-11-5"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    },
+    "ITMO-A1-links": {
+      "layer": "itmo_master",
+      "sourceNumber": "Приложение 1, сноска 5",
+      "scope": "document",
+      "severity": "major",
+      "weight": 3,
+      "mode": "deterministic",
+      "dedupKey": "itmo:A1-links",
+      "engine": {
+        "kind": "deterministic",
+        "requiredFacts": [],
+        "detectorId": "itmo:A1-links"
+      },
+      "routing": {
+        "strategy": "deterministic",
+        "exhaustive": true
+      }
+    }
+  }
+}

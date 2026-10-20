@@ -22,7 +22,10 @@ from reportlab.platypus import (
 )
 
 from .pdf_reporting import _register_fonts, _safe
-from .user_facing import advice_for_rule, clean_user_text, user_rule_requirement, user_rule_title
+from .rules.registry import profile_label
+from .itmo_coverage import coverage_lines
+from .evidence_presentation import evidence_groups, suggested_fix, source_label
+from .user_facing import advice_for_rule, clean_user_text, user_rule_requirement, user_rule_title, user_result_explanation
 
 _USER_STATUS = {
     "violation": ("Нужно исправить", colors.HexColor("#9B2C2C")),
@@ -176,7 +179,7 @@ def _cover(
         status_label = "Проверка завершена не полностью"
     elif int(counts.get("violation", 0) or 0) > 0:
         status_label = "Требует исправлений"
-    elif int(counts.get("uncertain", 0) or 0) > 0:
+    elif int(counts.get("uncertain", 0) or 0) > 0 or int(counts.get('notChecked', 0) or 0) > 0:
         status_label = "Требует ручной проверки"
     else:
         status_label = "Проверка завершена"
@@ -208,8 +211,8 @@ def _cover(
         Spacer(1, 5 * mm),
         Table([
             [_p("Статус", styles["metric_label"]), _p(status_label, styles["metric_value"])],
-            [_p("Автоматически проверено", styles["metric_label"]), _p(f"{coverage}% применимых правил", styles["metric_value"])],
-            [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "—", styles["metric_value"])],
+            [_p("Автоматически проверено", styles["metric_label"]), _p(f"{report['coverageMetrics']['normative']['assessed']}/{report['coverageMetrics']['normative']['total']} правил профиля" if report.get('coverageMetrics') else f"{coverage}% применимых правил", styles["metric_value"])],
+            [_p("Профиль", styles["metric_label"]), _p(profile_label(profile or report.get("profile")), styles["metric_value"])],
         ], colWidths=[55 * mm, 119 * mm], style=TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F5F6F7")),
             ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D9DDE1")),
@@ -225,6 +228,8 @@ def _cover(
         Spacer(1, 5 * mm),
     ])
 
+    for line in coverage_lines(report):
+        result.append(Paragraph(_safe(line), styles['muted']))
     if attention:
         result.extend([
             Paragraph("Что требует внимания", styles["section"]),
@@ -347,7 +352,9 @@ def _passed_section(results: list[dict[str, Any]], catalog: dict[str, dict[str, 
     cells: list[Any] = []
     for result, rule in passed:
         title = user_rule_title(rule, str(result.get("explanation") or result.get("ruleId") or ""))
-        cells.append(Paragraph(f"✓ {_safe(title)} <font color='#777777'>({_safe(str(result.get('ruleId') or ''))})</font>", styles["passed_item"]))
+        if rule.get('normativeReference'):
+            title += f" (п. {rule['normativeReference']['clause']})"
+        cells.append(Paragraph(f"✓ {_safe(title)}", styles["passed_item"]))
     rows = []
     for idx in range(0, len(cells), 2):
         rows.append([cells[idx], cells[idx + 1] if idx + 1 < len(cells) else ""])
@@ -359,12 +366,19 @@ def _passed_section(results: list[dict[str, Any]], catalog: dict[str, dict[str, 
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
-    return [
+    story = [
         Spacer(1, 7 * mm),
         Paragraph("Что проверено успешно", styles["section"]),
-        Paragraph("Ниже перечислены требования, по которым система не нашла подтверждённых нарушений.", styles["muted"]),
+        Paragraph("Выполнение перечисленных требований подтверждено в полной назначенной области проверки." if any(rule.get('layer') == 'itmo_master' for _, rule in passed) else "Ниже перечислены требования, по которым система не нашла подтверждённых нарушений.", styles["muted"]),
         table,
     ]
+    for result, rule in passed:
+        if rule.get('layer') == 'itmo_master' and result.get('checkedBy') == 'fact-engine+llm-extractor' and result.get('evidence'):
+            story.append(Paragraph(_safe(user_rule_title(rule)), styles['subsection']))
+            for ev in result['evidence'][:2]:
+                story.append(_compact_evidence(ev, styles))
+            story.append(Paragraph('Приведены примеры подтверждения. Полное обоснование каждого критерия сохранено в подробном отчёте.', styles['muted']))
+    return story
 
 
 def _not_checked_section(results: list[dict[str, Any]], catalog: dict[str, dict[str, Any]], styles: dict[str, ParagraphStyle]) -> list[Any]:
@@ -382,8 +396,10 @@ def _not_checked_section(results: list[dict[str, Any]], catalog: dict[str, dict[
     if not_checked:
         for result, rule in not_checked:
             title = user_rule_title(rule, str(result.get("ruleId") or ""))
-            explanation = str(result.get("explanation") or "").strip()
+            explanation = user_result_explanation(result, rule)
             text = f"• <b>{_safe(title)}</b>"
+            if rule.get("normativeReference"):
+                text += f" ({_safe(rule['sourceLabel'])})"
             if explanation:
                 text += f" — {_safe(explanation)}"
             story.append(Paragraph(text, styles["body"]))
@@ -449,7 +465,7 @@ def _user_rule_card(result: dict[str, Any], rule: dict[str, Any], styles: dict[s
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
     ]))
-    heading = Table([[badge, Paragraph(f"{_safe(title)} <font color='#777777'>({_safe(rid)})</font>", styles["rule_title"])]], colWidths=[39 * mm, 135 * mm])
+    heading = Table([[badge, Paragraph(_safe(title), styles["rule_title"])]], colWidths=[39 * mm, 135 * mm])
     heading.setStyle(TableStyle([
         ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D9DDE1")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -460,11 +476,13 @@ def _user_rule_card(result: dict[str, Any], rule: dict[str, Any], styles: dict[s
     ]))
 
     body: list[Any] = [heading, Spacer(1, 2 * mm)]
+    if rule.get("normativeReference"):
+        body.append(_label_value("Нормативный пункт", source_label(rule), styles))
     requirement = user_rule_requirement(rule)
     if requirement and requirement != title:
         body.append(_label_value("Правило", requirement, styles))
 
-    explanation = clean_user_text(str(result.get("explanation") or "").strip())
+    explanation = user_result_explanation(result, rule)
     if explanation:
         body.append(_label_value("Нарушение" if status == "violation" else "Результат проверки", explanation, styles))
 
@@ -476,19 +494,21 @@ def _user_rule_card(result: dict[str, Any], rule: dict[str, Any], styles: dict[s
     if term_text:
         body.append(_label_value("Обозначения", term_text, styles))
 
-    fact_text = _fact_matrix_text(result)
+    fact_text = _fact_matrix_text(result) if rule.get("layer") != "itmo_master" else ""
     if fact_text and status == "uncertain":
         body.append(_label_value("Что неоднозначно", fact_text, styles))
 
     evidence = list(result.get("evidence") or [])
     if evidence:
         body.append(Paragraph("Примеры", styles["subsection"]))
-        for item in evidence[:_MAX_USER_EVIDENCE]:
-            body.append(_compact_evidence(item, styles))
-        if len(evidence) > _MAX_USER_EVIDENCE:
-            body.append(Paragraph(f"Ещё примеров: {len(evidence) - _MAX_USER_EVIDENCE}. Полный список — в отчёте для разработчика.", styles["muted"]))
+        for group in evidence_groups(evidence):
+            if group["count"] > 1:
+                body.append(Paragraph(_safe(f"Одинаковое отклонение: {group['count']} случаев; страницы: {group['pages']}"), styles["muted"]))
+            for item in group["items"][:_MAX_USER_EVIDENCE]:
+                body.append(_compact_evidence(item, styles))
 
-    fix = clean_user_text(str(result.get("fix") or "").strip())
+
+    fix = clean_user_text(suggested_fix(rid, result.get("fix")) if status == "violation" else str(result.get("fix") or ""))
     if fix:
         body.append(_label_value("Как исправить", fix, styles))
     elif status == "uncertain":
@@ -705,6 +725,8 @@ def _compact_evidence(item: dict[str, Any], styles: dict[str, ParagraphStyle]) -
         meta_parts.append(f"«{token}»")
     meta = " · ".join(meta_parts)
     text = (f"<b>{_safe(meta)}</b><br/>" if meta else "") + f"«{_safe(quote)}»"
+    if item.get('reason'):
+        text += '<br/>' + _safe(clean_user_text(str(item['reason'])))
     table = Table([[Paragraph(text, styles["quote"])]], colWidths=[170 * mm])
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7F8F8")),

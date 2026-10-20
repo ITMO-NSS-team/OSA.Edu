@@ -14,7 +14,7 @@ export function RulesPage({ profile, rules, loading, onProfileChange }: Props) {
   const { language } = useLanguage();
   const labels = uiLabels(language);
   const t = language === "ru" ? {
-    title: "Правила", subtitle: "Полный реестр с источником, областью и способом проверки.", core: "Ядро", full: "Полный набор", search: "Поиск по ID или тексту правила", all: "Все категории", of: "из", loading: "Загрузка правил…", category: "Категория", check: "Проверка", scope: "Область", source: "Источник", line: "строка", correct: "Корректно", violation: "Нарушение", empty: "Ничего не найдено.",
+    title: "Правила", subtitle: "Полный реестр с источником, областью и способом проверки.", core: "Ядро", full: "Полный", search: "Поиск по ID или тексту правила", all: "Все категории", of: "из", loading: "Загрузка правил…", category: "Категория", check: "Проверка", scope: "Область", source: "Источник", line: "строка", correct: "Корректно", violation: "Нарушение", empty: "Ничего не найдено.",
   } : {
     title: "Rules", subtitle: "Complete rule registry with source, scope, and checking method.", core: "Core", full: "Full set", search: "Search by rule ID or text", all: "All categories", of: "of", loading: "Loading rules…", category: "Category", check: "Check", scope: "Scope", source: "Source", line: "line", correct: "Correct", violation: "Violation", empty: "Nothing found.",
   };
@@ -34,7 +34,7 @@ export function RulesPage({ profile, rules, loading, onProfileChange }: Props) {
     <div className="page-title">
       <div><h1>{t.title}</h1><p>{t.subtitle}</p></div>
       <select className="compact-select" value={profile} onChange={(event) => onProfileChange(event.target.value as CheckProfile)}>
-        <option value="core">{t.core}</option><option value="full">{t.full}</option>
+        <option value="full">{t.full}</option><option value="core">{t.core}</option><option value="itmo_master">ВКР ИТМО (магистратура)</option>
       </select>
     </div>
 
@@ -52,7 +52,7 @@ export function RulesPage({ profile, rules, loading, onProfileChange }: Props) {
         <div className="rule-body">
           <p>{rule.requirement}</p>
           <div className="meta-grid">
-            <span><b>{t.category}:</b> {rule.category}</span><span><b>{t.check}:</b> {labels.mode[rule.mode]}</span><span><b>{t.scope}:</b> {labels.scope[rule.scope]}</span><span><b>{t.source}:</b> {rule.sourceLabel}, {t.line} {rule.sourceLine}</span>
+            <span><b>{t.category}:</b> {rule.category}</span><span><b>{t.check}:</b> {labels.mode[rule.mode]}</span><span><b>{t.scope}:</b> {labels.scope[rule.scope]}</span><span><b>{t.source}:</b> {rule.sourceUrl ? <a href={rule.sourceUrl} target="_blank" rel="noreferrer">{rule.sourceLabel}</a> : rule.sourceLabel}{!rule.normativeReference && <>, {t.line} {rule.sourceLine}</>}</span>
           </div>
           {rule.correctExample && <div className="example good"><b>{t.correct}:</b> {rule.correctExample}</div>}
           {rule.incorrectExample && <div className="example bad"><b>{t.violation}:</b> {rule.incorrectExample}</div>}
