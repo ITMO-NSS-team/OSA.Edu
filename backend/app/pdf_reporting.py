@@ -25,6 +25,10 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from .rules.registry import profile_label
+from .itmo_coverage import coverage_lines
+from .evidence_presentation import evidence_groups, suggested_fix, source_label
+
 _STATUS_ORDER = ["violation", "pass", "uncertain", "not_checked", "not_applicable"]
 _STATUS_LABELS = {
     "violation": "Нарушено",
@@ -144,8 +148,11 @@ def _cover(
         [_p("Покрытие автоматических кандидатов", styles["metric_label"]), _p(f"{candidate_coverage}%", styles["metric_value"])],
         [_p("Классификация найденных обозначений", styles["metric_label"]), _p(f"{abbreviation_coverage}%", styles["metric_value"])],
         [_p("Полнота правил по обозначениям", styles["metric_label"]), _p(f"{abbreviation_rule_coverage}%", styles["metric_value"])],
-        [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "-", styles["metric_value"])],
+        [_p("Профиль", styles["metric_label"]), _p(profile_label(profile or report.get("profile")), styles["metric_value"])],
     ]
+    if report.get('coverageMetrics'):
+        rows = [row for row in rows if not any(label in str(row) for label in ('Покрытие автоматических кандидатов', 'Классификация найденных обозначений', 'Полнота правил по обозначениям'))]
+        rows += [[_p('Границы проверки', styles['metric_label']), _p(line, styles['metric_value'])] for line in coverage_lines(report)]
     metric_table = Table(rows, colWidths=[62 * mm, 112 * mm], hAlign="LEFT")
     metric_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F5F6F7")),
@@ -266,8 +273,8 @@ def _rule_result(result: dict[str, Any], rule: dict[str, Any] | None, styles: di
     items: list[Any] = [Spacer(1, 2.5 * mm), heading_table, Spacer(1, 2 * mm)]
     if rule:
         items.append(_label_value("Требование", str(rule.get("requirement", "")), styles))
-        source = str(rule.get("sourceLabel", ""))
-        if rule.get("sourceLine") is not None:
+        source = source_label(rule)
+        if rule.get("sourceLine") is not None and not rule.get("normativeReference"):
             source += f", строка {rule.get('sourceLine')}"
         items.append(_label_value("Источник", source, styles))
     items.append(_label_value("Результат", str(result.get("explanation", "")), styles))
@@ -329,49 +336,57 @@ def _rule_result(result: dict[str, Any], rule: dict[str, Any] | None, styles: di
     evidence = result.get("evidence") or []
     if evidence:
         items.extend([Spacer(1, 1.5 * mm), Paragraph("Доказательства", styles["subsection"])])
-        for item in evidence:
-            meta = str(item.get("location", ""))
-            if item.get("page"):
-                meta += f", стр. {item.get('page')}"
-            if item.get("start") is not None and item.get("end") is not None:
-                meta += f", символы {item.get('start')}–{item.get('end')}"
-            quote, shortened = _shorten(str(item.get("quote", "")), _MAX_QUOTE_CHARS)
-            token = str(item.get("token") or "").strip()
-            entity_kind = str(item.get("entityKind") or "").strip()
-            token_line = ""
-            if token:
-                token_line = f"<b>Обозначение:</b> {_safe(token)}" + (f" &nbsp; <b>Тип:</b> {_safe(entity_kind)}" if entity_kind else "") + "<br/>"
-            quote_text = token_line + f"<b>{_safe(meta)}</b><br/>{_safe(quote)}"
-            context = str(item.get("context") or "").strip()
-            if context and context != str(item.get("quote", "")).strip():
-                context_value, context_shortened = _shorten(context, min(_MAX_QUOTE_CHARS, 900))
-                quote_text += f"<br/><i>Контекст:</i> {_safe(context_value)}"
-                shortened = shortened or context_shortened
-            reason = str(item.get("reason") or "").strip()
-            if reason:
-                reason_value, reason_shortened = _shorten(reason, 600)
-                quote_text += f"<br/><i>Причина:</i> {_safe(reason_value)}"
-                shortened = shortened or reason_shortened
-            item_fix = str(item.get("fix") or "").strip()
-            if item_fix:
-                fix_value, fix_shortened = _shorten(item_fix, 600)
-                quote_text += f"<br/><i>Исправление:</i> {_safe(fix_value)}"
-                shortened = shortened or fix_shortened
-            if shortened:
-                quote_text += "<br/><i>Текст сокращён в PDF; полный вариант доступен в JSON/Markdown.</i>"
-            quote_table = Table([[Paragraph(quote_text, styles["quote"]) ]], colWidths=[170 * mm])
-            quote_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7F8F8")),
-                ("LINEBEFORE", (0, 0), (0, -1), 2, colors.HexColor("#BFC5CA")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ]))
-            items.extend([quote_table, Spacer(1, 1.5 * mm)])
+        for group in evidence_groups(evidence):
+            if group["count"] > 1:
+                items.append(Paragraph(_safe(f"Одинаковое отклонение: {group['count']} случаев; страницы: {group['pages']}"), styles["quote"]))
+            for item in group["items"]:
+                meta = str(item.get("location", ""))
+                if item.get("page"):
+                    meta += f", стр. {item.get('page')}"
+                if item.get("start") is not None and item.get("end") is not None:
+                    meta += f", символы {item.get('start')}–{item.get('end')}"
+                quote, shortened = _shorten(str(item.get("quote", "")), _MAX_QUOTE_CHARS)
+                token = str(item.get("token") or "").strip()
+                entity_kind = str(item.get("entityKind") or "").strip()
+                token_line = ""
+                if token:
+                    token_line = f"<b>Обозначение:</b> {_safe(token)}" + (f" &nbsp; <b>Тип:</b> {_safe(entity_kind)}" if entity_kind else "") + "<br/>"
+                quote_text = token_line + f"<b>{_safe(meta)}</b><br/>{_safe(quote)}"
+                context = str(item.get("context") or "").strip()
+                if context and context != str(item.get("quote", "")).strip():
+                    context_value, context_shortened = _shorten(context, min(_MAX_QUOTE_CHARS, 900))
+                    quote_text += f"<br/><i>Контекст:</i> {_safe(context_value)}"
+                    shortened = shortened or context_shortened
+                reason = str(item.get("reason") or "").strip()
+                if item.get('bbox'):
+                    quote_text += f"<br/><i>Координаты PDF, пт:</i> {_safe(str(item['bbox']))}"
+                if item.get('measurement'):
+                    quote_text += f"<br/><i>Измерение:</i> {_safe(str(item['measurement']))}"
+                if reason:
+                    reason_value, reason_shortened = _shorten(reason, 600)
+                    quote_text += f"<br/><i>Причина:</i> {_safe(reason_value)}"
+                    shortened = shortened or reason_shortened
+                item_fix = str(item.get("fix") or "").strip()
+                if item_fix:
+                    fix_value, fix_shortened = _shorten(item_fix, 600)
+                    quote_text += f"<br/><i>Исправление:</i> {_safe(fix_value)}"
+                    shortened = shortened or fix_shortened
+                if shortened:
+                    quote_text += "<br/><i>Текст сокращён в PDF; полный вариант доступен в JSON/Markdown.</i>"
+                quote_table = Table([[Paragraph(quote_text, styles["quote"]) ]], colWidths=[170 * mm])
+                quote_table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7F8F8")),
+                    ("LINEBEFORE", (0, 0), (0, -1), 2, colors.HexColor("#BFC5CA")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ]))
+                items.extend([quote_table, Spacer(1, 1.5 * mm)])
 
-    if result.get("fix"):
-        items.append(_label_value("Исправление", str(result.get("fix")), styles))
+    fix = suggested_fix(rule_id, result.get("fix")) if status == "violation" else str(result.get("fix") or "")
+    if fix:
+        items.append(_label_value("Как исправить", fix, styles))
     return items
 
 
@@ -383,7 +398,7 @@ def _technical_section(report: dict[str, Any], profile: str | None, styles: dict
         ["Версия приложения", technical.get("appVersion", "")],
         ["Провайдер API", technical.get("provider", "")],
         ["Model ID", technical.get("model", "")],
-        ["Профиль", "Ядро" if profile == "core" else "Полный набор" if profile == "full" else "-"],
+        ["Профиль", profile_label(profile or report.get("profile"))],
         ["Хеш промпта проверки", technical.get("promptHash", "")],
         ["Хеш промпта структуры", technical.get("mapPromptHash") or "-"],
         ["Физических запросов", usage.get("requests", 0)],

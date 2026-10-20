@@ -228,3 +228,46 @@ def enrich_rule_for_user(rule: dict[str, Any]) -> dict[str, Any]:
     if advice:
         result["relatedAdvice"] = advice
     return result
+
+
+_ITMO_FACT_LABELS = {
+    'content_matches_title': 'соответствие содержания теме',
+    'goal_tasks_match_title': 'соответствие цели и задач теме',
+    'results_and_scientific_propositions': 'результаты и научные положения',
+    'problem_formulated': 'формулировка проблемы', 'theoretical_depth': 'теоретическая проработка',
+    'research_orientation': 'исследовательская направленность',
+    'title_action': 'признак действия в названии', 'title_no_abbreviations': 'отсутствие сокращений в названии',
+    'relevance': 'актуальность', 'prior_research': 'степень разработанности', 'problem': 'решаемая проблема',
+    'goal': 'цель', 'tasks': 'задачи', 'practical_significance': 'практическая значимость',
+    'research_process': 'процесс исследования', 'methods_justified': 'методы исследования',
+    'results_described': 'описание результатов', 'chapters_solve_tasks': 'связь глав с задачами',
+    'logical_connections': 'логическая связь разделов', 'results_summarized': 'обобщение результатов',
+    'conclusions': 'выводы', 'recommendations': 'рекомендации', 'future_work': 'перспективы дальнейшей работы',
+    'conclusion_matches_tasks': 'согласованность заключения с задачами',
+    'academic_language': 'научный стиль', 'consistent_terminology': 'единая терминология',
+}
+
+
+def user_result_explanation(result: dict, rule: dict) -> str:
+    """Keep technical diagnostic records in developer reports only."""
+    if rule.get('layer') != 'itmo_master':
+        return clean_user_text(str(result.get('explanation') or ''))
+    if result.get('technicalIncomplete'):
+        return 'Проверка требования не завершена из-за технической ошибки. Необходим повтор или ручная проверка.'
+    if result.get('checkedBy') == 'required-facts':
+        return 'Не удалось надёжно определить необходимые разделы. Проверьте структуру документа и повторите проверку.'
+    decision = result.get('factDecision')
+    if decision:
+        names = list(dict.fromkeys(name for fragment in decision.get('fragments', [])
+                                   for name in fragment.get('details', [])))
+        labels = [_ITMO_FACT_LABELS.get(name, 'обязательный элемент содержания') for name in names]
+        if result.get('status') == 'violation':
+            return 'После проверки текста не подтверждены: '+', '.join(labels)+'.'
+        if result.get('status') == 'uncertain':
+            return 'Требуют ручной проверки: '+', '.join(labels)+'.'
+        if result.get('status') == 'pass':
+            return 'Обязательные элементы содержания подтверждены в проверенных разделах.'
+    text = clean_user_text(str(result.get('explanation') or ''))
+    for name, label in sorted(_ITMO_FACT_LABELS.items(), key=lambda pair: -len(pair[0])):
+        text = text.replace(name, label)
+    return text

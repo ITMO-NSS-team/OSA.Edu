@@ -55,7 +55,7 @@ class RuleEngineModel(BaseModel):
 class RuleManifestEntryModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    layer: Literal['core', 'soft']
+    layer: Literal['core', 'soft', 'itmo_master']
     sourceNumber: str
     scope: str
     severity: Literal['critical', 'major', 'minor', 'info']

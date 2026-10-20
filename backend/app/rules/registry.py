@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import csv
+import json
 import re
 from functools import lru_cache
 from io import StringIO
 from typing import Any
 
-from ..config import RULES_DIR
+from ..config import RULES_DIR, CONFIG_DIR
 from .manifest import load_rule_manifest, runtime_metadata
 
 # Search/report keywords are intentionally lexical. They do not influence runtime
@@ -17,6 +18,19 @@ STOP_WORDS = {
     'быть','может','должен','должна','должны','было','были','будет','будут','чтобы','этого','этой','этих','этом','такой',
     'такие','такого','требование','совет'
 }
+
+PROFILE_LABELS = {'full': 'Полный', 'core': 'Ядро', 'itmo_master': 'ВКР ИТМО (магистратура)'}
+
+
+def profile_label(profile: str | None) -> str:
+    return PROFILE_LABELS.get(profile or '', '—')
+
+
+def map_prompt_for_profile(prompt: str, profile: str) -> str:
+    if profile != 'itmo_master':
+        return prompt
+    guidance = (CONFIG_DIR / 'itmo_master' / 'map-guidance.txt').read_text(encoding='utf-8').strip()
+    return prompt if guidance in prompt else prompt + '\n\n' + guidance
 
 
 def tokenize(value: str) -> list[str]:
@@ -105,7 +119,13 @@ def load_rule_registry() -> dict[str, list[dict[str, Any]]]:
             incorrect=_empty(row[3]) if len(row) > 3 else None,
         ))
 
-    catalog_ids = {item['id'] for item in [*core, *soft]}
+    itmo = json.loads((CONFIG_DIR / 'itmo_master' / 'catalog.json').read_text(encoding='utf-8'))['rules']
+    automation = json.loads((CONFIG_DIR / 'itmo_master' / 'automation.json').read_text(encoding='utf-8'))
+    itmo = [{**item, **runtime_metadata(item['id']), 'keywords': tokenize(item['requirement']),
+             'automation': automation[item['id']],
+             'sourceUrl': f"/api/rule-sources/itmo_master.pdf#page={item['normativeReference']['pages'][0]}"}
+            for item in itmo]
+    catalog_ids = {item['id'] for item in [*core, *soft, *itmo]}
     manifest_ids = set(load_rule_manifest().rules)
     missing = sorted(catalog_ids - manifest_ids)
     orphan = sorted(manifest_ids - catalog_ids)
@@ -114,7 +134,7 @@ def load_rule_registry() -> dict[str, list[dict[str, Any]]]:
             'Rule catalog/manifest mismatch. '
             f'Missing in manifest: {missing[:10]}; orphan manifest entries: {orphan[:10]}.'
         )
-    return {'core': core, 'soft': soft, 'all': [*core, *soft]}
+    return {'core': core, 'soft': soft, 'all': [*core, *soft], 'itmo_master': itmo}
 
 
 def parse_user_rules(value: str) -> list[dict[str, Any]]:
@@ -144,5 +164,7 @@ def parse_user_rules(value: str) -> list[dict[str, Any]]:
 
 def rules_for_profile(profile: str, additional: str = '') -> list[dict[str, Any]]:
     registry = load_rule_registry()
-    base = registry['all'] if profile == 'full' else registry['core']
+    if profile not in PROFILE_LABELS:
+        raise ValueError(f'Unknown rule profile: {profile}')
+    base = registry['all'] if profile == 'full' else registry[profile]
     return [*base, *parse_user_rules(additional)]

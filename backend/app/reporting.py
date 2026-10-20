@@ -7,6 +7,8 @@ from typing import Any
 from .config import APP_VERSION
 from .util import normalized_quote
 from .user_facing import enrich_rule_for_user
+from .rules.registry import profile_label
+from .itmo_coverage import coverage_metrics, coverage_lines, reason_for
 
 SCORE_FAMILIES = [
     ["CORE-5-4", "CORE-7-2", "CORE-19"],
@@ -134,11 +136,17 @@ def make_report(
     routing: dict[str, Any],
     technical_input: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    profile = (technical_input or {}).get("profile")
+    if not profile and rules and all(r.get("layer") == "itmo_master" for r in rules):
+        profile = "itmo_master"
     dedup_by_rule = {str(rule.get("id")): rule.get("dedupKey") for rule in rules}
     prepared = _link_related_violations([
         {**result, **({"dedupKey": dedup_by_rule.get(str(result.get("ruleId")))} if dedup_by_rule.get(str(result.get("ruleId"))) else {})}
         for result in results
     ])
+    if profile == 'itmo_master':
+        by_id = {r['id']: r for r in rules}
+        prepared = [{**r, 'assessmentReason': reason_for(by_id.get(r['ruleId'], {}), r)} for r in prepared]
     count = lambda status: sum(1 for x in prepared if x.get("status") == status)
     violations = [x for x in prepared if x.get("status") == "violation"]
     applicable = [x for x in prepared if x.get("status") != "not_applicable"]
@@ -212,6 +220,7 @@ def make_report(
         "performance": technical_input.get("performance") or {},
     }
     catalog_keys = ["id", "category", "title", "requirement", "sourceLabel", "sourceLine", "mode", "scope", "severity", "dedupKey", "candidateFamily", "correctExample", "incorrectExample"]
+    catalog_keys += ["layer", "normativeReference", "sourceUrl", "obligation", "condition", "limitations", "verificationMethod", "automation"]
     issue_groups: dict[str, dict[str, Any]] = {}
     for result in violations:
         key = str(result.get("dedupKey") or result.get("ruleId"))
@@ -228,10 +237,13 @@ def make_report(
         "ruleCatalog": [enrich_rule_for_user({k: rule.get(k) for k in catalog_keys if rule.get(k) is not None}) for rule in rules],
         "issueGroups": list(issue_groups.values()),
         "summary": summary,
+        "profile": profile,
+        "profileLabel": profile_label(profile),
         "score": score,
         "scoreIsProvisional": score is not None and (coverage < 0.9 or health.get("status") != "ready"),
         "reportHealth": health,
         "coverage": coverage,
+        **({'coverageMetrics': coverage_metrics(rules, prepared)} if profile == 'itmo_master' else {}),
         "candidateCoverage": candidate_coverage,
         "automaticCandidateCoverage": candidate_coverage,
         "abbreviationCoverage": abbreviation_coverage,
@@ -288,6 +300,7 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
     catalog = {x.get("id"): x for x in report.get("ruleCatalog", [])}
     lines = [
         f"# Протокол нормоконтроля — {name}", "",
+        f"**Набор правил:** {report.get('profileLabel', '—')}",
         f"**Статус отчёта:** {(report.get('reportHealth') or {}).get('label', '—')}",
         *([f"**Почему:** {' '.join((report.get('reportHealth') or {}).get('reasons', []))}"] if (report.get('reportHealth') or {}).get('reasons') else []),
         f"**Оценка по проверенным правилам:** {score}",
@@ -299,6 +312,10 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
         "> Оценка не является решением о допуске к защите. Смысловые замечания и исправления необходимо проверить вручную.", "",
         "## Краткий итог", str(report.get("summary", "")), "",
     ]
+    if report.get('coverageMetrics'):
+        # The legacy candidate/abbreviation metrics do not describe this profile.
+        lines = [line for line in lines if not any(label in line for label in ('Покрытие автоматических кандидатов', 'Классификация найденных обозначений', 'Полнота применения правил к обозначениям'))]
+        lines += [*coverage_lines(report), '']
 
     document_map = report.get("documentMap")
     if document_map:
@@ -334,7 +351,7 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
             lines += [f"### {result.get('ruleId')}{' — ' + str(rule.get('title')) if rule else ''}", ""]
             if rule:
                 lines.append(f"- **Требование:** {rule.get('requirement','')}")
-                lines.append(f"- **Источник:** {rule.get('sourceLabel','')}, строка {rule.get('sourceLine','')}")
+                lines.append(f"- **Источник:** {rule.get('sourceLabel','')}" + ("" if rule.get("normativeReference") else f", строка {rule.get('sourceLine','')}"))
             lines.append(f"- **Результат:** {result.get('explanation','')}")
             lines.append(f"- **Проверено:** {result.get('checkedBy','')}")
             lines.append(f"- **Проверка доказательств:** {_evidence_status(result.get('evidenceStatus'))}")
@@ -386,6 +403,10 @@ def report_to_markdown(name: str, report: dict[str, Any]) -> str:
                         lines.append(f"    - Контекст: «{evidence.get('context')}»")
                     if evidence.get("reason"):
                         lines.append(f"    - Причина: {evidence.get('reason')}")
+                    if evidence.get('bbox'):
+                        lines.append(f"    - Координаты PDF, пт: {evidence['bbox']}")
+                    if evidence.get('measurement'):
+                        lines.append(f"    - Измерение: {evidence['measurement']}")
                     if evidence.get("fix"):
                         lines.append(f"    - Исправление: {evidence.get('fix')}")
             if result.get("fix"):
