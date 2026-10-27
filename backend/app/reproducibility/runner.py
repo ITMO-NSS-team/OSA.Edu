@@ -13,6 +13,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import urlparse
 
 from ..llm.host_llm import DEFAULT_HOST_LLM_MODEL
 
@@ -84,6 +85,47 @@ def configured_base_url() -> str:
     return base
 
 
+PDF_PARSERS = {"edu", "mistral-ocr", "cloudflare-ai"}
+
+
+def remote_parser_missing_dependencies() -> list[str]:
+    """Extra modules available with the optional OSA paper-claims dependency set."""
+    return [package for package in ("pypdf", "markdown_it") if importlib.util.find_spec(package) is None]
+
+
+def configured_pdf_parser() -> str:
+    """Use Edu's lightweight local text-layer adapter by default."""
+    selected = os.getenv("REPRODUCIBILITY_PDF_PARSER", "edu").strip().lower() or "edu"
+    if selected not in PDF_PARSERS:
+        raise OsaRunError("REPRODUCIBILITY_PDF_PARSER должен быть одним из: edu, mistral-ocr, cloudflare-ai.")
+    if selected != "edu":
+        if use_host_llm():
+            raise OsaRunError(
+                f"{selected} требует OpenRouter (REPRODUCIBILITY_USE_HOST_LLM=false) "
+                "и пакет osa_tool[paper-claims]. Для локального парсинга выберите edu."
+            )
+        base_host = (urlparse(configured_base_url()).hostname or "").lower()
+        if base_host != "openrouter.ai" and not base_host.endswith(".openrouter.ai"):
+            raise OsaRunError(f"{selected} поддерживает только OpenRouter PDF API; проверьте REPRODUCIBILITY_BASE_URL.")
+    return selected
+
+
+def parser_readiness() -> tuple[str | None, str | None]:
+    """Return selected mode and a human-readable blocking error, if any."""
+    try:
+        parser = configured_pdf_parser()
+    except OsaRunError as exc:
+        return None, str(exc)
+    if parser != "edu":
+        missing = remote_parser_missing_dependencies()
+        if missing:
+            return parser, (
+                f"Для {parser} отсутствуют зависимости: {', '.join(missing)}. "
+                "Установите OSA с extra [paper-claims] (Marker необязателен)."
+            )
+    return parser, None
+
+
 def _osa_cli_args(repository: str, paper_path: Path, output_dir: Path, *, mode: str = "full", claims_path: Path | None = None) -> list[str]:
     model = configured_model()
     args = [
@@ -109,12 +151,15 @@ def _osa_cli_args(repository: str, paper_path: Path, output_dir: Path, *, mode: 
         "--max-retries",
         os.getenv("REPRODUCIBILITY_LLM_MAX_RETRIES", "3"),
     ]
+    parser = configured_pdf_parser() if mode != "verification-only" else "edu"
     if mode == "verification-only":
         if not claims_path:
             raise OsaRunError("Для возобновления проверки не найден claims.json.")
         args.extend(["--claims-json", str(claims_path)])
     else:
         args.extend(["--paper", str(paper_path)])
+        if parser != "edu":
+            args.extend(["--pdf-parser", parser])
     return args
 
 
@@ -129,6 +174,7 @@ def build_osa_command(repository: str, paper_path: Path, output_dir: Path, *, mo
             "output": str(output_dir),
             "model": model,
             "base_url": configured_base_url(),
+            "pdf_parser": configured_pdf_parser() if mode != "verification-only" else "edu",
             "mode": mode,
             "claims": str(claims_path) if claims_path else "",
         }
@@ -229,6 +275,12 @@ def _parse_progress(line: str) -> tuple[int, str] | None:
 
     if "Stage 1/4: starting PDF splitting" in clean:
         return 26, "OSA: разбивает PDF на части."
+    remote = re.search(r"Parsing chunk (\d+)/(\d+) with (mistral-ocr|cloudflare-ai)", clean, re.IGNORECASE)
+    if remote:
+        current, total = int(remote.group(1)), max(1, int(remote.group(2)))
+        return 28 + round((current - 1) / total * 13), f"OSA {remote.group(3)}: часть {current}/{total}."
+    if "Stage 2/4: starting PDF conversion" in clean:
+        return 28, "OSA: преобразуем PDF в Markdown."
     if "Stage 2/4: starting Marker conversion" in clean:
         return 28, "OSA Marker: преобразуем PDF в Markdown."
 
@@ -401,6 +453,7 @@ async def run_osa_analysis(
             f"[OSA.Edu] Paper: {paper_path}",
             f"[OSA.Edu] Paper display name: {paper_for_display}",
             f"[OSA.Edu] Mode: {mode}",
+            f"[OSA.Edu] PDF parser: {configured_pdf_parser() if mode != 'verification-only' else 'resumed claims'}",
             f"[OSA.Edu] Claims path: {claims_path}" if claims_path else "[OSA.Edu] Claims path: -",
         ]
         for line in header:

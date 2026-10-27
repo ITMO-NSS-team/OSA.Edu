@@ -18,7 +18,9 @@ from ..llm.host_llm import host_provider_status
 from ..util import now_iso
 from .diagnostics import llm_access, repository_access, runtime_status
 from .job_queue import cancel_reproducibility_job, start_reproducibility_queue
-from .runner import configured_base_url, configured_model, osa_installed, use_host_llm
+from .runner import (OsaRunError, configured_base_url, configured_model,
+                     configured_pdf_parser, parser_readiness,
+                     osa_installed, use_host_llm)
 from .store import (
     create_reproducibility_job,
     delete_reproducibility_job,
@@ -224,8 +226,11 @@ async def reproducibility_status():
     host_mode = use_host_llm()
     llm_configured, host_status = await _llm_ready_status()
     runtime = await asyncio.to_thread(runtime_status, include_cuda=False)
+    pdf_parser, parser_error = parser_readiness()
     return {
-        "ok": osa_installed() and llm_configured and bool(runtime.get("pythonSupportedForPaperClaims")) and bool(runtime.get("git", {}).get("installed")),
+        "ok": not parser_error and osa_installed() and llm_configured and bool(runtime.get("pythonSupportedForPaperClaims")) and bool(runtime.get("git", {}).get("installed")),
+        "pdfParser": pdf_parser,
+        "pdfParserError": parser_error,
         "osaInstalled": osa_installed(),
         "osaVersion": runtime.get("osaVersion"),
         "llmConfigured": llm_configured,
@@ -255,7 +260,15 @@ async def reproducibility_preflight(repository: str):
     runtime, repo, llm = await asyncio.gather(runtime_task, repository_task, llm_task)
 
     git = runtime.get("git", {})
+    pdf_parser, parser_error = parser_readiness()
     checks = [
+        {
+            "id": "pdf-parser",
+            "label": "PDF-парсер",
+            "ok": parser_error is None,
+            "blocking": True,
+            "detail": parser_error or f"Режим: {pdf_parser}. Marker не требуется.",
+        },
         {
             "id": "osa",
             "label": "OSA",
@@ -387,6 +400,11 @@ async def create_reproducibility_job_endpoint(
     if repository_error:
         await file.close()
         return _error(400, repository_error)
+
+    _pdf_parser, parser_error = parser_readiness()
+    if parser_error:
+        await file.close()
+        return _error(400, parser_error)
 
     if not osa_installed():
         await file.close()

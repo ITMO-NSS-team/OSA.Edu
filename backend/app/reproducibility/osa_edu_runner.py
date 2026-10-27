@@ -7,13 +7,19 @@ import runpy
 import sys
 from pathlib import Path
 
-from .runner import PROGRESS_PREFIX, use_host_llm
+from .runner import PROGRESS_PREFIX, use_host_llm, configured_pdf_parser
 from .thesis_parser import PROMPTS_DIR, write_thesis_sections
 
 
 def prepare_arguments(arguments: list[str]) -> list[str]:
     arguments = list(arguments)
-    if "--paper" in arguments:
+    # Honor an explicitly supplied upstream parser (custom CLI integration).
+    explicit_remote = (
+        "--pdf-parser" in arguments
+        and arguments.index("--pdf-parser") + 1 < len(arguments)
+        and arguments[arguments.index("--pdf-parser") + 1] in {"mistral-ocr", "cloudflare-ai"}
+    )
+    if "--paper" in arguments and not explicit_remote and configured_pdf_parser() == "edu":
         index = arguments.index("--paper")
         paper = Path(arguments[index + 1])
         output = Path(arguments[arguments.index("--paper-output-dir") + 1])
