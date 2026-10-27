@@ -3,6 +3,8 @@ import type {
   Health,
   Job,
   LiteratureJob,
+  LanguageJob,
+  LanguageResult,
   NormControlJob,
   NormControlServerStatus,
   ReproducibilityJob,
@@ -134,6 +136,14 @@ export const api = {
   reportJsonUrl: (id: string) => `${API}/api/jobs/${id}/report.json`,
   normControlReportPdfUrl: (id: string) =>
     `${API}/api/normcontrol/jobs/${id}/report.pdf`,
+  languageJobs: () => request<LanguageJob[]>("/api/language/jobs"),
+  createLanguageJob: (body: FormData) => request<LanguageJob>("/api/language/jobs", { method: "POST", body }),
+  cancelLanguageJob: (id: string) => request<LanguageJob>(`/api/language/jobs/${id}/cancel`, { method: "POST" }),
+  retryLanguageJob: (id: string) => request<LanguageJob>(`/api/language/jobs/${id}/retry`, { method: "POST" }),
+  deleteLanguageJob: (id: string) => request<void>(`/api/language/jobs/${id}`, { method: "DELETE" }),
+  languageReportPdfUrl: (id: string) => `${API}/api/language/jobs/${id}/report.pdf`,
+  languageReportJsonUrl: (id: string) => `${API}/api/language/jobs/${id}/report.json`,
+  languageReport: (id: string) => request<LanguageResult>(`/api/language/jobs/${id}/report.json`),
   literatureJobs: () => request<LiteratureJob[]>("/api/literature/jobs"),
   createLiteratureJobs: (body: FormData) =>
     request<LiteratureJob[]>("/api/literature/jobs", { method: "POST", body }),

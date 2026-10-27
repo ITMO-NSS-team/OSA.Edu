@@ -425,6 +425,35 @@ def _code_explanation(rule,document):
     return _uncertain(rule, 'Найдены фрагменты кода. Подробность и соответствие русского описания назначению кода требуют смысловой проверки; наличие соседних слов не доказывает выполнение правила.')
 
 
+def _subject_chapter_headings(rule, document):
+    """Find only high-confidence, generic *numbered chapter* titles.
+
+    Does not judge topical appropriateness of every chapter (semantic task),
+    and never treats Introduction/Conclusion as needing a specific title.
+    """
+    blocks = {str(b.get('id')): b for b in document.get('blocks', [])}
+    chapters = [el for el in (document.get('map') or {}).get('elements', [])
+                if el.get('type') == 'chapter']
+    if not chapters:
+        return _uncertain(rule, 'Нет подтверждённого списка основных глав, поэтому их названия не проверены.')
+    problematic = {'обзор предметной области', 'исследование предметной области', 'метод', 'эксперименты'}
+    flagged = []
+    for el in chapters:
+        title = (el.get('label') or '').strip()
+        title = re.sub(r'^\s*(?:глава\s*)?\d+(?:\.\d+)*[.):]?\s*', '', title, flags=re.I)
+        title = re.sub(r'\s+', ' ', title).strip(' .–—-:').lower()
+        if title in problematic:
+            block = blocks.get(str(el.get('startBlockId') or ''))
+            if block and title in (block.get('text') or '').lower():
+                flagged.append(evidence(block, block['text']))
+    if flagged:
+        return _violation(rule, 'Обнаружены нумерованные главы с заведомо общими названиями: '
+                          'это авторская рекомендация Шалыто (п. 4.10).',
+                          flagged[:12], 'Назвать главу по конкретной задаче, методу или эксперименту работы.')
+    return _uncertain(rule, 'Среди подтверждённых названий глав не найдено заведомо общих формулировок; '
+                      'содержательность остальных названий не доказана.')
+
+
 def _heading_periods(rule,document):
     ev=[evidence(b,b['text']) for b in _main_work_blocks(document) if (b.get('type')=='heading' or is_actual_caption(b)) and b.get('text','').strip().endswith('.')]
     return _violation(rule,'В конце заголовка или подписи стоит точка.',ev[:15],'Убрать точку.') if ev else _pass(rule,'В распознанных заголовках и подписях лишние точки не обнаружены.')
@@ -437,6 +466,7 @@ def run_structural(rule:dict,document:dict,routing_fragments:list[dict]|None=Non
         return _uncertain(rule,'Автоматическая проверка аббревиатур временно отключена: текущий детектор недостаточно надёжен для категорического вывода.')
     if rid == 'SOFT-055': return combined_abbreviation_rules(rule,document)
     if rid in {'SOFT-056','SOFT-077','SOFT-151'}: return run_abbreviation_check(rule,document)
+    if rid=='SOFT-164': return _subject_chapter_headings(rule,document)
     if rid=='CORE-1-6': return _positions_chapters(rule,document,routing_fragments)
     if rid=='SOFT-026': return _defense_section(rule,document)
     if rid in {'CORE-5-3','SOFT-062'}: return _chapters_new_page(rule,document)

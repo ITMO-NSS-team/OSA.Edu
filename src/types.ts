@@ -135,3 +135,64 @@ export interface RepositoryQualityStatus {
 export interface RepositoryQualityPreflightCheck { id: string; label: string; ok: boolean; blocking: boolean; detail: string; }
 export interface RepositoryQualityPreflight { ok: boolean; checks: RepositoryQualityPreflightCheck[]; warnings: string[]; model: string; baseUrl: string; }
 export interface RepositoryQualityLog { text: string; available: boolean; size: number; truncated?: boolean; }
+
+/** Independent review of spelling/grammar/syntax/punctuation and optional style. */
+export type LanguageCategory = "spelling" | "grammar" | "syntax" | "punctuation" | "style";
+export type LanguageJobStatus = "queued" | "running" | "cancelling" | "done" | "partial" | "failed" | "cancelled";
+export interface LanguageFinding {
+  id: string;
+  page: number;
+  fragmentId: string;
+  category: LanguageCategory;
+  categoryLabel: string;
+  quote: string;
+  replacement: string;
+  explanation: string;
+  confidence?: number;
+  status: "suggested" | "disputed";
+  context?: string;
+  contextBefore?: string;
+  contextAfter?: string;
+  originalSentence?: string;
+  correctedSentence?: string;
+  source?: {blockId: string; page?: number; start?: number; end?: number; order?: number; bbox?: number[]};
+  validation?: {technical: boolean; semantic: "pending" | "accept" | "reject" | "uncertain"; reason?: string; method?: string};
+  disputeReason?: string;
+}
+export interface LanguageResult {
+  issues: LanguageFinding[];
+  disputed?: LanguageFinding[];
+  schemaVersion?: number;
+  status?: "complete" | "partial" | "cancelled";
+  resumable?: boolean;
+  coverage?: {checkedCharacters: number; totalCharacters: number; ratio: number; uncheckedPages: number[]};
+  uncheckedFragments?: Array<{id: string; chunk: number; fragmentIds: string[]; pages: number[]; characters: number; kind: string; message: string}>;
+  counts: Partial<Record<LanguageCategory, number>>;
+  totalIssues: number;
+  styleEnabled: boolean;
+  model: string;
+  totalChunks: number;
+  checkedChunks: number;
+  complete: boolean;
+  warnings: string[];
+  errors: Array<{chunk: number; message: string; kind?: string; pages?: number[]}>;
+  rejectedModelSuggestions: number;
+  extraction: {pageCount: number; emptyPages: number[]; analyzableFragments: number; omittedBlocks: Record<string, number>; analyzableCharacters: number};
+  usage: {requests?: number; retries?: number; estimatedInputTokens?: number; actualInputTokens?: number; actualOutputTokens?: number; actualCostUsd?: number; requestDurationMs?: number};
+}
+export interface LanguageJob {
+  id: string;
+  originalName: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+  status: LanguageJobStatus;
+  model: string;
+  styleEnabled: boolean;
+  includeDisputed?: boolean;
+  canResume?: boolean;
+  progress: number;
+  progressMessage: string;
+  result: LanguageResult | null;
+  error: string | null;
+}
