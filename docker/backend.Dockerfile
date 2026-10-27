@@ -6,6 +6,10 @@ ENV PORT=8787
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core fonts-dejavu-extra hunspell-ru \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
@@ -13,6 +17,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY backend ./backend
 COPY config ./config
 COPY rules-data ./rules-data
+
+RUN python -m backend.app.language.check_environment
 
 EXPOSE 8787
 

@@ -3,6 +3,7 @@ import { api } from "./api";
 import { LanguageContext, type UiLanguage } from "./i18n";
 import { CheckPage } from "./components/CheckPage";
 import { LiteraturePage } from "./components/LiteraturePage";
+import { LanguagePage } from "./components/LanguagePage";
 import { NormControlPage } from "./components/NormControlPage";
 import { PromptPage } from "./components/PromptPage";
 import { ReportsPage } from "./components/ReportsPage";
@@ -21,6 +22,7 @@ type Page =
   | "check"
   | "normcontrol"
   | "literature"
+  | "language"
   | "reproducibility"
   | "repository-quality"
   | "prompt"
@@ -106,6 +108,7 @@ export default function App() {
     reports: "Отчёты",
     norm: "Нормоконтроль",
     literature: "Проверка литературы",
+    languageReview: "Проверка языка",
     reproducibility: "Проверка воспроизводимости",
     repositoryQuality: "Качество репозитория",
   } : {
@@ -121,6 +124,7 @@ export default function App() {
     reports: "Reports",
     norm: "Formal review",
     literature: "Literature check",
+    languageReview: "Language review",
     reproducibility: "Reproducibility",
     repositoryQuality: "Repository quality",
   };
@@ -147,6 +151,7 @@ export default function App() {
         <div className="nav-group nav-group-secondary">
           <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>{copy.norm}{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
           <NavButton active={page === "literature"} onClick={() => setPage("literature")}>{copy.literature}</NavButton>
+          <NavButton active={page === "language"} onClick={() => setPage("language")}>{copy.languageReview}</NavButton>
           <NavButton active={page === "reproducibility"} onClick={() => setPage("reproducibility")}>{copy.reproducibility}</NavButton>
           <NavButton active={page === "repository-quality"} onClick={() => setPage("repository-quality")}>{copy.repositoryQuality}</NavButton>
         </div>
@@ -166,6 +171,7 @@ export default function App() {
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
     <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
+    {page === "language" && <LanguagePage models={health.models} configured={health.configured} />}
     {page === "reproducibility" && <ReproducibilityPage />}
     {page === "repository-quality" && <RepositoryQualityPage />}
 

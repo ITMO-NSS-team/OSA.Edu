@@ -169,25 +169,29 @@ def _yo(rule,document):
     return result(rule,'violation','Обнаружены высокоуверенные слова, где требуется буква «ё».',ev,.99,'detector','Исправить конкретные найденные слова.') if ev else result(rule,'pass','Высокоуверенные замены е/ё не обнаружены.',confidence=.98)
 
 
-def _quote_consistency(rule,document):
-    variants={}
-    for b in narrative_blocks(document):
-        text=b['text']
-        for name,p in [('ёлочки',r'«[^»]{2,}»'),('английские',r'“[^”]{2,}”'),('немецкие',r'„[^“]{2,}“'),('прямые двойные',r'"[^"\n]{2,}"')]:
-            m=re.search(p,text)
-            if m and name not in variants:
-                q=contextual(text,m.start(),len(m.group()))
-                if name=='прямые двойные':
-                    if is_code_or_prompt(q):
-                        continue
-                    around=text[max(0,m.start()-100):min(len(text),m.end()+100)]
-                    numbers=len(re.findall(r'(?<!\p{L})\d+(?:[.,]\d+)?%?',around))
-                    prose_words=len(re.findall(r'[А-ЯЁа-яё]{3,}',around))
-                    if numbers >= 10 and numbers >= prose_words * 1.2:
-                        continue
-                variants[name]=evidence(b,q)
-    if len(variants)<=1: return result(rule,'pass','В основном тексте не обнаружено смешения нескольких типов кавычек.',confidence=.98)
-    return result(rule,'violation','Обнаружено несколько типов кавычек: '+', '.join(variants)+'.',list(variants.values()),.99,'detector','Выбрать один тип кавычек.')
+def _quote_consistency(rule, document):
+    """Check only demonstrably untypographic *prose* quotation marks.
+
+    «Outer „inner“ outer» is correct in Russian; valid nesting must not cause
+    a false positive merely because two glyph families appear on the page.
+    """
+    suspicious = []
+    for block in narrative_blocks(document):
+        value = block.get('text', '')
+        for match in re.finditer(r'(?<![=\w])"[^"\n]{2,120}"', value):
+            q = contextual(value, match.start(), len(match.group()))
+            if is_code_or_prompt(q) or is_likely_table_context(q):
+                continue
+            # Reject ambiguous tokenization and English-only snippets.
+            if not re.search(r'[А-ЯЁа-яё]', match.group()):
+                continue
+            suspicious.append(evidence(block, q))
+    suspicious = dedupe_evidence(suspicious)[:12]
+    if suspicious and document.get('sourceFormat') == 'pdf':
+        return result(rule, 'uncertain', 'В PDF найдены прямые кавычки; текстовый слой может не сохранять исходные типографские знаки.', suspicious, 0, 'detector')
+    if suspicious:
+        return result(rule, 'violation', 'В русском связном тексте использованы прямые кавычки вместо типографских.', suspicious, .95, 'detector', 'Использовать «ёлочки», а при вложенной цитате — „лапки“.')
+    return result(rule, 'uncertain', 'Явных прямых кавычек в русской прозе не обнаружено, но полнота проверки кавычек и вложенности не доказана.', confidence=0)
 
 
 def _list_cap(rule,document):
@@ -317,7 +321,7 @@ def _dash(rule,document):
     ev=dedupe_evidence(ev)[:12]
     if not ev: return result(rule,'pass','Высокоуверенные нарушения различия тире и дефиса не обнаружены.',confidence=.98)
     if document.get('sourceFormat')=='pdf': return result(rule,'uncertain','В PDF найдены возможные нарушения тире, но извлечение может терять пробелы.',ev,0,'detector')
-    return result(rule,'violation','В DOCX обнаружено тире без требуемых пробелов либо дефис вместо тире.',ev,1,'detector','Использовать среднее тире «–» с пробелами.')
+    return result(rule,'violation','В DOCX обнаружено тире без требуемых пробелов либо дефис вместо тире.',ev,1,'detector','Отделять тире пробелами, а дефис использовать внутри сложных слов без пробелов.')
 
 
 def _generic(rule,document,detector):

@@ -115,5 +115,10 @@ def enforce_verdict_contracts(results: list[dict[str, Any]], *, rules: list[dict
         failure = required_fact_failure(rule, fact_store) if fact_store is not None else None
         if failure and item.get('status') in {'pass', 'violation'}:
             item = failure
+        # Some Shalyto recommendations describe a preferred practice but are
+        # not universal obligations. Keep the observation, not a normative FAIL.
+        routing = rule.get('routing') or {}
+        if item.get('status') == 'violation' and routing.get('allowViolation') is False:
+            item = _downgrade(item, routing.get('reason') or 'Авторская рекомендация не является обязательным нормативом.')
         out.append(enforce_verdict_contract(item))
     return out

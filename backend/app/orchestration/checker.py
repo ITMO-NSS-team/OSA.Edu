@@ -52,7 +52,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
     for routed in routing['routed']:
         st=routed['strategy']; rule=routed['rule']
         prerequisite = required_fact_failure(rule, fact_store)
-        if prerequisite and st not in {'manual', 'unavailable'}:
+        if prerequisite and st not in {'manual', 'unavailable', 'not_applicable', 'applicability_unknown'}:
             local[rule['id']] = prerequisite
             continue
         if st in {'deterministic', 'structural'} and 'notations' in (rule.get('globalFactKeys') or []):
@@ -76,8 +76,16 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             except Exception as exc:
                 warnings.append(f"{rule['id']}: structural checker завершился ошибкой: {exc}")
                 local[rule['id']]=technical_rule_result(rule,'structural',exc)
-        elif st=='manual':
+        elif st in {'manual', 'not_applicable'}:
             local[rule['id']]=_manual(rule,routed.get('reason'))
+        elif st=='applicability_unknown':
+            local[rule['id']]={
+                'ruleId': rule['id'], 'status': 'uncertain',
+                'severity': rule.get('severity', 'major'),
+                'explanation': routed.get('reason') or 'Уровень работы не подтверждён.',
+                'confidence': 0, 'evidence': [], 'evidenceStatus': 'not_required',
+                'checkedBy': 'applicability', 'coverage': {'exhaustive': False},
+            }
         elif st=='unavailable':
             local[rule['id']]=_not_checked(rule,routed.get('reason') or 'Надёжная автоматическая проверка недоступна.')
         elif st=='candidate':

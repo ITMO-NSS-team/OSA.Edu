@@ -204,7 +204,10 @@ def run_bibliography_rule(rule:dict,document:dict)->dict:
     ev=[]
     patterns=[]
     if rid=='CORE-9-2': patterns=[r'\bISBN\b',r'\bed\.\s+by\b',r'\s&\s',r'\b[A-ZА-ЯЁ][\p{L}-]+,\s+[A-ZА-ЯЁ]\.']
-    elif rid=='CORE-9-3': patterns=[r'\bp\.\s*\d+(?:\s*[-–—]\s*\d+)?\b']
+    elif rid=='CORE-9-3':
+        # p. 654 is valid for a one-page citation; p. 654-660 is a range
+        # and should normally use pp.  Never flag a singleton p. N.
+        patterns=[r'\bp\.\s*\d+\s*[-–—]\s*\d+\b']
     for b in blocks:
         if rid=='CORE-9-2':
             text=b.get('text','')

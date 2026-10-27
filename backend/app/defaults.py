@@ -15,6 +15,7 @@ DEFAULT_PROFILE = 'core'
 
 MODELS = [
     {'id':'gpt-5.6-luna','label':'GPT-5.6 Luna · подписка','provider':'host','tier':'production','contextTokens':128_000,'note':'Host bridge или совместимая локальная команда; отдельный API-ключ не нужен.','recommended':True},
+    {'id':'openai/gpt-6-luna','label':'GPT-6 Luna · API','provider':'openrouter','tier':'production','contextTokens':1_050_000,'note':'Экономичная модель OpenAI через OpenRouter; требуется OPENROUTER_API_KEY.'},
     {'id':'nvidia/nemotron-3-super-120b-a12b:free','label':'Nemotron 3 Super · бесплатно','provider':'openrouter','tier':'free','contextTokens':1_000_000,'note':'Фиксированная бесплатная модель с контекстом 1 млн токенов.'},
     {'id':'nvidia/nemotron-3-ultra-550b-a55b:free','label':'Nemotron 3 Ultra · бесплатно','provider':'openrouter','tier':'free','contextTokens':1_000_000,'note':'Более крупная бесплатная модель для сложной структуры и смысловой проверки.'},
     {'id':'openrouter/free','label':'OpenRouter Free Router · бесплатно','provider':'openrouter','tier':'free','contextTokens':200_000,'note':'OpenRouter автоматически выбирает доступную бесплатную модель.'},
