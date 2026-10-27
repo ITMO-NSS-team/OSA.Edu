@@ -37,20 +37,37 @@ def _canonical_url(url: str) -> str:
         return url.strip().rstrip("/").lower()
 
 
+def _full_name_author_surnames(prefix: str) -> list[str]:
+    names: list[str] = []
+    chunks = re.split(r"\s*;\s*|,\s+(?:and\s+)?|\s+and\s+|\s+и\s+", prefix.strip(" .,;:"))
+    for chunk in chunks:
+        value = chunk.strip(" .")
+        if not value or re.fullmatch(r"et\s+al", value, flags=re.I):
+            continue
+        initial_surname = re.fullmatch(
+            r"(?:[A-ZА-ЯЁ]\.\s*){1,4}([A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’\-]{1,60})",
+            value,
+        )
+        if initial_surname:
+            names.append(initial_surname.group(1))
+            continue
+        words = re.findall(r"[A-ZА-ЯЁÀ-ÖØ-Þ][A-Za-zА-Яа-яЁёÀ-ÖØ-öø-ÿ'’\-]+", value)
+        if len(words) >= 2:
+            names.append(words[-1])
+    return names
+
+
 def _citation_author_surnames(reference: str, cited_title: str) -> set[str]:
     prefix = reference
     if cited_title and cited_title in reference:
         prefix = reference.split(cited_title, 1)[0]
-    # In inverted Russian/English citation styles surnames are the tokens directly
-    # before initials. This deliberately avoids treating title words as authors.
-    names = re.findall(r"\b([A-ZА-ЯЁ][A-Za-zА-Яа-яЁё'’\-]{1,50})\s+(?=[A-ZА-ЯЁ](?:\.|\s+[A-ZА-ЯЁ]\.))", prefix)
+    # Full-name lists such as `Tom B. Brown, ...` should yield Brown, not
+    # the partial inverted-style match `Tom`.
+    names = _full_name_author_surnames(prefix)
     if not names:
-        # Full-name style: `Tom B. Brown, Dandelion Mané, ...`.
-        chunks = re.split(r",\s+(?:and\s+)?|\s+and\s+", prefix.strip(" .,"))
-        for chunk in chunks:
-            words = re.findall(r"[A-Z][A-Za-zÀ-ÖØ-öø-ÿ'’\-]+", chunk)
-            if words:
-                names.append(words[-1])
+        # In inverted Russian/English citation styles surnames are the tokens directly
+        # before initials. This deliberately avoids treating title words as authors.
+        names = re.findall(r"\b([A-ZА-ЯЁ][A-Za-zА-Яа-яЁё'’\-]{1,50})\s+(?=[A-ZА-ЯЁ](?:\.|\s+[A-ZА-ЯЁ]\.))", prefix)
     return {normalize_text(name) for name in names if normalize_text(name)}
 
 
