@@ -5,7 +5,7 @@ export type Severity = "critical" | "major" | "minor" | "info";
 export type RuleStatus = "pass" | "violation" | "uncertain" | "not_applicable" | "not_checked";
 export type RuleMode = "deterministic" | "candidate" | "structural" | "semantic" | "manual";
 export type RuleScope = "document" | "title" | "goal" | "defense_statements" | "chapter" | "list" | "figure_table" | "formula" | "bibliography" | "presentation" | "defense" | "process";
-export type CheckProfile = "core" | "full";
+export type CheckProfile = "core" | "full" | "vkrcheck";
 
 export interface ModelInfo { id: string; label: string; provider: Provider; tier: "free" | "production"; contextTokens: number; note: string; recommended?: boolean; }
 export interface RelatedAdvice { title: string; summary: string; page: number; url: string; source: string; }

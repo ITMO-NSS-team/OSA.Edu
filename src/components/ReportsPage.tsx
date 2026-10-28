@@ -30,7 +30,7 @@ export function ReportsPage({ jobs, onAction, onChanged }: Props) {
       <div className="row between"><h2>{t.jobs}</h2><span>{jobs.length}</span></div>
       <div className="jobs-list">
         {jobs.map((job) => <button key={job.id} className={`job-row ${selectedId === job.id ? "selected" : ""}`} onClick={() => setSelectedId(job.id)}>
-          <strong>{job.originalName}</strong><span>{jobProgressSummary(job, language)}</span>
+          <strong>{job.originalName}</strong><span>{job.profile === "vkrcheck" ? "VkrCheck · " : ""}{jobProgressSummary(job, language)}</span>
         </button>)}
         {!jobs.length && <div className="empty small">{t.noJobs}</div>}
       </div>
@@ -95,7 +95,7 @@ function StructureReview({ job, onChanged, onAction, language }: { job: Job; onC
     </div>
 
     <div className="panel review-intro">
-      <div><strong>{t.whatToCheck}</strong><p>{t.structureHint}</p></div>
+      <div><strong>{t.whatToCheck}</strong><p>{job.profile === "vkrcheck" ? (language === "ru" ? "Проверьте границы введения, всех глав, заключения и списка источников. При необходимости исправьте карту перед запуском." : "Check the introduction, chapter, conclusion, and reference boundaries. Correct the map before starting if needed.") : t.structureHint}</p></div>
       <div className="actions"><button className="button secondary" disabled={saving} onClick={() => void mutate(() => api.addMapElement(job.id, {}))}>{t.addFragment}</button><button className="button primary" disabled={saving || !map.elements.length} onClick={() => void mutate(() => api.confirmStructure(job.id))}>{t.confirmStart}</button></div>
     </div>
 
@@ -175,7 +175,7 @@ function Report({ job, status, query, onStatus, onQuery, onAction, language }: {
     <div className="panel report-controls"><button className={status === "all" ? "text-button active" : "text-button"} onClick={() => onStatus("all")}>{t.allRules} ({report.ruleResults.length})</button><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={t.searchRules} /><span>{t.rulesCoverage}: {Math.round(report.coverage * 100)} % · {t.candidates}: {Math.round((report.automaticCandidateCoverage ?? report.candidateCoverage ?? 1) * 100)} % · {t.termMap}: {Math.round((report.abbreviationCoverage ?? 1) * 100)} % · {t.termRules}: {Math.round((report.abbreviationRuleCoverage ?? 1) * 100)} %</span></div>
     <div className="result-list">{results.map((result) => <RuleResultCard key={result.ruleId} result={result} rule={catalog.get(result.ruleId)} language={language} />)}{!results.length && <div className="empty panel">{t.noRules}</div>}</div>
     <details className="panel technical-details"><summary>{t.technical}</summary><div className="technical-body">
-      <p><b>{t.model}:</b> {report.technical.model}</p><p><b>{t.version}:</b> {report.technical.appVersion}</p><p><b>{t.promptHash}:</b> {report.technical.promptHash}</p><p><b>{t.profile}:</b> {job.profile === "core" ? t.core : t.full}</p>
+      <p><b>{t.model}:</b> {report.technical.model}</p><p><b>{t.version}:</b> {report.technical.appVersion}</p><p><b>{t.promptHash}:</b> {report.technical.promptHash}</p><p><b>{t.profile}:</b> {job.profile === "vkrcheck" ? "VkrCheck" : job.profile === "core" ? t.core : t.full}</p>
       <p><b>{t.routing}:</b> {report.routing.strategy}; {t.explicitRules}: {report.routing.explicitRules}; fallback: {report.routing.fallbackRules}; {t.fragments}: {report.routing.fragments}; {t.physicalRequests}: {report.routing.physicalRequests ?? report.routing.checkRequests}; {t.firstPassPlan}: {report.routing.plannedCheckRequests ?? report.routing.checkRequests}; candidate: {report.routing.candidateRequests ?? 0}; semantic first-pass: {report.routing.semanticRequests ?? 0}; {t.abbreviations}: Python; evidence verifier: {report.routing.evidenceVerifierRequests ?? 0}</p>
       <p><b>{t.llmRequests}:</b> {report.llmUsage.requests}; {t.retriesLower}: {report.llmUsage.retries}; {t.limiterWait}: {Math.round(report.llmUsage.rateLimitWaitMs / 1000)} s</p>
       {report.llmUsage.traces?.length > 0 && <div><b>{t.successfulCalls}:</b><ul>{report.llmUsage.traces.map((item, index) => <li key={`${item.at}-${index}`}>{item.operation}: {item.provider}/{item.model}; upstream: {item.providerName || "—"}; compatibility: {item.compatibilityMode ? t.yes : t.no}; request: {item.requestId || "—"}</li>)}</ul></div>}{report.llmUsage.diagnostics.length > 0 && <ApiDiagnostics title={t.providerDiagnostics} items={report.llmUsage.diagnostics} language={language} />}

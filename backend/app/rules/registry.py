@@ -8,6 +8,7 @@ from typing import Any
 
 from ..config import RULES_DIR
 from .manifest import load_rule_manifest, runtime_metadata
+from .vkrcheck import VKR_RULES
 
 # Search/report keywords are intentionally lexical. They do not influence runtime
 # engine, scope or severity; those values come only from the canonical manifest.
@@ -114,7 +115,7 @@ def load_rule_registry() -> dict[str, list[dict[str, Any]]]:
             'Rule catalog/manifest mismatch. '
             f'Missing in manifest: {missing[:10]}; orphan manifest entries: {orphan[:10]}.'
         )
-    return {'core': core, 'soft': soft, 'all': [*core, *soft]}
+    return {'core': core, 'soft': soft, 'all': [*core, *soft], 'vkrcheck': VKR_RULES}
 
 
 def parse_user_rules(value: str) -> list[dict[str, Any]]:
@@ -144,5 +145,7 @@ def parse_user_rules(value: str) -> list[dict[str, Any]]:
 
 def rules_for_profile(profile: str, additional: str = '') -> list[dict[str, Any]]:
     registry = load_rule_registry()
+    if profile == 'vkrcheck':
+        return list(registry['vkrcheck'])
     base = registry['all'] if profile == 'full' else registry['core']
     return [*base, *parse_user_rules(additional)]

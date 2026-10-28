@@ -52,6 +52,17 @@ button { cursor: pointer; }
 
 .panel { background: #fff; border: 1px solid #e1e3e6; border-radius: 12px; padding: 20px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 14px; }
+.form-grid.single { grid-template-columns: 1fr; }
+.vkr-criteria { margin-bottom: 14px; }
+.vkr-criteria-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.vkr-criteria-heading h2 { margin: 0 0 5px; font-size: 17px; }
+.vkr-criteria-heading p { margin: 0; color: #747a81; font-size: 13px; line-height: 1.5; }
+.vkr-criteria-heading .button { flex: 0 0 auto; }
+.vkr-criteria-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.vkr-criteria-grid > div { padding: 14px; border: 1px solid #e8eaec; border-radius: 9px; background: #fafbfb; }
+.vkr-criteria-grid span { display: block; margin-bottom: 9px; color: #838991; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+.vkr-criteria-grid strong { display: block; font-size: 14px; }
+.vkr-criteria-grid p { margin: 6px 0 0; color: #666d74; font-size: 13px; line-height: 1.5; }
 label { display: flex; flex-direction: column; gap: 7px; }
 label > span { font-weight: 600; font-size: 14px; }
 small, .hint { color: #767c83; font-size: 12px; line-height: 1.45; }
@@ -175,10 +186,15 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
   .meta-grid { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 760px) {
+  .vkr-criteria-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 560px) {
   .page { padding: 24px 14px 48px; }
   .page-title { flex-direction: column; }
   .prompt-summary { align-items: flex-start; flex-direction: column; }
+  .vkr-criteria-heading { align-items: flex-start; flex-direction: column; }
   .status-grid { grid-template-columns: 1fr; }
   .app-header nav button { padding: 8px 10px; }
   .app-header nav { gap: 10px; }

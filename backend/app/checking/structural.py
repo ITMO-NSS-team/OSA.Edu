@@ -2,6 +2,7 @@ from __future__ import annotations
 import regex as re
 from .common import grounded_check, evidence, contextual, dedupe_evidence, result, is_actual_caption, looks_like_contents, is_code_or_prompt, mapped_excluded_ids
 from .bibliography import run_bibliography_rule
+from .vkrcheck import run_vkrcheck_structural
 from .abbreviations import run_abbreviation_check, combined_abbreviation_rules
 from ..document.numbered_items import collect_unique_defense_items, collect_unique_numbered_items
 from ..scope import main_work_ids
@@ -433,6 +434,7 @@ def _heading_periods(rule,document):
 @grounded_check
 def run_structural(rule:dict,document:dict,routing_fragments:list[dict]|None=None)->dict:
     rid=rule['id']
+    if rid.startswith('VKR-'): return run_vkrcheck_structural(rule, document)
     if rid in DEFERRED_ABBREVIATIONS:
         return _uncertain(rule,'Автоматическая проверка аббревиатур временно отключена: текущий детектор недостаточно надёжен для категорического вывода.')
     if rid == 'SOFT-055': return combined_abbreviation_rules(rule,document)

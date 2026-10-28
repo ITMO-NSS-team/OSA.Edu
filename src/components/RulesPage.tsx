@@ -14,9 +14,9 @@ export function RulesPage({ profile, rules, loading, onProfileChange }: Props) {
   const { language } = useLanguage();
   const labels = uiLabels(language);
   const t = language === "ru" ? {
-    title: "Правила", subtitle: "Полный реестр с источником, областью и способом проверки.", core: "Ядро", full: "Полный набор", search: "Поиск по ID или тексту правила", all: "Все категории", of: "из", loading: "Загрузка правил…", category: "Категория", check: "Проверка", scope: "Область", source: "Источник", line: "строка", correct: "Корректно", violation: "Нарушение", empty: "Ничего не найдено.",
+    title: "Правила", subtitle: "Полный реестр с источником, областью и способом проверки.", core: "Ядро", full: "Полный набор", vkrcheck: "VkrCheck", search: "Поиск по ID или тексту правила", all: "Все категории", of: "из", loading: "Загрузка правил…", category: "Категория", check: "Проверка", scope: "Область", source: "Источник", line: "строка", correct: "Корректно", violation: "Нарушение", empty: "Ничего не найдено.",
   } : {
-    title: "Rules", subtitle: "Complete rule registry with source, scope, and checking method.", core: "Core", full: "Full set", search: "Search by rule ID or text", all: "All categories", of: "of", loading: "Loading rules…", category: "Category", check: "Check", scope: "Scope", source: "Source", line: "line", correct: "Correct", violation: "Violation", empty: "Nothing found.",
+    title: "Rules", subtitle: "Complete rule registry with source, scope, and checking method.", core: "Core", full: "Full set", vkrcheck: "VkrCheck", search: "Search by rule ID or text", all: "All categories", of: "of", loading: "Loading rules…", category: "Category", check: "Check", scope: "Scope", source: "Source", line: "line", correct: "Correct", violation: "Violation", empty: "Nothing found.",
   };
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -34,7 +34,7 @@ export function RulesPage({ profile, rules, loading, onProfileChange }: Props) {
     <div className="page-title">
       <div><h1>{t.title}</h1><p>{t.subtitle}</p></div>
       <select className="compact-select" value={profile} onChange={(event) => onProfileChange(event.target.value as CheckProfile)}>
-        <option value="core">{t.core}</option><option value="full">{t.full}</option>
+        <option value="core">{t.core}</option><option value="full">{t.full}</option><option value="vkrcheck">{t.vkrcheck}</option>
       </select>
     </div>
 
