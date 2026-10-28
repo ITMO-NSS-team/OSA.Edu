@@ -4,7 +4,6 @@ import { useLanguage } from "../i18n";
 import type { CheckProfile, Health, Job } from "../types";
 
 interface Props {
-  variant?: "default" | "vkrcheck";
   health: Health;
   prompt: string;
   mapPrompt: string;
@@ -27,7 +26,11 @@ export function CheckPage(props: Props) {
   } : {
     onlyPdfDocx: "Only PDF and DOCX files are supported.", title: "Thesis check", developerDesc: "Developer mode: the document map is accepted automatically and all files are checked sequentially without manual confirmation.", normalDesc: "The selected model first extracts major semantic sections. Rule checking starts after you confirm the document structure.", openrouter: "OpenRouter is not configured: add OPENROUTER_API_KEY to .env and restart the server.", host: "Host LLM is not ready", hostFallback: "provider is not authenticated.", profile: "Rule set", core: "Core", full: "Full set", coreHint: "Primary strict rules.", fullHint: "Core rules plus extended recommendations.", model: "Model", free: "Free models", production: "Production", prompts: "Two transparent prompts", map: "Map", rules: "rules", chars: "characters", openPrompts: "Open prompts", developer: "Developer mode · automatic check", developerHint: "For regression runs. Each document structure is accepted automatically and checking starts immediately. Ambiguous map elements remain visible and related rules stay uncertain. Invalid boundaries stop that file for manual review.", drop: "Drop PDF or DOCX files here", choose: "or click to choose files", files: "Files", clear: "Clear", remove: "Remove", extra: "Additional requirements", onePerLine: "One rule per line", extraHint: "Leave empty if there are no additional requirements.", adding: "Adding…", auto: "Run automatic check", prepare: "Prepare structure", extract: "Extract structure"
   };
-  const vkrcheck = props.variant === "vkrcheck";
+  const vkrcheck = props.profile === "vkrcheck";
+  const vkrcheckLabel = language === "ru" ? "VkrCheck (6 критериев)" : "VkrCheck (6 criteria)";
+  const profileHint = vkrcheck
+    ? (language === "ru" ? "Шесть критериев структуры и содержания магистерской ВКР." : "Six criteria for the structure and content of a master's thesis.")
+    : props.profile === "core" ? t.coreHint : t.fullHint;
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [developerMode, setDeveloperMode] = useState(() => localStorage.getItem("osaDeveloperMode") === "1");
@@ -55,7 +58,7 @@ export function CheckPage(props: Props) {
       const body = new FormData();
       files.forEach((file) => body.append("files", file));
       body.append("model", props.model);
-      body.append("profile", vkrcheck ? "vkrcheck" : props.profile);
+      body.append("profile", props.profile);
       body.append("prompt", props.prompt);
       body.append("mapPrompt", props.mapPrompt);
       body.append("additionalCriteria", vkrcheck ? "" : props.criteria);
@@ -72,7 +75,7 @@ export function CheckPage(props: Props) {
     : t.openrouter;
 
   return <section className="page narrow">
-    <div className="page-title"><div><h1>{vkrcheck ? (language === "ru" ? "Проверка VkrCheck" : "VkrCheck review") : t.title}</h1><p>{vkrcheck ? (developerMode ? (language === "ru" ? "Критерии магистерской ВКР из VkrCheck. В режиме разработчика карта документа принимается автоматически." : "Master's thesis criteria from VkrCheck. Developer mode accepts the document map automatically.") : language === "ru" ? "Критерии магистерской ВКР из VkrCheck. После загрузки подтвердите карту документа, затем начнётся проверка." : "Master's thesis criteria from VkrCheck. Confirm the document map after upload to start the review.") : developerMode ? t.developerDesc : t.normalDesc}</p></div></div>
+    <div className="page-title"><div><h1>{t.title}</h1><p>{vkrcheck ? (developerMode ? (language === "ru" ? "Критерии магистерской ВКР из VkrCheck. В режиме разработчика карта документа принимается автоматически." : "Master's thesis criteria from VkrCheck. Developer mode accepts the document map automatically.") : language === "ru" ? "Критерии магистерской ВКР из VkrCheck. После загрузки подтвердите карту документа, затем начнётся проверка." : "Master's thesis criteria from VkrCheck. Confirm the document map after upload to start the review.") : developerMode ? t.developerDesc : t.normalDesc}</p></div></div>
     {vkrcheck && <div className="panel vkr-criteria">
       <div className="vkr-criteria-heading">
         <div><h2>{language === "ru" ? "Что проверяем" : "Review criteria"}</h2><p>{language === "ru" ? "Шесть критериев по структуре и содержанию магистерской ВКР." : "Six criteria for the structure and content of a master's thesis."}</p></div>
@@ -86,10 +89,11 @@ export function CheckPage(props: Props) {
     </div>}
     {!selectedProviderConfigured && <div className="inline-error">{providerError}</div>}
 
-    <div className={`panel form-grid${vkrcheck ? " single" : ""}`}>
-      {!vkrcheck && <label><span>{t.profile}</span><select value={props.profile} onChange={(event) => props.onProfileChange(event.target.value as CheckProfile)}>
+    <div className="panel form-grid">
+      <label><span>{t.profile}</span><select value={props.profile} onChange={(event) => props.onProfileChange(event.target.value as CheckProfile)}>
         <option value="core">{t.core} · {props.health.knowledge.coreCount}</option><option value="full">{t.full} · {props.health.knowledge.fullCount}</option>
-      </select><small>{props.profile === "core" ? t.coreHint : t.fullHint}</small></label>}
+        <option value="vkrcheck">{vkrcheckLabel}</option>
+      </select><small>{profileHint}</small></label>
       <label><span>{t.model}</span><select value={props.model} onChange={(event) => props.onModelChange(event.target.value)}>
         <optgroup label={t.free}>{freeModels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>
         <optgroup label={t.production}>{productionModels.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>

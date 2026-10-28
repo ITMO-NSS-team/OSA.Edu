@@ -19,7 +19,6 @@ import type {
 
 type Page =
   | "check"
-  | "vkrcheck"
   | "normcontrol"
   | "literature"
   | "reproducibility"
@@ -102,7 +101,6 @@ export default function App() {
     queueFree: "Очередь свободна",
     brand: "содержательная проверка ВКР",
     check: "Формальная и смысловая проверка",
-    vkrcheck: "Проверка VkrCheck",
     prompts: "Промпты",
     rules: "Правила",
     reports: "Отчёты",
@@ -118,7 +116,6 @@ export default function App() {
     queueFree: "Queue is empty",
     brand: "thesis quality checks",
     check: "Thesis check",
-    vkrcheck: "VkrCheck review",
     prompts: "Prompts",
     rules: "Rules",
     reports: "Reports",
@@ -143,7 +140,6 @@ export default function App() {
       <nav>
         <div className="nav-group">
           <NavButton active={page === "check"} onClick={() => setPage("check")}>{copy.check}</NavButton>
-          <NavButton active={page === "vkrcheck"} onClick={() => setPage("vkrcheck")}>{copy.vkrcheck}</NavButton>
           <NavButton active={page === "prompt"} onClick={() => setPage("prompt")}>{copy.prompts}</NavButton>
           <NavButton active={page === "rules"} onClick={() => setPage("rules")}>{copy.rules}</NavButton>
           <NavButton active={page === "reports"} onClick={() => setPage("reports")}>{copy.reports}{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
@@ -168,10 +164,7 @@ export default function App() {
 
     {page === "check" && <CheckPage health={health} prompt={prompt} mapPrompt={mapPrompt} profile={profile} model={model} criteria={criteria}
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
-      onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
-    {page === "vkrcheck" && <CheckPage variant="vkrcheck" health={health} prompt={prompt} mapPrompt={mapPrompt} profile="vkrcheck" model={model} criteria=""
-      onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
-      onOpenRules={() => { setRulesProfile("vkrcheck"); setPage("rules"); }}
+      onOpenRules={() => { setRulesProfile(profile); setPage("rules"); }}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
     <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
     {page === "reproducibility" && <ReproducibilityPage />}
