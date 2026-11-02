@@ -54,6 +54,79 @@ def _named(text):
     return None
 
 
+def _matched_blocks(blocks, match):
+    """Project a match in newline-joined text back to its actual source blocks."""
+    if match is None:
+        return []
+    rows = []; offset = 0
+    for block in blocks:
+        end = offset + len(block.get('text', ''))
+        if offset < match.end() and end > match.start():
+            rows.append(block)
+        offset = end + 1
+    return rows
+
+
+def _bibliography_link_rows(document, inv):
+    """Locate bibliography text in source order, including same-page boundaries.
+
+    A confirmed map or a following section bounds the range. Without a reliable
+    end, only explicitly numbered entry rows are positive scope evidence; an
+    arbitrary URL later in the file cannot establish bibliography membership.
+    """
+    lines = inv['lines']
+    bib_heading = re.compile(
+        r'^(?:\d+(?:\.\d+)*\.?\s+)?(?:'
+        r'список\s+(?:(?:использованных|библиографических)\s+)?(?:источников|литературы)|'
+        r'список\s+использованной\s+литературы|библиографический\s+список|литература|'
+        r'references|bibliography|list\s+of\s+(?:references|sources))\.?$', re.I,
+    )
+    entry_start = re.compile(r'^\s*(?:\[\d{1,3}\]|\d{1,3}[.)])\s+\S')
+    def is_heading(row):
+        return row['_parent'].get('type') == 'heading' or (
+            row['text'] == row['text'].upper() and bool(re.search(r'\p{L}', row['text'])))
+    starts = {}
+    for i, row in enumerate(lines):
+        if is_heading(row) and (bib_heading.fullmatch(row['text']) or bib_heading.fullmatch(_norm(row['_parent']['text']))):
+            starts[row['_parent']['id']] = i
+    index = {b['id']: i for i, b in enumerate(document.get('blocks', []))}
+    mapped = [e for e in (document.get('map') or {}).get('elements', [])
+              if e.get('type') == 'bibliography' and e.get('state') == 'confirmed'
+              and e.get('canonicalRole') != 'secondary_copy'
+              and e.get('startBlockId') in index and e.get('endBlockId') in index
+              and index[e['startBlockId']] <= index[e['endBlockId']]]
+    end = None
+    if len(mapped) == 1:
+        element = mapped[0]
+        positions = [i for i, row in enumerate(lines)
+                     if index[element['startBlockId']] <= index[row['_parent']['id']] <= index[element['endBlockId']]]
+        if not positions:
+            return [], False
+        start, end = positions[0], positions[-1] + 1
+    elif len(starts) == 1:
+        start = next(iter(starts.values())) + 1
+    else:
+        return [], False
+    for i in range(start, end if end is not None else len(lines)):
+        row = lines[i]
+        if bib_heading.fullmatch(row['text']):
+            continue
+        appendix = re.match(r'^(?:\d+(?:\.\d+)*\.?\s+)?(?:приложени[ея]|appendix|appendices)\b', row['text'], re.I)
+        # A title may include an appendix designation and subtitle, so it need
+        # not match the exact NAMED grammar. Entry numbers are not headings.
+        entry_parent = entry_start.match(_norm(row['_parent']['text'])) or row['_parent'].get('type') == 'bibliography'
+        boundary = is_heading(row) and not entry_start.match(row['text']) and not entry_parent
+        if boundary or (appendix and re.match(r'^(?:приложени[ея]|appendix|appendices)\s+[А-ЯЁA-Z0-9](?:\s|[.:—–-]|$)', row['text'], re.I)):
+            end = i
+            break
+    bounded = end is not None
+    rows = [row for row in lines[start:end]
+            if not bib_heading.fullmatch(row['text'])
+            and (bounded or entry_start.match(_norm(row['_parent']['text']))
+                 or row['_parent'].get('type') == 'bibliography')]
+    return rows, bounded
+
+
 def _ev(row, detail=None):
     if row.get('_segments'):
         segment = row['_segments'][-1 if row.get('check') == 'caption_period' else 0]
@@ -72,7 +145,7 @@ def _ev(row, detail=None):
         out.pop('start', None); out.pop('end', None)
         if row.get('_sourceStart') is not None:
             out.update(start=row['_sourceStart'], end=row['_sourceStart']+len(row['text']))
-    for key in ('reason', 'check', 'elementKind', 'rgb', 'hex', 'printedPage', 'measurement', 'sourceKind', 'bboxes'):
+    for key in ('reason', 'check', 'elementKind', 'rgb', 'hex', 'printedPage', 'measurement', 'sourceKind', 'bboxes', 'uri'):
         if key in row:
             out[key] = row[key]
     if detail:
@@ -223,12 +296,13 @@ def run_itmo_rule(rule, document):
         if kind in {'titlepage','assignment','abstract'}:
             if kind == 'titlepage':
                 front = [b for b in document.get('blocks', []) if b.get('page') == 1]
-                text = ' '.join(b['text'] for b in front)
+                text = '\n'.join(b['text'] for b in front)
                 ru = re.search(r'ВЫПУСКНАЯ\s+КВАЛИФИКАЦИОННАЯ\s+РАБОТА', text, re.I)
                 en = re.search(r"MASTER[’']?S?\s+THESIS", text, re.I)
                 if (ru and re.search(r'Обучающийся\s*:', text, re.I) and re.search(r'Руководитель', text, re.I)) or (en and re.search(r'Student\s*:', text, re.I) and re.search(r'Supervisor\s*:', text, re.I)):
-                    title_row = next(b for b in front if re.search(r"ВЫПУСКНАЯ\s+КВАЛИФИКАЦИОННАЯ\s+РАБОТА|MASTER[’']?S?\s+THESIS",b['text'],re.I))
-                    return finish('pass', 'Титульный лист найден по совокупности реквизитов. Согласование в ИСУ этим не подтверждается.', [title_row], True)
+                    title_rows = _matched_blocks(front, ru if ru else en)
+                    if title_rows:
+                        return finish('pass', 'Титульный лист найден по совокупности реквизитов. Согласование в ИСУ этим не подтверждается.', title_rows, True)
             rows = [x for x in inv['headings'] if x['section'] == kind]
             if rows:
                 return finish('pass', 'Обязательный элемент найден по явному заголовку.', rows, True)
@@ -515,19 +589,28 @@ def run_itmo_rule(rule, document):
             return finish('violation' if bad else 'uncertain', 'Проверены распознанные обозначения и страницы приложений в содержании. Полнота отдельных заголовков требует проверки.', bad or appendices, checks=matches)
 
     if key == 'A1-links':
+        bib_rows, bounded = _bibliography_link_rows(document, inv)
+        if not bib_rows:
+            return unknown('Область библиографии не установлена надёжно; принадлежность URL списку источников не доказана.')
         bad = []; groups = {}
         for p in pages:
-            if not inv['bibliography'] or p['number'] < inv['bibliography']['page']:
-                continue
             for link in (p.get('layoutObjects') or {}).get('links', []):
-                if re.match(r'https?://', link['uri']):
-                    groups.setdefault((p['number'], link['uri']), []).append(link['bbox'])
-        for (page, uri), boxes in groups.items():
+                box = link.get('bbox')
+                if not box or not re.match(r'https?://', link.get('uri', ''), re.I):
+                    continue
+                row = next((r for r in bib_rows if r['page'] == p['number'] and r.get('bbox')
+                            and min(box[2], r['bbox'][2]) > max(box[0], r['bbox'][0])
+                            and min(box[3], r['bbox'][3]) > max(box[1], r['bbox'][1])), None)
+                if row is not None:
+                    group = groups.setdefault((p['number'], link['uri'], row['_parent']['id']), {'row': row, 'boxes': []})
+                    group['boxes'].append(box)
+        for (page, uri, _), group in groups.items():
+            boxes = group['boxes']
             boxes = list({tuple(b): b for b in boxes}.values())
             union = [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)]
-            bad.append(issue(dict(page=page, text=uri, bbox=union, bboxes=boxes, sourceKind='pdf_annotation'),
+            bad.append(issue(dict(group['row'], page=page, uri=uri, bbox=union, bboxes=boxes, sourceKind='pdf_annotation'),
                              'active_resource_link', 'Адрес подтверждён URL-аннотацией PDF; это активная гиперссылка электронного ресурса в списке источников.'))
-        return finish('violation', 'В библиографии найдены активные гиперссылки электронных ресурсов (сноска 5 приложения 1).', bad) if bad else finish('uncertain', 'Активные URL-аннотации в библиографии не найдены. Текст URL не является доказательством активной гиперссылки.')
+        return finish('violation', 'В библиографии найдены активные гиперссылки электронных ресурсов (сноска 5 приложения 1).', bad) if bad else finish('uncertain', 'Активные URL-аннотации в подтверждённой области библиографии не найдены. Текст URL не доказывает активную гиперссылку; полнота границ списка ' + ('установлена.' if bounded else 'не установлена.'))
 
     if key in {'4-5-3','4-6-3','4-6-2-number','4-5-4','4-6-2-links','4-5-2','4-6-1'}:
         kind = 'figure' if key.startswith('4-5') else 'table'

@@ -25,12 +25,16 @@ def font_family(font):
 
 
 def pagination(document, inv, centered):
+    if document.get('sourceFormat') != 'pdf':
+        return dict(rows=[], bad=[], missing=[], ambiguous=[], complete=False, printed={})
     if 'pagination' in inv:
         return inv['pagination']
     body_fonts = Counter(font_family(b.get('fontName')) for b in inv['body'] if b.get('fontName'))
     body_font = body_fonts.most_common(1)[0][0] if body_fonts else None
     positions = []; bad = []; missing = []; ambiguous = []
     for page in document.get('pages', []):
+        if not page.get('number') or not page.get('width') or not page.get('height'):
+            ambiguous.append(page.get('number')); continue
         if page['number'] < (inv['start'] or 1):
             continue  # ISU front matter is not assumed to follow the main text offset.
         rows = [*(page.get('layoutArtifacts') or []),
@@ -69,11 +73,13 @@ def pagination(document, inv, centered):
 
 
 def colored_spans(document, inv):
+    if document.get('sourceFormat') != 'pdf':
+        return [], [], 0
     bad = []; ambiguous = []; observed = 0
     body_ids = {b['id'] for b in inv['body']}
     caption_ids = {bid for c in inv['captions'] for bid in c.get('blockIds', [c['id']])}
     for block in document.get('blocks', []):
-        if block.get('page', 0) < inv['start']:
+        if not block.get('page') or block['page'] < (inv['start'] or 0):
             continue
         prose = block['id'] in body_ids or (block.get('type') == 'paragraph' and len(re.findall(r'\p{L}{2,}', block.get('text', ''))) >= 20)
         for line in block.get('lines') or []:
@@ -142,10 +148,12 @@ def caption_continuations(blocks, index, kind, centered):
     blocks are never changed. Each line keeps its own original parent.
     """
     start = blocks[index]
-    segments = [{**l, '_parent': start, 'page': start['page']} for l in start.get('lines') or [start]]
+    page = start.get('page')
+    segments = [{**l, '_parent': start, **({'page': page} if page is not None else {})}
+                for l in start.get('lines') or [start]]
     consumed = [start['id']]
     size = start.get('fontSize')
-    if not size or not segments[-1].get('bbox'):
+    if not page or not size or not segments[-1].get('bbox'):
         return segments, consumed
     for following in blocks[index+1:]:
         if following.get('page') != start['page'] or following.get('type') in {'heading', 'caption', 'table', 'toc', 'bibliography', 'code'}:
@@ -167,7 +175,9 @@ def caption_continuations(blocks, index, kind, centered):
 
 def object_box(document, cap):
     """Only a unique, nearby, horizontally overlapping PDF object is assigned."""
-    page = next((p for p in document.get('pages', []) if p['number'] == cap['page']), {})
+    if document.get('sourceFormat') != 'pdf' or not cap.get('page') or not cap.get('bbox'):
+        return None
+    page = next((p for p in document.get('pages', []) if p.get('number') == cap['page']), {})
     objects = (page.get('layoutObjects') or {}).get('tables' if cap['kind'] == 'table' else 'images', [])
     box = cap.get('bbox')
     if not box:
@@ -227,13 +237,14 @@ def caption_format_issues(caps, document, centered):
             bad.append(issue(cap, 'caption_title_case', 'Название начинается со строчной буквы.'))
         if cap['text'].rstrip().endswith('.'):
             bad.append(issue(cap, 'caption_period', 'В конце полного названия стоит точка.'))
-        page = next((p for p in document.get('pages', []) if p['number'] == cap['page']), {})
+        page = next((p for p in document.get('pages', []) if p.get('number') == cap.get('page')), {}) if document.get('sourceFormat') == 'pdf' and cap.get('page') else {}
         lines = cap.get('lines') or [cap]
-        if cap['kind'] == 'figure' and page:
+        geometry = bool(page.get('width'))
+        if cap['kind'] == 'figure' and geometry:
             for line in lines:
                 if line.get('bbox') and not centered(line['bbox'], page['width']):
                     bad.append(issue({**line, 'page': cap['page'], '_parent': line.get('_parent') or cap['_parent']}, 'caption_center', 'Строка подписи рисунка не центрирована.'))
-        if cap['kind'] == 'table':
+        if cap['kind'] == 'table' and geometry:
             # Use an assigned table's left edge if known, otherwise text margin.
             obj = object_box(document, cap)
             left = obj[0] if obj else 30*MM
@@ -251,11 +262,11 @@ def caption_format_issues(caps, document, centered):
         failed = {r['check'] for r in bad[before:]}
         alignment = 'caption_center' if cap['kind'] == 'figure' else 'table_title_left'
         position = 'caption_below' if cap['kind'] == 'figure' else 'table_title_above'
-        observations.append({'number': cap['number'], 'page': cap['page'], 'objectBbox': obj,
+        observations.append({'number': cap['number'], 'page': cap.get('page'), 'objectBbox': obj,
                              'positionChecked': bool(obj), 'lineCount': len(lines),
                              'checks': {name: 'violation' if name in failed else 'pass'
                                         for name in ['caption_separator', 'caption_title_case', 'caption_period']},
-                             'alignment': 'violation' if alignment in failed else 'pass' if all(l.get('bbox') for l in lines) else 'uncertain',
+                             'alignment': 'violation' if alignment in failed else 'pass' if geometry and all(l.get('bbox') for l in lines) else 'uncertain',
                              'position': 'violation' if position in failed else 'pass' if obj else 'uncertain',
                              'singleSpacing': 'uncertain' if len(lines) > 1 else 'not_applicable'})
         if 'caption_title_case' not in failed and not re.match(r'^[\p{Lu}\p{N}]', title):
@@ -264,6 +275,8 @@ def caption_format_issues(caps, document, centered):
 
 
 def toc_rows(document, inv):
+    if document.get('sourceFormat') != 'pdf':
+        return []
     if 'tocRows' in inv:
         return inv['tocRows']
     start = inv['start']; intro = inv['introduction']; rows = []; pending = []
