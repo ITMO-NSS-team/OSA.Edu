@@ -1,0 +1,6 @@
+# Install into a SEPARATE Python 3.11/3.12 environment, not the OSA.Edu venv.
+# Pin the upstream implementation used by the adapter; no vendored algorithms.
+slideguard @ git+https://github.com/Industrial-AI-Research-Lab/SlideGuard.git@7f62d6a2a02918ca4e1f7562041a5d03bad5743a
+# Upstream ui/__init__.py imports auth even when only its PDF generator is used.
+# This runtime dependency is missing from the upstream package metadata.
+SQLAlchemy>=2.0,<3

@@ -13,6 +13,7 @@ services:
     environment:
       PORT: "8787"
       WEB_ORIGINS: http://127.0.0.1:5173,http://localhost:5173
+      SLIDEGUARD_PYTHON: /opt/slideguard-venv/bin/python
     volumes:
       - .:/app
       - backend_data:/app/data
