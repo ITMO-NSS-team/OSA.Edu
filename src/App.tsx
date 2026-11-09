@@ -9,6 +9,7 @@ import { ReportsPage } from "./components/ReportsPage";
 import { RulesPage } from "./components/RulesPage";
 import { ReproducibilityPage } from "./components/ReproducibilityPage";
 import { RepositoryQualityPage } from "./components/RepositoryQualityPage";
+import { PresentationsPage } from "./presentations/PresentationsPage";
 import type {
   CheckProfile,
   Health,
@@ -23,6 +24,7 @@ type Page =
   | "literature"
   | "reproducibility"
   | "repository-quality"
+  | "presentations"
   | "prompt"
   | "rules"
   | "reports";
@@ -108,6 +110,7 @@ export default function App() {
     literature: "Проверка литературы",
     reproducibility: "Проверка воспроизводимости",
     repositoryQuality: "Качество репозитория",
+    presentations: "Проверка презентаций",
   } : {
     loading: "Loading…",
     checking: "running",
@@ -123,6 +126,7 @@ export default function App() {
     literature: "Literature check",
     reproducibility: "Reproducibility",
     repositoryQuality: "Repository quality",
+    presentations: "Presentation check",
   };
 
   function setLanguage(value: UiLanguage) { setLanguageState(value); }
@@ -149,6 +153,7 @@ export default function App() {
           <NavButton active={page === "literature"} onClick={() => setPage("literature")}>{copy.literature}</NavButton>
           <NavButton active={page === "reproducibility"} onClick={() => setPage("reproducibility")}>{copy.reproducibility}</NavButton>
           <NavButton active={page === "repository-quality"} onClick={() => setPage("repository-quality")}>{copy.repositoryQuality}</NavButton>
+          <NavButton active={page === "presentations"} onClick={() => setPage("presentations")}>{copy.presentations}</NavButton>
         </div>
       </nav>
       <div className="header-tools">
@@ -168,6 +173,7 @@ export default function App() {
     <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
     {page === "reproducibility" && <ReproducibilityPage />}
     {page === "repository-quality" && <RepositoryQualityPage />}
+    {page === "presentations" && <PresentationsPage />}
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}

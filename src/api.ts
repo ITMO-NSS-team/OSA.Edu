@@ -16,6 +16,7 @@ import type {
   Rule,
   StructureDetails,
 } from "./types";
+import type { PresentationJob, PresentationResult, PresentationRuntime } from "./presentations/types";
 
 const API = (
   import.meta.env.VITE_API_BASE_URL?.trim() || "http://127.0.0.1:8787"
@@ -24,12 +25,21 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${url}`, options);
   const body =
     response.status === 204 ? null : await response.json().catch(() => ({}));
-  if (!response.ok)
-    throw new Error((body as { error?: string })?.error || "Ошибка API.");
+  if (!response.ok) {
+    const error = body as { error?: string; detail?: unknown };
+    throw new Error(error?.error || (typeof error?.detail === "string" ? error.detail : "Ошибка API."));
+  }
   return body as T;
 }
 
 export const api = {
+  presentationStatus: (signal?: AbortSignal) => request<PresentationRuntime>("/api/presentations/status", { signal }),
+  presentationJobs: (offset = 0, signal?: AbortSignal) => request<PresentationJob[]>(`/api/presentations/jobs?limit=50&offset=${offset}`, { signal }),
+  presentationJob: (id: string, signal?: AbortSignal) => request<PresentationJob>(`/api/presentations/jobs/${encodeURIComponent(id)}`, { signal }),
+  createPresentationJobs: (body: FormData) => request<PresentationJob[]>("/api/presentations/jobs", { method: "POST", body }),
+  presentationResult: (id: string, signal?: AbortSignal) => request<PresentationResult>(`/api/presentations/jobs/${encodeURIComponent(id)}/result`, { signal }),
+  retryPresentation: (id: string) => request<PresentationJob>(`/api/presentations/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" }),
+  presentationDownloadUrl: (id: string, format: "json" | "pdf" | "log") => `${API}/api/presentations/jobs/${encodeURIComponent(id)}/${format === "log" ? "log.txt" : `report.${format}`}`,
   health: () => request<Health>("/api/health"),
   jobs: () => request<Job[]>("/api/jobs"),
   normControlJobs: () => request<NormControlJob[]>("/api/normcontrol/jobs"),

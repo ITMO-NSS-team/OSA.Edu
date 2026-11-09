@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import uuid
@@ -56,6 +57,7 @@ from .reproducibility.store import recover_reproducibility_jobs
 from .repository_quality.queue import start_repository_quality_queue
 from .repository_quality.router import router as repository_quality_router
 from .repository_quality.store import recover_repository_quality_jobs
+from .presentations.router import router as presentations_router, get_queue as get_presentations_queue
 from .pdf_reporting import report_to_pdf as developer_report_to_pdf
 from .queue import start_queue
 from .reporting import report_to_markdown
@@ -86,13 +88,20 @@ async def lifespan(_app: FastAPI):
     start_literature_queue()
     start_reproducibility_queue()
     start_repository_quality_queue()
-    yield
+    presentations_queue = get_presentations_queue()
+    await asyncio.to_thread(presentations_queue.store.recover)
+    presentations_queue.start()
+    try:
+        yield
+    finally:
+        await presentations_queue.stop()
 
 
 app = FastAPI(title="OSA.Edu API", version=APP_VERSION, lifespan=lifespan)
 app.include_router(literature_router)
 app.include_router(reproducibility_router)
 app.include_router(repository_quality_router)
+app.include_router(presentations_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=WEB_ORIGINS,
