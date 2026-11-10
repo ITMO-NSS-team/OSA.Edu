@@ -190,7 +190,7 @@ async def run_repository_quality(
 ) -> tuple[dict[str, Any], Path, str]:
     if not osa_installed():
         raise RepositoryQualityRunError(
-            'Пакет OSA не установлен. Установите `osa_tool[paper-claims]` из ветки feat/thesis-repository-analysis '
+            'Пакет OSA не установлен. Установите зависимости из requirements.txt '
             "или задайте REPOSITORY_QUALITY_OSA_COMMAND."
         )
 

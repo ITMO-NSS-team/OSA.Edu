@@ -18,7 +18,9 @@ from ..llm.host_llm import host_provider_status
 from ..util import now_iso
 from .diagnostics import llm_access, repository_access, runtime_status
 from .job_queue import cancel_reproducibility_job, start_reproducibility_queue
-from .runner import configured_base_url, configured_model, osa_installed, use_host_llm
+from .runner import (OsaRunError, configured_base_url, configured_model,
+                     configured_pdf_parser, parser_readiness,
+                     osa_installed, use_host_llm)
 from .store import (
     create_reproducibility_job,
     delete_reproducibility_job,
@@ -224,8 +226,11 @@ async def reproducibility_status():
     host_mode = use_host_llm()
     llm_configured, host_status = await _llm_ready_status()
     runtime = await asyncio.to_thread(runtime_status, include_cuda=False)
+    pdf_parser, parser_error = parser_readiness()
     return {
-        "ok": osa_installed() and llm_configured and bool(runtime.get("pythonSupportedForPaperClaims")) and bool(runtime.get("git", {}).get("installed")),
+        "ok": not parser_error and osa_installed() and llm_configured and bool(runtime.get("pythonSupportedForPaperClaims")) and bool(runtime.get("git", {}).get("installed")),
+        "pdfParser": pdf_parser,
+        "pdfParserError": parser_error,
         "osaInstalled": osa_installed(),
         "osaVersion": runtime.get("osaVersion"),
         "llmConfigured": llm_configured,
@@ -248,15 +253,22 @@ async def reproducibility_preflight(repository: str):
     if repository_error:
         return _error(400, repository_error)
 
-    runtime_task = asyncio.to_thread(runtime_status, include_cuda=True)
+    runtime_task = asyncio.to_thread(runtime_status)
     repository_task = asyncio.to_thread(repository_access, repository)
     host_mode = use_host_llm()
     llm_task = llm_access(configured_base_url(), configured_model(), use_host_llm=host_mode)
     runtime, repo, llm = await asyncio.gather(runtime_task, repository_task, llm_task)
 
     git = runtime.get("git", {})
-    cuda = runtime.get("cuda", {})
+    pdf_parser, parser_error = parser_readiness()
     checks = [
+        {
+            "id": "pdf-parser",
+            "label": "PDF-парсер",
+            "ok": parser_error is None,
+            "blocking": True,
+            "detail": parser_error or f"Режим: {pdf_parser}. Marker не требуется.",
+        },
         {
             "id": "osa",
             "label": "OSA",
@@ -269,7 +281,7 @@ async def reproducibility_preflight(repository: str):
             "label": "Python",
             "ok": bool(runtime.get("pythonSupportedForPaperClaims")),
             "blocking": True,
-            "detail": f"Python {runtime.get('pythonVersion')}; paper-claims требует 3.11–3.14.",
+            "detail": f"Python {runtime.get('pythonVersion')}; OSA требует Python >=3.11, <4.0.",
         },
         {
             "id": "git",
@@ -291,17 +303,6 @@ async def reproducibility_preflight(repository: str):
             "ok": bool(llm.get("ok")),
             "blocking": True,
             "detail": str(llm.get("detail") or ("Не удалось проверить Host LLM." if host_mode else "Не удалось проверить API key.")),
-        },
-        {
-            "id": "cuda",
-            "label": "CUDA",
-            "ok": bool(cuda.get("available")),
-            "blocking": False,
-            "detail": (
-                f"{cuda.get('device')} · PyTorch {cuda.get('torchVersion')} · CUDA runtime {cuda.get('runtime')}"
-                if cuda.get("available")
-                else str(cuda.get("error") or "CUDA недоступна; Marker сможет работать на CPU, но заметно медленнее.")
-            ),
         },
     ]
     if "sourcecraft.dev" in repository.lower():
@@ -327,8 +328,6 @@ async def reproducibility_preflight(repository: str):
     warnings: list[str] = []
     if sys.platform == "win32":
         warnings.append("На Windows запускайте backend без uvicorn --reload: asyncio subprocess с reload может падать с NotImplementedError.")
-    if not cuda.get("available"):
-        warnings.append("CUDA не обязательна, но Marker на CPU может обрабатывать большую ВКР значительно дольше.")
     return {
         "ok": blocking_ok,
         "checks": checks,
@@ -402,11 +401,16 @@ async def create_reproducibility_job_endpoint(
         await file.close()
         return _error(400, repository_error)
 
+    _pdf_parser, parser_error = parser_readiness()
+    if parser_error:
+        await file.close()
+        return _error(400, parser_error)
+
     if not osa_installed():
         await file.close()
         return _error(
             503,
-            'OSA не установлена в backend. Установите `osa_tool[paper-claims]` или настройте REPRODUCIBILITY_OSA_COMMAND.',
+            'OSA не установлена в backend. Установите requirements.txt (OSA paper-claims-lite) или настройте REPRODUCIBILITY_OSA_COMMAND.',
         )
 
     llm_configured, host_status = await _llm_ready_status(force=True)
