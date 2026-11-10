@@ -38,8 +38,14 @@ async def build_routing(*, document: dict, map_value: dict, rules: list[dict]) -
         applicable, applicability_reason = evaluate_applicability(rule, document)
         if applicable is False:
             spec = {
-                'strategy': 'manual',
+                'strategy': 'not_applicable',
                 'reason': applicability_reason or 'Правило неприменимо к этому типу документа.',
+            }
+
+        elif applicable is None and (rule.get('applicability') or {}).get('predicate'):
+            spec = {
+                'strategy': 'applicability_unknown',
+                'reason': applicability_reason or 'Для проверки необходимо подтвердить тип работы.',
             }
 
         routed.append(route_rule(rule, fragments, spec, explicit=explicit))

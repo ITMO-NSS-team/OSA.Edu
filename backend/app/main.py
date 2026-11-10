@@ -36,6 +36,9 @@ from .document.map_builder import ALLOWED_TYPES, refresh_map
 from .extraction import read_extracted, save_extracted
 from .literature.queue import start_literature_queue
 from .literature.router import router as literature_router
+from .language.router import router as language_router
+from .language.queue import start_queue as start_language_queue
+from .language.store import recover_jobs as recover_language_jobs
 from .literature.store import recover_literature_jobs
 from .llm.host_llm import host_provider_status
 from .llm.rate_limiter import configured_rate_limits
@@ -84,6 +87,8 @@ async def lifespan(_app: FastAPI):
     await recover_reproducibility_jobs()
     await recover_repository_quality_jobs()
     start_literature_queue()
+    await recover_language_jobs()
+    start_language_queue()
     start_reproducibility_queue()
     start_repository_quality_queue()
     yield
@@ -91,6 +96,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="OSA.Edu API", version=APP_VERSION, lifespan=lifespan)
 app.include_router(literature_router)
+app.include_router(language_router)
 app.include_router(reproducibility_router)
 app.include_router(repository_quality_router)
 app.add_middleware(
