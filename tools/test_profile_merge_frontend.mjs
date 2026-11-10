@@ -20,7 +20,7 @@ const source = `
   globalThis.fetch = () => { throw new Error("HTTP forbidden in frontend smoke test"); };
   const reports = JSON.parse(readFileSync(${JSON.stringify(path.resolve(fixtures))}, "utf8"));
   const profiles = ["core", "full", "vkrcheck", "itmo_master"];
-  const health = { models: [], configured: {}, knowledge: { coreCount: 65, fullCount: 227, itmoMasterCount: 77 } };
+  const health = { models: [], configured: {}, knowledge: { coreCount: 65, fullCount: 230, itmoMasterCount: 77 } };
   const noop = () => {};
   for (const language of ["ru", "en"]) {
     const render = node => renderToStaticMarkup(<LanguageContext.Provider value={{ language, setLanguage: noop }}>{node}</LanguageContext.Provider>);

@@ -80,4 +80,3 @@ def candidates(fragments: list[dict[str, Any]], lexicon=None) -> list[dict[str, 
                 continue
             result.append({'fragment_id': fragment['id'], 'word': word, 'start': match.start()})
     return result
-

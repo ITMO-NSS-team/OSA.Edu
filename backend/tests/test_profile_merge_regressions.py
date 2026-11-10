@@ -64,7 +64,7 @@ class ProfileMergeTests(unittest.IsolatedAsyncioTestCase):
     def test_registries_are_complete_disjoint_and_keep_existing_additional_rule_policy(self):
         registry = load_rule_registry()
         self.assertEqual(set(PROFILES), set(PROFILE_LABELS))
-        expected_counts = {'core': 65, 'full': 227, 'vkrcheck': 6, 'itmo_master': 77}
+        expected_counts = {'core': 65, 'full': 230, 'vkrcheck': 6, 'itmo_master': 77}
         for profile in PROFILES:
             with self.subTest(profile=profile):
                 rules = rules_for_profile(profile)

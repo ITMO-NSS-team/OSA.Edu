@@ -129,10 +129,10 @@ const REPRO_UI = {
 } as const;
 
 
-export function ReproducibilityPage() {
+export function ReproducibilityPage({ initialRepository = "", initialJobId }: { initialRepository?: string; initialJobId?: string } = {}) {
   const { language } = useLanguage();
   const u = REPRO_UI[language];
-  const [repo, setRepo] = useState("");
+  const [repo, setRepo] = useState(initialRepository);
   const [paperName, setPaperName] = useState("");
   const [paperFile, setPaperFile] = useState<File | null>(null);
   const [jsonName, setJsonName] = useState("");
@@ -141,7 +141,7 @@ export function ReproducibilityPage() {
   const [printLang, setPrintLang] = useState<UiLang>(language);
   const [claimFilter, setClaimFilter] = useState<ClaimFilter>("checked");
   const [jobs, setJobs] = useState<ReproducibilityJob[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(initialJobId ?? null);
   const [serviceStatus, setServiceStatus] = useState<ReproducibilityStatus | null>(null);
   const [preflight, setPreflight] = useState<ReproducibilityPreflight | null>(null);
   const [preflightBusy, setPreflightBusy] = useState(false);

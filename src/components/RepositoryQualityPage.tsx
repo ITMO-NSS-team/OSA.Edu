@@ -188,12 +188,12 @@ const TYPE_LABELS = {
   },
 } as const;
 
-export function RepositoryQualityPage() {
+export function RepositoryQualityPage({ initialRepository = "", initialJobId }: { initialRepository?: string; initialJobId?: string } = {}) {
   const { language } = useLanguage();
   const t = COPY[language];
-  const [repo, setRepo] = useState("");
+  const [repo, setRepo] = useState(initialRepository);
   const [jobs, setJobs] = useState<RepositoryQualityJob[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(initialJobId ?? null);
   const [serviceStatus, setServiceStatus] = useState<RepositoryQualityStatus | null>(null);
   const [preflight, setPreflight] = useState<RepositoryQualityPreflight | null>(null);
   const [preflightBusy, setPreflightBusy] = useState(false);
