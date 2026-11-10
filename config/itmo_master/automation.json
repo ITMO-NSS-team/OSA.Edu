@@ -1,0 +1,695 @@
+{
+  "ITMO-1-2": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Нужны рабочая программа ГИА и образовательный стандарт; они не предоставлены."
+  },
+  "ITMO-1-3": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Авторство и происхождение материалов не устанавливаются по PDF."
+  },
+  "ITMO-1-4": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Полная оценка требует образовательного стандарта, экспертной оценки, проверки заимствований и защиты."
+  },
+  "ITMO-1-6": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Соответствие официально утверждённой теме и направлению подготовки проверяется отдельно по документам ОП."
+  },
+  "ITMO-2-4-results": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Отдельный структурный раздел положений и доказательство мировой научной новизны не требуются этим пунктом."
+  },
+  "ITMO-2-4-volume": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": false,
+    "availability": "Рекомендация/решение программы, не обязательное нарушение",
+    "implementation": "unavailable",
+    "reason": "Отклонение от рекомендации не является нарушением. Для обязательного объёма нужна программа ГИА."
+  },
+  "ITMO-2-5": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Нужны распорядительные акты и материалы защиты."
+  },
+  "ITMO-2-6": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Загрузка PDF подтверждает только формат этого файла, но не полноту представленных материалов."
+  },
+  "ITMO-2-7": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Нужны сведения о языке реализации конкретной ОП; английский PDF сам по себе не нарушение."
+  },
+  "ITMO-3-1-title": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-3-1-bilingual": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Нужен официальный Перечень тем. Язык PDF не подтверждает условие автоматически."
+  },
+  "ITMO-3-2-titlepage": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Отсутствие неподтверждённого элемента даёт UNKNOWN, а не нарушение. Для титула, задания и аннотации нужны надёжные признаки или подтверждённая карта."
+  },
+  "ITMO-3-2-assignment": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Отсутствие неподтверждённого элемента даёт UNKNOWN, а не нарушение. Для титула, задания и аннотации нужны надёжные признаки или подтверждённая карта."
+  },
+  "ITMO-3-2-abstract": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Отсутствие неподтверждённого элемента даёт UNKNOWN, а не нарушение. Для титула, задания и аннотации нужны надёжные признаки или подтверждённая карта."
+  },
+  "ITMO-3-2-contents": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Отсутствие неподтверждённого элемента даёт UNKNOWN, а не нарушение. Для титула, задания и аннотации нужны надёжные признаки или подтверждённая карта."
+  },
+  "ITMO-3-2-introduction": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Отсутствие неподтверждённого элемента даёт UNKNOWN, а не нарушение. Для титула, задания и аннотации нужны надёжные признаки или подтверждённая карта."
+  },
+  "ITMO-3-2-chapter": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Отсутствие неподтверждённого элемента даёт UNKNOWN, а не нарушение. Для титула, задания и аннотации нужны надёжные признаки или подтверждённая карта."
+  },
+  "ITMO-3-2-conclusion": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Отсутствие неподтверждённого элемента даёт UNKNOWN, а не нарушение. Для титула, задания и аннотации нужны надёжные признаки или подтверждённая карта."
+  },
+  "ITMO-3-2-bibliography": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Отсутствие неподтверждённого элемента даёт UNKNOWN, а не нарушение. Для титула, задания и аннотации нужны надёжные признаки или подтверждённая карта."
+  },
+  "ITMO-3-2-optional": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Отсутствие необязательного элемента само по себе не нарушение."
+  },
+  "ITMO-3-3": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Факт согласования требует данных ИСУ."
+  },
+  "ITMO-3-4": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Сопоставить записи содержания с полными заголовками и печатной пагинацией. Неоднозначные совпадения UNKNOWN."
+  },
+  "ITMO-3-5": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-3-5-recommended": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": false,
+    "availability": "Рекомендация/решение программы, не обязательное нарушение",
+    "implementation": "unavailable",
+    "reason": "Отсутствие этих элементов во введении не является нарушением; методы в основной части и результаты оцениваются по 2.4 и 3.6."
+  },
+  "ITMO-3-6-approval": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Факт согласования требует внешних документов; сопоставление с заданием пока ручное."
+  },
+  "ITMO-3-6-process": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Не требуй эксперимента, расчёта или разработанного объекта, если они не относятся к характеру конкретной работы."
+  },
+  "ITMO-3-6-links": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-3-7": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Рекомендации обязательны по п.3.7; отдельный подраздел/ключевое слово не требуется. Отсутствие требует полного просмотра и семантического обоснования."
+  },
+  "ITMO-3-7-tasks": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-3-8": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Форма проекта не установлена. Нужны метаданные ОП; автоматическое установление формы не реализовано."
+  },
+  "ITMO-3-9": {
+    "category": "C",
+    "before": "semantic_fact",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "В английской ВКР не требуй замены английских слов русскими. Стандарты сокращений и единицы измерения требуют отдельной проверки; это правило их не покрывает."
+  },
+  "ITMO-3-9-units": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По PDF доступны отдельные признаки; полный вывод требует семантики и/или дополнительных справочников",
+    "implementation": "unavailable",
+    "reason": "Частично доступны обозначения единиц в прозе; пока не реализованы классификация единиц и исключений в таблицах/формулах."
+  },
+  "ITMO-4-2-a4": {
+    "category": "A",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-4-2-font": {
+    "category": "C",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Проверяется связный основной текст; формулы, таблицы, сноски и шрифты с неопределимой гарнитурой не дают ложного PASS."
+  },
+  "ITMO-4-2-color": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Точный span, RGB/HEX, bbox и тип элемента; неоднозначный математический символ UNKNOWN."
+  },
+  "ITMO-4-2-spacing": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Измерять шаг базовых линий и метрики шрифта; измерение не равно настройке редактора. Только доказуемые противоречия."
+  },
+  "ITMO-4-2-alignment": {
+    "category": "C",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "По нескольким полным строкам абзацев оценивается геометрия; недостаточная или спорная геометрия даёт UNKNOWN."
+  },
+  "ITMO-4-2-margins": {
+    "category": "C",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Уверенное проникновение связного текста в поля — нарушение. Большой свободный край не доказывает размер поля; PDF не хранит настройки полей, поэтому отсутствие проникновения не даёт PASS."
+  },
+  "ITMO-4-2-indent": {
+    "category": "C",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Проверяются многострочные абзацы по первой и последующим строкам; полнота всех абзацев по PDF не гарантируется."
+  },
+  "ITMO-4-2-emphasis": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По PDF доступны отдельные признаки; полный вывод требует семантики и/или дополнительных справочников",
+    "implementation": "unavailable",
+    "reason": "PDF позволяет наблюдать начертание, но не цель акцентирования; нужна семантическая оценка допустимости, пока не реализована."
+  },
+  "ITMO-4-3-1": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Разделить последовательность, координаты, шрифт и пунктуацию; не смешивать физическую и печатную страницу."
+  },
+  "ITMO-4-4-1": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Англоязычные эквиваленты распознаются; обозначение приложения не считается номером главы."
+  },
+  "ITMO-4-4-2": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Проверяются начала структурных элементов и глав; автоматическое доказательство необоснованного переноса подраздела пока недоступно."
+  },
+  "ITMO-4-4-3": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Ненумерованный заголовок считается главой только при подтверждённой карте; уверенные точки после распознанных номеров проверяются непосредственно."
+  },
+  "ITMO-4-4-4": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Проверять отступ и финальную точку у уверенных заголовков. Аббревиатуры и подчёркивания остаются экспертными."
+  },
+  "ITMO-4-5-2": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-5-3": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Отдельные признаки формата, пунктуации, нумерации, центрирования и положения; две схемы нумерации."
+  },
+  "ITMO-4-5-4": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-4-6-1": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-6-2-number": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Дедупликация подписей, продолжения таблиц, сквозная/главая схемы отдельно от названия."
+  },
+  "ITMO-4-6-2-links": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-4-6-3": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Полное многострочное название; положение относительно таблицы, левый край, пунктуация."
+  },
+  "ITMO-4-6-4": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+  },
+  "ITMO-4-7-1": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-7-2": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По PDF доступны отдельные признаки; полный вывод требует семантики и/или дополнительных справочников",
+    "implementation": "unavailable",
+    "reason": "Семантическое сопоставление каждого символа с пояснением возможно частично; полного распознавания формул и порядка обозначений нет."
+  },
+  "ITMO-4-7-3": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По PDF доступны отдельные признаки; полный вывод требует семантики и/или дополнительных справочников",
+    "implementation": "unavailable",
+    "reason": "Видимые разрывы числа и единицы проверяемы частично; PDF не сохраняет исходный неразрывный пробел. Нужна классификация единиц."
+  },
+  "ITMO-4-7-4": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-8-1": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Нужна экспертная оценка или внешние стандарты",
+    "implementation": "unavailable",
+    "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+  },
+  "ITMO-4-8-2": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": false,
+    "availability": "Нужна экспертная оценка или внешние стандарты",
+    "implementation": "unavailable",
+    "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+  },
+  "ITMO-4-8-3": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По PDF доступны отдельные признаки; полный вывод требует семантики и/или дополнительных справочников",
+    "implementation": "unavailable",
+    "reason": "Первое употребление и расшифровку можно сопоставлять с существующей картой обозначений; полная нормативная проверка ИТМО пока не подключена."
+  },
+  "ITMO-4-8-4": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-8-5": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-9-1": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По PDF доступны отдельные признаки; полный вывод требует семантики и/или дополнительных справочников",
+    "implementation": "unavailable",
+    "reason": "Специфичность терминологии оценивается частично семантически; без оценки применимости нельзя требовать список. Пока не реализовано."
+  },
+  "ITMO-4-9-2": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-9-3": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-10-1": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Сверять распознанные ссылки с полным списком; несуществующий номер — положительное доказательство. Неиспользованные записи — UNKNOWN."
+  },
+  "ITMO-4-10-2": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-4-10-3-order": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Общий парсер библиографии и составные ссылки; только полное покрытие даёт PASS."
+  },
+  "ITMO-4-10-3-format": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "implemented",
+    "reason": "PASS возможен только при полном покрытии области; неоднозначные факты требуют ручной проверки."
+  },
+  "ITMO-4-10-4": {
+    "category": "B",
+    "before": "deterministic",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Составные ссылки, связь со списком; отсутствие ссылок не доказывать одним неуспешным regex."
+  },
+  "ITMO-4-10-5": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": true,
+    "availability": "Внешние документы/метаданные обязательны",
+    "implementation": "unavailable",
+    "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+  },
+  "ITMO-4-11-1": {
+    "category": "D",
+    "before": "unavailable",
+    "pdfAssessable": false,
+    "externalData": false,
+    "availability": "Нужна экспертная оценка или внешние стандарты",
+    "implementation": "unavailable",
+    "reason": "Требуется ручная проверка: одного PDF или реализованного анализа недостаточно."
+  },
+  "ITMO-4-11-2": {
+    "category": "C",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-11-3": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-11-4": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-4-11-5": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  },
+  "ITMO-A1-links": {
+    "category": "B",
+    "before": "unavailable",
+    "pdfAssessable": true,
+    "externalData": false,
+    "availability": "По тексту и геометрии PDF, с оговорёнными ограничениями",
+    "implementation": "partial",
+    "reason": "Реализованы наблюдаемые признаки и положительные контрпримеры; полнота области и условия применимости не подтверждаются одним распознаванием. PASS всего требования запрещён при неполном покрытии."
+  }
+}

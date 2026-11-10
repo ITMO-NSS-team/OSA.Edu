@@ -18,6 +18,18 @@ ABSENCE_RULES = {
     if entry.engine.kind.value == 'semantic_fact'
 }
 
+ITMO_ASSESSMENT = '''
+ДОКАЗАТЕЛЬНОСТЬ ИТМО: наличие заголовка/обещания/термина не доказывает выполнение требования.
+Для КАЖДОЙ ячейки absenceCheck.items добавь assessment:
+{"status":"supported|contradicted|insufficient","reason":"объяснение соответствия именно нормативному критерию, минимум 20 символов","counterEvidence":[{"blockId":"...","quote":"..."}]}.
+found означает подтверждённое выполнение критерия (assessment=supported), а не просто наличие похожего текста.
+not_found допустим только после полного просмотра и смыслового исключения правдоподобных кандидатов (assessment=contradicted с основанием отсутствия).
+Если есть противоречащие цитаты, укажи их в counterEvidence и используй ambiguous. Не выдумывай противоречия.
+Для соответствия темы, задач, глав и результатов приведи цитаты с ОБЕИХ сторон отношения и объясни сопоставление всех задач/глав, а не одного примера.
+Для введения, заключения и исследовательской направленности оценивай содержательные утверждения и аргументацию, а не ключевые слова.
+Цитата не более 500 символов, обычно 1–3 коротких цитаты на критерий. Не расширяй нормативный смысл.
+'''
+
 def _message(map_value:dict,fragment:dict,rules:list[dict],fact_store:dict|None=None)->str:
     summary='\n'.join(f"{e.get('type')} | {e.get('label')} | {e.get('startBlockId')}…{e.get('endBlockId')}" for e in map_value.get('elements',[]))
     blocks='\n\n'.join(f"BLOCK {b['id']} | {b.get('location','')}"+(f" | page={b['page']}" if b.get('page') else '')+f" | type={b.get('type','paragraph')}\n{b.get('text','')}" for b in fragment.get('blocks',[]))
@@ -30,6 +42,8 @@ def _message(map_value:dict,fragment:dict,rules:list[dict],fact_store:dict|None=
         guidance_text = f"\nУТОЧНЕНИЕ ПРОВЕРКИ: {guidance}" if guidance else ''
         chunks.append(f"RULE {rule['id']}\nКатегория: {rule.get('category','')}\nТребование: {rule.get('requirement','')}\nКорректный пример: {rule.get('correctExample') or '—'}\nПример нарушения: {rule.get('incorrectExample') or '—'}{guidance_text}{absence}")
     semantic_context = str(fragment.get('semanticContext') or '').strip()
+    if any(r['id'].startswith('ITMO-') for r in rules):
+        chunks.append(ITMO_ASSESSMENT)
     semantic_section = f"\nSEMANTIC_CONTEXT (контекст для понимания; evidence всё равно только из BLOCK):\n{semantic_context}\n" if semantic_context else ''
     fact_keys = []
     for rule in rules:
@@ -62,6 +76,7 @@ FRAGMENT: {fragment.get('label')}
 SEMANTIC_CONTEXT: {fragment.get('semanticContext','')}
 
 RULE {rule.get('id')}: {rule.get('requirement','')}
+{ITMO_ASSESSMENT if str(rule.get('id')).startswith('ITMO-') else ''}
 FACTS: {', '.join(required)}
 
 {blocks}

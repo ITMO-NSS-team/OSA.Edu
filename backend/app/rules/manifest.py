@@ -14,6 +14,11 @@ def load_rule_manifest() -> RuleManifestModel:
         raise RuntimeError(f'Canonical rule manifest is missing: {path}')
     try:
         payload = json.loads(path.read_text(encoding='utf-8'))
+        extra = json.loads((CONFIG_DIR / 'itmo_master' / 'manifest.json').read_text(encoding='utf-8'))
+        duplicate = set(payload['rules']) & set(extra['rules'])
+        if duplicate:
+            raise ValueError(f'Duplicate rule IDs: {sorted(duplicate)}')
+        payload['rules'].update(extra['rules'])
         return RuleManifestModel.model_validate(payload)
     except Exception as exc:
         raise RuntimeError(f'Invalid canonical rule manifest {path}: {exc}') from exc

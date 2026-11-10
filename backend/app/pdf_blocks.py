@@ -47,7 +47,7 @@ def clean_font_name(value: str) -> str:
     return re.sub(r"^[A-Z]{6}\+", "", value or "")
 
 
-def build_pdf_pages(document: Any) -> tuple[list[dict[str, Any]], dict[str, Any], list[int]]:
+def build_pdf_pages(document: Any, *, layout_objects: bool = False) -> tuple[list[dict[str, Any]], dict[str, Any], list[int]]:
     """Extract a line-aware PDF block model.
 
     The model is deliberately conservative: page numbers and repeated marginal
@@ -95,11 +95,24 @@ def build_pdf_pages(document: Any) -> tuple[list[dict[str, Any]], dict[str, Any]
         visual_lines = _coalesce_visual_lines(fragments, page_width, page_height)
         if not visual_lines:
             empty_pages.append(number)
+        objects = None
+        if layout_objects:
+            # Once per page, in the canonical extraction. Detection is explicitly
+            # partial: borderless tables/vector diagrams may not be recovered.
+            objects = {'images': [list(x['bbox']) for x in page.get_image_info()],
+                       'tables': [], 'complete': False, 'errors': [],
+                       'links': [{'bbox': list(link['from']), 'uri': link['uri']}
+                                 for link in page.get_links() if link.get('uri')]}
+            try:
+                objects['tables'] = [list(t.bbox) for t in page.find_tables().tables]
+            except Exception as exc:
+                objects['errors'].append(type(exc).__name__)
         raw_pages.append({
             "number": number,
             "width": round(page_width, 2),
             "height": round(page_height, 2),
             "lines": visual_lines,
+            **({'layoutObjects': objects} if objects is not None else {}),
         })
 
     body_size = round(median(all_sizes), 2) if all_sizes else 0.0
@@ -136,6 +149,7 @@ def build_pdf_pages(document: Any) -> tuple[list[dict[str, Any]], dict[str, Any]
             "text": page_text,
             "blocks": blocks,
             "layoutArtifacts": artifacts,
+            **({'layoutObjects': raw_page['layoutObjects']} if 'layoutObjects' in raw_page else {}),
         })
 
     style_stats = {
@@ -184,6 +198,10 @@ def _line_fragment(
                 or font.upper().startswith("SFTI")
             ),
             "flags": flags,
+            "color": raw_span.get("color"),
+            "origin": list(raw_span.get("origin") or []),
+            "ascender": raw_span.get("ascender"),
+            "descender": raw_span.get("descender"),
             "sourceSpanIndex": raw_span_index,
         })
     if not spans:

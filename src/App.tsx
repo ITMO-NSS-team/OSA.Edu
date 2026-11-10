@@ -169,6 +169,7 @@ export default function App() {
 
     {page === "check" && <CheckPage health={health} prompt={prompt} mapPrompt={mapPrompt} profile={profile} model={model} criteria={criteria}
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
+      onOpenRules={() => { setRulesProfile(profile); setPage("rules"); }}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
     <div hidden={page !== "literature"}><LiteraturePage models={health.models} /></div>
     {page === "language" && <LanguagePage models={health.models} configured={health.configured} />}
