@@ -9,6 +9,7 @@ from typing import Any
 
 from ..config import RULES_DIR, CONFIG_DIR
 from .manifest import load_rule_manifest, runtime_metadata
+from .vkrcheck import VKR_RULES
 
 # Search/report keywords are intentionally lexical. They do not influence runtime
 # engine, scope or severity; those values come only from the canonical manifest.
@@ -19,7 +20,7 @@ STOP_WORDS = {
     'такие','такого','требование','совет'
 }
 
-PROFILE_LABELS = {'full': 'Полный', 'core': 'Ядро', 'itmo_master': 'ВКР ИТМО (магистратура)'}
+PROFILE_LABELS = {'full': 'Полный', 'core': 'Ядро', 'vkrcheck': 'VkrCheck', 'itmo_master': 'ВКР ИТМО (магистратура)'}
 
 
 def profile_label(profile: str | None) -> str:
@@ -134,7 +135,7 @@ def load_rule_registry() -> dict[str, list[dict[str, Any]]]:
             'Rule catalog/manifest mismatch. '
             f'Missing in manifest: {missing[:10]}; orphan manifest entries: {orphan[:10]}.'
         )
-    return {'core': core, 'soft': soft, 'all': [*core, *soft], 'itmo_master': itmo}
+    return {'core': core, 'soft': soft, 'all': [*core, *soft], 'vkrcheck': VKR_RULES, 'itmo_master': itmo}
 
 
 def parse_user_rules(value: str) -> list[dict[str, Any]]:
@@ -166,5 +167,7 @@ def rules_for_profile(profile: str, additional: str = '') -> list[dict[str, Any]
     registry = load_rule_registry()
     if profile not in PROFILE_LABELS:
         raise ValueError(f'Unknown rule profile: {profile}')
+    if profile == 'vkrcheck':
+        return list(registry['vkrcheck'])
     base = registry['all'] if profile == 'full' else registry[profile]
     return [*base, *parse_user_rules(additional)]
