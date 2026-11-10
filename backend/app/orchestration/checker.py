@@ -30,9 +30,13 @@ from .verdict_contract import enforce_verdict_contracts, technical_rule_result, 
 # Compatibility alias. Canonical direction is Document Map → legacy fields.
 hydrate_fields_from_confirmed_map = hydrate_legacy_fields
 
-async def check_document(*,document:dict,provider:str,model:str,prompt:str,profile:str,additional_criteria:str,only_rule_ids:list[str]|None=None,on_progress:Callable[[int,int,str],Awaitable[None]|None]|None=None,is_cancelled:Callable[[],Awaitable[bool]|bool]|None=None)->dict:
+async def check_document(*,document:dict,provider:str,model:str,prompt:str,profile:str,additional_criteria:str,only_rule_ids:list[str]|None=None,on_progress:Callable[[int,int,str],Awaitable[None]|None]|None=None,is_cancelled:Callable[[],Awaitable[bool]|bool]|None=None,allow_external_llm:bool=True)->dict:
     if not map_is_confirmed(document.get('map')):
         raise ValueError('Структура документа не подтверждена.')
+    if profile == 'itmo_master' and document.get('sourceFormat') == 'pdf' and any(
+        not str(page.get('text') or '').strip() for page in document.get('pages', [])
+    ):
+        document['extractionIncomplete'] = True
     fact_store=build_document_fact_store(document)
     document['factStore']=fact_store
     hydrate_legacy_fields(document)
@@ -41,6 +45,7 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
     rules=[r for r in all_rules if not selected or r['id'] in selected]
     warnings=[]
     usage=empty_usage()
+    document['_rulesProfile'] = profile
     routing=await build_routing(document=document,map_value=document['map'],rules=rules)
     merge_usage(usage,routing.get('usage'))
 
@@ -51,8 +56,11 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
     notation_dependent=[]
     for routed in routing['routed']:
         st=routed['strategy']; rule=routed['rule']
+        if not allow_external_llm and (st in {'llm', 'candidate'} or rule.get('engineKind') == 'abbreviation_fact_map'):
+            local[rule['id']] = _not_checked(rule, 'Семантическая проверка не запускалась: отправка текста внешней модели отключена.')
+            continue
         prerequisite = required_fact_failure(rule, fact_store)
-        if prerequisite and st not in {'manual', 'unavailable'}:
+        if prerequisite and st not in {'manual', 'unavailable', 'not_applicable', 'applicability_unknown'}:
             local[rule['id']] = prerequisite
             continue
         if st in {'deterministic', 'structural'} and 'notations' in (rule.get('globalFactKeys') or []):
@@ -76,8 +84,16 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
             except Exception as exc:
                 warnings.append(f"{rule['id']}: structural checker завершился ошибкой: {exc}")
                 local[rule['id']]=technical_rule_result(rule,'structural',exc)
-        elif st=='manual':
+        elif st in {'manual', 'not_applicable'}:
             local[rule['id']]=_manual(rule,routed.get('reason'))
+        elif st=='applicability_unknown':
+            local[rule['id']]={
+                'ruleId': rule['id'], 'status': 'uncertain',
+                'severity': rule.get('severity', 'major'),
+                'explanation': routed.get('reason') or 'Уровень работы не подтверждён.',
+                'confidence': 0, 'evidence': [], 'evidenceStatus': 'not_required',
+                'checkedBy': 'applicability', 'coverage': {'exhaustive': False},
+            }
         elif st=='unavailable':
             local[rule['id']]=_not_checked(rule,routed.get('reason') or 'Надёжная автоматическая проверка недоступна.')
         elif st=='candidate':
@@ -391,9 +407,12 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
         initial.append(_aggregate(rule,routed,[x for x in raw if x.get('ruleId')==rule['id']]))
     verifier_usage=empty_usage()
     try:
-        verified, verifier_usage, verifier_warnings = await verify_semantic_evidence(
-            document=document, rules=rules, results=initial, provider=provider, model=model, system_prompt=prompt,
-        )
+        if not allow_external_llm:
+            verified, verifier_usage, verifier_warnings = initial, empty_usage(), []
+        else:
+            verified, verifier_usage, verifier_warnings = await verify_semantic_evidence(
+                document=document, rules=rules, results=initial, provider=provider, model=model, system_prompt=prompt,
+            )
         merge_usage(usage, verifier_usage)
         warnings.extend(verifier_warnings)
     except Exception as exc:
@@ -424,6 +443,10 @@ async def check_document(*,document:dict,provider:str,model:str,prompt:str,profi
                 technical_rule_result(rule,'result_validation',exc)
             ).model_dump(exclude_none=True))
     results=validated
+    for item in results:
+        reference = (rule_by_id.get(item['ruleId']) or {}).get('normativeReference')
+        if reference:
+            item['normativeReference'] = reference
     warnings=_prune_resolved_warnings(warnings,results)
     return {
         'rules':all_rules,

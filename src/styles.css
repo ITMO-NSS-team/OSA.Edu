@@ -28,7 +28,7 @@ button { cursor: pointer; }
 .brand { border: 0; background: transparent; text-align: left; padding: 0; color: inherit; }
 .brand strong { display: block; font-size: 16px; }
 .brand span { display: block; font-size: 12px; color: #767b82; margin-top: 2px; }
-.app-header nav { min-width: 0; display: flex; justify-content: center; align-items: center; gap: 14px; overflow-x: auto; scrollbar-width: thin; }
+.app-header nav { min-width: 0; display: flex; justify-content: flex-start; align-items: center; gap: 14px; overflow-x: auto; scrollbar-width: thin; }
 .nav-group { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .nav-group-secondary { margin-left: 4px; padding-left: 18px; border-left: 1px solid #dfe2e5; }
 .app-header nav button { flex: 0 0 auto; border: 0; background: transparent; color: #5d6269; padding: 9px 12px; border-radius: 8px; white-space: nowrap; }
@@ -111,6 +111,17 @@ button { cursor: pointer; }
 .nir-next .button { flex: 0 0 auto; }
 .nir-source { margin: 16px 2px 0; color: #777e85; font-size: 12px; line-height: 1.5; }
 .nir-source a { color: #515c67; }
+.form-grid.single { grid-template-columns: 1fr; }
+.vkr-criteria { margin-bottom: 14px; }
+.vkr-criteria-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.vkr-criteria-heading h2 { margin: 0 0 5px; font-size: 17px; }
+.vkr-criteria-heading p { margin: 0; color: #747a81; font-size: 13px; line-height: 1.5; }
+.vkr-criteria-heading .button { flex: 0 0 auto; }
+.vkr-criteria-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.vkr-criteria-grid > div { padding: 14px; border: 1px solid #e8eaec; border-radius: 9px; background: #fafbfb; }
+.vkr-criteria-grid span { display: block; margin-bottom: 9px; color: #838991; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+.vkr-criteria-grid strong { display: block; font-size: 14px; }
+.vkr-criteria-grid p { margin: 6px 0 0; color: #666d74; font-size: 13px; line-height: 1.5; }
 label { display: flex; flex-direction: column; gap: 7px; }
 label > span { font-weight: 600; font-size: 14px; }
 small, .hint { color: #767c83; font-size: 12px; line-height: 1.45; }
@@ -241,6 +252,7 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
   .nir-stage-top { grid-template-columns: 38px minmax(0, 1fr); }
   .nir-stage-status { grid-column: 2; justify-self: start; }
   .nir-next { align-items: flex-start; flex-direction: column; }
+  .vkr-criteria-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
@@ -249,6 +261,7 @@ blockquote span { display: block; color: #70767c; font-size: 12px; margin-bottom
   .prompt-summary { align-items: flex-start; flex-direction: column; }
   .nir-stage { padding: 16px; }
   .nir-deliverable, .nir-stage label, .nir-stage-actions, .nir-guidance, .nir-check, .nir-no-check, .nir-coverage { margin-left: 0; }
+  .vkr-criteria-heading { align-items: flex-start; flex-direction: column; }
   .status-grid { grid-template-columns: 1fr; }
   .app-header nav button { padding: 8px 10px; }
   .app-header nav { gap: 10px; }

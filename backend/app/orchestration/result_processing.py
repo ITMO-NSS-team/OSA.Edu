@@ -47,7 +47,7 @@ def _parse_evidence(value:Any,block_map:dict[str,dict])->list[dict]:
     return out
 
 
-def _coverage_matrix(value:Any,fragment:dict,block_map:dict,required:list[str]|None):
+def _coverage_matrix(value:Any,fragment:dict,block_map:dict,required:list[str]|None,rule_id:str=''):
     if not required or not isinstance(value,dict):return None
     try: checked=int(value.get('checkedBlockCount',0))
     except Exception:checked=0
@@ -64,11 +64,22 @@ def _coverage_matrix(value:Any,fragment:dict,block_map:dict,required:list[str]|N
         if evidence_recovery_required:
             status='ambiguous'
             reason=(reason+' found→ambiguous: факт не имеет проверяемого evidence из BLOCK.').strip()
+        assessment = None
+        if rule_id.startswith('ITMO-'):
+            raw_assessment = raw.get('assessment') if isinstance(raw.get('assessment'), dict) else {}
+            counter = _parse_evidence(raw_assessment.get('counterEvidence'), block_map)
+            basis = ' '.join(str(raw_assessment.get('reason') or '').split())[:1200]
+            assessment = {'status': raw_assessment.get('status'), 'reason': basis, 'counterEvidence': counter}
+            expected = 'supported' if status == 'found' else 'contradicted' if status == 'not_found' else 'insufficient'
+            if status in {'found', 'not_found'} and (raw_assessment.get('status') != expected or len(basis) < 20 or counter):
+                status = 'ambiguous'
+                reason += ' Нормативный вывод не обоснован отдельно от наличия факта либо есть противоречащие evidence.'
         by[name]={
             'name':name,'status':status,'reason':reason,'evidence':verified_evidence,'candidates':candidates,
             # A complete matrix with this flag is semantically incomplete: the
             # model asserted a positive fact but did not ground it in BLOCK.
             'evidenceRecoveryRequired': evidence_recovery_required,
+            **({'assessment': assessment} if assessment is not None else {}),
         }
     items=[by.get(name,{'name':name,'status':'ambiguous','reason':'','evidence':[],'candidates':[]}) for name in required]
     total=len(fragment.get('blocks',[])); complete=fragment.get('complete') is True and checked>=total and all(n in by for n in required)
@@ -113,7 +124,7 @@ def _parse_fragment_results(value:Any,fragment:dict,rules:list[dict])->list[dict
         if not rec:
             out.append({**_not_checked(rule,'LLM не вернула результат для правила.'),'fragmentId':fragment['id'],'checkedBy':'llm','checkedFragments':[fragment['id']],'technicalIncomplete':True});continue
         status=rec.get('status') if rec.get('status') in {'pass','violation','uncertain','not_applicable'} else 'uncertain'
-        ev=_parse_evidence(rec.get('evidence'),bmap); matrix=_coverage_matrix(rec.get('absenceCheck'),fragment,bmap,fact_items(rule['id']))
+        ev=_parse_evidence(rec.get('evidence'),bmap); matrix=_coverage_matrix(rec.get('absenceCheck'),fragment,bmap,fact_items(rule['id']),rule['id'])
         matrix=enrich_matrix(rule['id'],matrix,fragment)
         valid_abs=bool(matrix and matrix['complete'] and any(x['status']=='not_found' for x in matrix['items']))
         evidence_status='verified' if ev else 'coverage_verified' if valid_abs else 'not_required'

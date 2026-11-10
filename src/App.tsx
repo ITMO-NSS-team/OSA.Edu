@@ -3,6 +3,7 @@ import { api } from "./api";
 import { LanguageContext, type UiLanguage } from "./i18n";
 import { CheckPage } from "./components/CheckPage";
 import { LiteraturePage } from "./components/LiteraturePage";
+import { LanguagePage } from "./components/LanguagePage";
 import { NormControlPage } from "./components/NormControlPage";
 import { NirRoadmapPage } from "./components/NirRoadmapPage";
 import { PromptPage } from "./components/PromptPage";
@@ -23,6 +24,7 @@ type Page =
   | "nir-roadmap"
   | "normcontrol"
   | "literature"
+  | "language"
   | "reproducibility"
   | "repository-quality"
   | "prompt"
@@ -110,6 +112,7 @@ export default function App() {
     reports: "Отчёты",
     norm: "Нормоконтроль",
     literature: "Проверка литературы",
+    languageReview: "Проверка языка",
     reproducibility: "Проверка воспроизводимости",
     repositoryQuality: "Качество репозитория",
   } : {
@@ -126,6 +129,7 @@ export default function App() {
     reports: "Reports",
     norm: "Formal review",
     literature: "Literature check",
+    languageReview: "Language review",
     reproducibility: "Reproducibility",
     repositoryQuality: "Repository quality",
   };
@@ -150,11 +154,12 @@ export default function App() {
           <NavButton active={page === "reports"} onClick={() => setPage("reports")}>{copy.reports}{jobs.length ? ` · ${jobs.length}` : ""}</NavButton>
         </div>
         <div className="nav-group nav-group-secondary">
-          <NavButton active={page === "nir-roadmap"} onClick={() => setPage("nir-roadmap")}>{copy.nirRoadmap}</NavButton>
+          <NavButton active={page === "nir-roadmap"} onClick={() => { setRoadmapTarget(null); setPage("nir-roadmap"); }}>{copy.nirRoadmap}</NavButton>
           <NavButton active={page === "normcontrol"} onClick={() => setPage("normcontrol")}>{copy.norm}{normControlJobs.length ? ` · ${normControlJobs.length}` : ""}</NavButton>
           <NavButton active={page === "literature"} onClick={() => { setRoadmapTarget(null); setPage("literature"); }}>{copy.literature}</NavButton>
           <NavButton active={page === "reproducibility"} onClick={() => { setRoadmapTarget(null); setPage("reproducibility"); }}>{copy.reproducibility}</NavButton>
           <NavButton active={page === "repository-quality"} onClick={() => { setRoadmapTarget(null); setPage("repository-quality"); }}>{copy.repositoryQuality}</NavButton>
+          <NavButton active={page === "language"} onClick={() => { setRoadmapTarget(null); setPage("language"); }}>{copy.languageReview}</NavButton>
         </div>
       </nav>
       <div className="header-tools">
@@ -170,11 +175,13 @@ export default function App() {
 
     {page === "check" && <CheckPage health={health} prompt={prompt} mapPrompt={mapPrompt} profile={profile} model={model} criteria={criteria}
       onProfileChange={setProfile} onModelChange={setModel} onCriteriaChange={setCriteria} onOpenPrompt={() => setPage("prompt")}
+      onOpenRules={() => { setRulesProfile(profile); setPage("rules"); }}
       onCreated={(created) => { setJobs((current) => [...created, ...current]); setPage("reports"); }} onError={setError} />}
     {page === "nir-roadmap" && <NirRoadmapPage models={health.models} onOpenCheck={(nextPage, jobId, repository) => { setRoadmapTarget({ page: nextPage, jobId, repository }); setPage(nextPage); }} />}
     <div hidden={page !== "literature"}><LiteraturePage models={health.models} preferredJobId={roadmapTarget?.page === "literature" ? roadmapTarget.jobId : undefined} /></div>
     {page === "reproducibility" && <ReproducibilityPage initialRepository={roadmapTarget?.page === "reproducibility" ? roadmapTarget.repository : undefined} initialJobId={roadmapTarget?.page === "reproducibility" ? roadmapTarget.jobId : undefined} />}
     {page === "repository-quality" && <RepositoryQualityPage initialRepository={roadmapTarget?.page === "repository-quality" ? roadmapTarget.repository : undefined} initialJobId={roadmapTarget?.page === "repository-quality" ? roadmapTarget.jobId : undefined} />}
+    {page === "language" && <LanguagePage models={health.models} configured={health.configured} />}
 
     {page === "prompt" && <PromptPage rulePrompt={prompt} mapPrompt={mapPrompt} defaultRulePrompt={health.defaults.prompt} defaultMapPrompt={health.defaults.mapPrompt}
       onRulePromptChange={setPrompt} onMapPromptChange={setMapPrompt} onError={setError} />}

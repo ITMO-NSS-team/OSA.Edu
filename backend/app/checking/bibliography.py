@@ -8,6 +8,67 @@ _SPACED_DASH = re.compile(r'\s[–—]\s')
 _ENTRY_START = re.compile(r'^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.)])\s+(?![—–-])(?=\S)')
 
 
+def _mathematical_brackets(text: str, match) -> bool:
+    """Separate interval/set notation from evidence of a numeric citation.
+
+    Semicolon-separated pairs without a citation cue are ambiguous interval
+    notation. Comma lists and source ranges remain citations unless the local
+    context explicitly describes mathematical bounds or set membership.
+    """
+    prefix = text[max(0, match.start()-120):match.start()]
+    # A previous bracketed expression must not contaminate a later citation.
+    prefix = prefix.rsplit(']', 1)[-1]
+    citation_cue = re.search(
+        r'(?:\b(?:см|see|cf)\.?|\b(?:источник|ссылк|литератур|работ|исследовани|'
+        r'публикаци|метод|source|reference|stud|paper)\p{L}*)\s*[:№]?\s*$', prefix, re.I,
+    )
+    if citation_cue:
+        return False
+    if re.search(r'(?:[∈∉⊂⊆]|\\(?:in|notin|subseteq)|\bпринадлеж\p{L}*)\s*$', prefix, re.I):
+        return True
+    pair = re.fullmatch(r'\d+\s*([,;–—−-])\s*\d+', match[1])
+    if not pair:
+        return False
+    if pair[1] == ';':
+        return True
+    return bool(re.search(
+        r'\b(?:отрез\p{L}*|интервал\p{L}*|диапазон\p{L}*|промежут\p{L}*|'
+        r'границ\p{L}*|intervals?|ranges?|segments?|bounds?)\b'
+        r'(?:\s+(?:значени\p{L}*|чисел|переменн\p{L}*|допустим\p{L}*|возможн\p{L}*|'
+        r'заданн\p{L}*|времени|с|границ\p{L}*|are|is|of|values?|variable|closed|open|'
+        r'\p{L}(?:_\w+)?)){0,6}\s*[:=]?\s*$', prefix, re.I,
+    ))
+
+
+def numeric_citations(text: str) -> list[dict]:
+    """Ordered numeric square-bracket citations, retaining source offsets.
+
+    Intentionally does not reinterpret author/year citations or decimal
+    intervals. Segmentation of references remains bibliography_entries().
+    """
+    out = []
+    pattern = r'\[\s*(\d{1,3}(?:\s*(?:[,;–—−-]\s*\d{1,3}))*)\s*\]'
+    for match in re.finditer(pattern, text):
+        if _mathematical_brackets(text, match):
+            continue
+        numbers = []
+        valid = True
+        for part in re.split(r'\s*[,;]\s*', match[1]):
+            bounds = list(map(int, re.split(r'\s*[–—−-]\s*', part)))
+            if not all(n > 0 for n in bounds):
+                valid = False; break
+            if len(bounds) == 2:
+                a, b = bounds
+                if not (a <= b <= a+200):
+                    valid = False; break
+                numbers.extend(range(a, b+1))
+            else:
+                numbers.extend(bounds)
+        if valid:
+            out.append(dict(numbers=numbers, text=match[0], start=match.start(), end=match.end()))
+    return out
+
+
 def bibliography_entries(blocks: list[dict]) -> tuple[list[dict], bool]:
     """Join wrapped records, retaining every source block and original number.
 
@@ -204,7 +265,10 @@ def run_bibliography_rule(rule:dict,document:dict)->dict:
     ev=[]
     patterns=[]
     if rid=='CORE-9-2': patterns=[r'\bISBN\b',r'\bed\.\s+by\b',r'\s&\s',r'\b[A-ZА-ЯЁ][\p{L}-]+,\s+[A-ZА-ЯЁ]\.']
-    elif rid=='CORE-9-3': patterns=[r'\bp\.\s*\d+(?:\s*[-–—]\s*\d+)?\b']
+    elif rid=='CORE-9-3':
+        # p. 654 is valid for a one-page citation; p. 654-660 is a range
+        # and should normally use pp.  Never flag a singleton p. N.
+        patterns=[r'\bp\.\s*\d+\s*[-–—]\s*\d+\b']
     for b in blocks:
         if rid=='CORE-9-2':
             text=b.get('text','')
