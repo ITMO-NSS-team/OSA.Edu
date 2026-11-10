@@ -209,7 +209,7 @@ def _cover(
         Table([
             [_p("Статус", styles["metric_label"]), _p(status_label, styles["metric_value"])],
             [_p("Автоматически проверено", styles["metric_label"]), _p(f"{coverage}% применимых правил", styles["metric_value"])],
-            [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "—", styles["metric_value"])],
+            [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "VkrCheck" if profile == "vkrcheck" else "—", styles["metric_value"])],
         ], colWidths=[55 * mm, 119 * mm], style=TableStyle([
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F5F6F7")),
             ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D9DDE1")),

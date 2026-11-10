@@ -144,7 +144,7 @@ def _cover(
         [_p("Покрытие автоматических кандидатов", styles["metric_label"]), _p(f"{candidate_coverage}%", styles["metric_value"])],
         [_p("Классификация найденных обозначений", styles["metric_label"]), _p(f"{abbreviation_coverage}%", styles["metric_value"])],
         [_p("Полнота правил по обозначениям", styles["metric_label"]), _p(f"{abbreviation_rule_coverage}%", styles["metric_value"])],
-        [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "-", styles["metric_value"])],
+        [_p("Профиль", styles["metric_label"]), _p("Ядро" if profile == "core" else "Полный набор" if profile == "full" else "VkrCheck" if profile == "vkrcheck" else "-", styles["metric_value"])],
     ]
     metric_table = Table(rows, colWidths=[62 * mm, 112 * mm], hAlign="LEFT")
     metric_table.setStyle(TableStyle([
@@ -383,7 +383,7 @@ def _technical_section(report: dict[str, Any], profile: str | None, styles: dict
         ["Версия приложения", technical.get("appVersion", "")],
         ["Провайдер API", technical.get("provider", "")],
         ["Model ID", technical.get("model", "")],
-        ["Профиль", "Ядро" if profile == "core" else "Полный набор" if profile == "full" else "-"],
+        ["Профиль", "Ядро" if profile == "core" else "Полный набор" if profile == "full" else "VkrCheck" if profile == "vkrcheck" else "-"],
         ["Хеш промпта проверки", technical.get("promptHash", "")],
         ["Хеш промпта структуры", technical.get("mapPromptHash") or "-"],
         ["Физических запросов", usage.get("requests", 0)],
