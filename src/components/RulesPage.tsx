@@ -34,7 +34,7 @@ export function RulesPage({ profile, rules, loading, onProfileChange }: Props) {
     <div className="page-title">
       <div><h1>{t.title}</h1><p>{t.subtitle}</p></div>
       <select className="compact-select" value={profile} onChange={(event) => onProfileChange(event.target.value as CheckProfile)}>
-        <option value="core">{t.core}</option><option value="full">{t.full}</option><option value="vkrcheck">{t.vkrcheck}</option>
+        <option value="core">{t.core}</option><option value="full">{t.full}</option><option value="vkrcheck">{t.vkrcheck}</option><option value="itmo_master">ВКР ИТМО (магистратура)</option>
       </select>
     </div>
 
@@ -52,7 +52,7 @@ export function RulesPage({ profile, rules, loading, onProfileChange }: Props) {
         <div className="rule-body">
           <p>{rule.requirement}</p>
           <div className="meta-grid">
-            <span><b>{t.category}:</b> {rule.category}</span><span><b>{t.check}:</b> {labels.mode[rule.mode]}</span><span><b>{t.scope}:</b> {labels.scope[rule.scope]}</span><span><b>{t.source}:</b> {rule.sourceLabel}, {t.line} {rule.sourceLine}</span>
+            <span><b>{t.category}:</b> {rule.category}</span><span><b>{t.check}:</b> {labels.mode[rule.mode]}</span><span><b>{t.scope}:</b> {labels.scope[rule.scope]}</span><span><b>{t.source}:</b> {rule.sourceUrl ? <a href={rule.sourceUrl} target="_blank" rel="noreferrer">{rule.sourceLabel}</a> : rule.sourceLabel}{!rule.normativeReference && <>, {t.line} {rule.sourceLine}</>}</span>
           </div>
           {rule.correctExample && <div className="example good"><b>{t.correct}:</b> {rule.correctExample}</div>}
           {rule.incorrectExample && <div className="example bad"><b>{t.violation}:</b> {rule.incorrectExample}</div>}

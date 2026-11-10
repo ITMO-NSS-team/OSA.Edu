@@ -94,6 +94,22 @@ def build_fragments(document: dict, map_value: dict) -> list[dict]:
     explicit_conclusions = by_type("chapter_conclusions")
     conclusion = by_type("conclusion")
 
+    # ITMO checks need the actual full ranges, never the summary samples used by
+    # scientific_core. These views reuse the same Fact Store and source blocks.
+    if document.get('_rulesProfile') == 'itmo_master':
+        for selector, source in (
+            ('itmo_scientific', [*title, *introduction, *chapters, *conclusion]),
+            ('itmo_intro_conclusion', [*introduction, *conclusion]),
+            ('itmo_main', chapters),
+        ):
+            labels = {'itmo_scientific': 'Связность ВКР', 'itmo_intro_conclusion': 'Введение и заключение', 'itmo_main': 'Основная часть целиком'}
+            required = bool(chapters) if selector == 'itmo_main' else bool(introduction and conclusion)
+            if selector == 'itmo_scientific':
+                required = bool(required and chapters)
+            add_virtual(selector, labels[selector],
+                        source, _flatten_blocks(source),
+                        complete=bool(required and all(x.get('complete') for x in source)))
+
     # Keep every extracted block once so full-document checks retain source
     # order and coverage. The checker adds type/page metadata to the prompt.
     add_virtual(

@@ -188,7 +188,9 @@ async def _perform_check(job: dict[str, Any]) -> None:
         ])
         usage = _merge_usage_stats(previous_report.get("llmUsage"), checked["llmUsage"]) if previous_report else checked["llmUsage"]
         routing = (
-            {**previous_report.get("routing", {}), "checkRequests": int((previous_report.get("routing") or {}).get("checkRequests", 0)) + int(checked["routing"].get("checkRequests", 0))}
+            {**previous_report.get("routing", {}),
+             "checkRequests": int((previous_report.get("routing") or {}).get("checkRequests", 0)) + int(checked["routing"].get("checkRequests", 0)),
+             "physicalRequests": int((previous_report.get("routing") or {}).get("physicalRequests", (previous_report.get("routing") or {}).get("checkRequests", 0))) + int(checked["routing"].get("physicalRequests", checked["routing"].get("checkRequests", 0)))}
             if previous_report else checked["routing"]
         )
         performance = document.setdefault("performance", {})
@@ -198,6 +200,7 @@ async def _perform_check(job: dict[str, Any]) -> None:
             checked["rules"], results, warnings, usage, document.get("map"), routing,
             {
                 "appVersion": APP_VERSION,
+                "profile": job.get("profile", "core"),
                 "provider": job.get("provider", "openrouter"),
                 "model": job["model"],
                 "promptHash": _hash_text(job.get("prompt", "")),
@@ -242,7 +245,10 @@ async def _obtain_document(job: dict[str, Any]) -> tuple[dict[str, Any], str]:
     source = Path(job["filePath"])
     if not source.exists():
         raise RuntimeError("Исходный файл удалён, а кэш извлечённого документа отсутствует. Загрузите файл заново.")
-    document = await asyncio.to_thread(extract_document, source)
+    if job.get('profile') == 'itmo_master':
+        document = await asyncio.to_thread(extract_document, source, layout_objects=True)
+    else:
+        document = await asyncio.to_thread(extract_document, source)
     path = save_extracted(job["id"], document)
     return document, path
 

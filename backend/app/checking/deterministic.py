@@ -350,6 +350,9 @@ def _generic(rule,document,detector):
 @grounded_check
 def run_deterministic(rule:dict,document:dict)->dict:
     detector=rule.get('detectorId') or RULE_FALLBACK.get(rule['id'])
+    if str(detector or '').startswith('itmo:'):
+        from .itmo_master import run_itmo_rule
+        return run_itmo_rule(rule, document)
     if rule['id'] in {'CORE-9-2','CORE-9-3'}: return run_bibliography_rule(rule,document)
     if not detector: return result(rule,'not_checked','Для правила не назначен детерминированный детектор.')
     if detector=='title-process': return _title_process(rule,document)

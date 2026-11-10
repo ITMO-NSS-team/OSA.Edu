@@ -12,24 +12,24 @@ from .pdf_blocks import build_pdf_pages
 from .util import normalize_text
 
 
-def extract_document(path: str | Path) -> dict[str, Any]:
+def extract_document(path: str | Path, *, layout_objects: bool = False) -> dict[str, Any]:
     path = Path(path)
     suffix = path.suffix.lower()
     if suffix == '.pdf':
-        return _extract_pdf(path)
+        return _extract_pdf(path, layout_objects=layout_objects)
     if suffix == '.docx':
         return _extract_docx(path)
     raise ValueError('Поддерживаются только PDF и DOCX.')
 
 
-def _extract_pdf(path: Path) -> dict[str, Any]:
+def _extract_pdf(path: Path, *, layout_objects: bool = False) -> dict[str, Any]:
     import pymupdf
 
     document = pymupdf.open(path)
     try:
         if document.needs_pass:
             raise RuntimeError('PDF защищён паролем и не может быть прочитан без пароля.')
-        pages, style_stats, empty_pages = build_pdf_pages(document)
+        pages, style_stats, empty_pages = build_pdf_pages(document, layout_objects=layout_objects)
     finally:
         document.close()
 
