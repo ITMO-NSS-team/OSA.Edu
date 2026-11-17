@@ -1,12 +1,12 @@
-# Video Samples — Automatic Annotation Pipeline
+# Video Samples — Transcription and Cutting Pipeline
 
-Автоматическая разметка аудио для MVP аудио-пайплайна.
+Пайплайн для транскрипции и нарезки аудио под MVP аудио-пайплайн.
 
 Issue: #31
 
 ## Как запустить
-1. Открыть ноутбук automatic_annotation_pipeline.ipynb
+1. Открыть ноутбук `transcrib+cut.ipynb`
 2. Запустить все ячейки по порядку
 
 ## Что тут
-Ноутбук, который автоматически размечает аудио (для создания video samples под аудио-пайплайн).
+Ноутбук, который транскрибирует аудио через faster-whisper и нарезает его на сегменты (pairs).
