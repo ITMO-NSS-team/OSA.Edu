@@ -1,12 +1,12 @@
 # Video Samples — Transcription and Cutting Pipeline
 
-Пайплайн для транскрипции и нарезки аудио под MVP аудио-пайплайн.
+Pipeline for audio transcription and cutting for the MVP audio pipeline.
 
 Issue: #31
 
-## Как запустить
-1. Открыть ноутбук `transcrib+cut.ipynb`
-2. Запустить все ячейки по порядку
+## How to run
+1. Open the notebook `transcrib+cut.ipynb`
+2. Run all cells in order
 
-## Что тут
-Ноутбук, который транскрибирует аудио через faster-whisper и нарезает его на сегменты (pairs).
+## What's inside
+Notebook that transcribes audio with faster-whisper and cuts it into segments (pairs).
